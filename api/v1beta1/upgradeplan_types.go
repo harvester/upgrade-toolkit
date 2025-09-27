@@ -132,7 +132,11 @@ type UpgradePlanStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// nodeStatuses reflect each node's upgrade status for node specific tasks
+	// isoImageID refers to the namespaced name of the VM image that will be used for the upgrade.
+	// +optional
+	ISOImageID *string `json:"isoImageID,omitempty"`
+
+	// nodeStatuses reflect each node's upgrade status for node specific tasks.
 	// +mapType=atomic
 	// +optional
 	NodeUpgradeStatuses map[string]NodeUpgradeStatus `json:"nodeUpgradeStatuses,omitempty"`
@@ -145,13 +149,17 @@ type UpgradePlanStatus struct {
 	// +optional
 	PhaseTransitionTimestamps []UpgradePlanPhaseTransitionTimestamp `json:"phaseTransitionTimestamps,omitempty"`
 
-	// previousVersion is the Harvester version before upgrade
+	// previousVersion is the Harvester version before upgrade.
 	// +optional
 	PreviousVersion *string `json:"previousVersion,omitempty"`
 
 	// releaseMetadata reflects the essential metadata extracted from the artifact.
 	// +optional
 	ReleaseMetadata *ReleaseMetadata `json:"releaseMetadata,omitempty"`
+
+	// version is the snapshot of the associated Version resource
+	// +optional
+	Version *VersionSpec `json:"version,omitempty"`
 }
 
 // +kubebuilder:object:root=true

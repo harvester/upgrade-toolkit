@@ -37,6 +37,18 @@ rules:
   - list
   - watch
 - apiGroups:
+  - harvesterhci.io
+  resources:
+  - virtualmachineimages
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - management.harvesterhci.io
   resources:
   - upgradeplans

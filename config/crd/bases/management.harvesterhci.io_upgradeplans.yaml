@@ -150,6 +150,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              isoImageID:
+                description: isoImageID refers to the namespaced name of the VM image
+                  that will be used for the upgrade.
+                type: string
               nodeUpgradeStatuses:
                 additionalProperties:
                   properties:
@@ -161,7 +165,7 @@ spec:
                       type: string
                   type: object
                 description: nodeStatuses reflect each node's upgrade status for node
-                  specific tasks
+                  specific tasks.
                 type: object
                 x-kubernetes-map-type: atomic
               phase:
@@ -187,7 +191,7 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
               previousVersion:
-                description: previousVersion is the Harvester version before upgrade
+                description: previousVersion is the Harvester version before upgrade.
                 type: string
               releaseMetadata:
                 description: releaseMetadata reflects the essential metadata extracted
@@ -207,6 +211,22 @@ spec:
                     type: string
                   rancher:
                     type: string
+                type: object
+              version:
+                description: version is the snapshot of the associated Version resource
+                properties:
+                  isoChecksum:
+                    type: string
+                  isoURL:
+                    type: string
+                  releaseDate:
+                    type: string
+                  tags:
+                    items:
+                      type: string
+                    type: array
+                required:
+                - isoURL
                 type: object
             type: object
         required:

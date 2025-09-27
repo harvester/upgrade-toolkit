@@ -27,6 +27,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/goccy/go-yaml"
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/harvester/harvester/pkg/settings"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/harvester/harvester/pkg/settings"
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
@@ -53,6 +54,7 @@ const (
 	harvesterManagedLabel          = "harvesterhci.io/managed"
 	harvesterUpgradePlanLabel      = "management.harvesterhci.io/upgrade-plan"
 	harvesterUpgradeComponentLabel = "management.harvesterhci.io/upgrade-component"
+	imageComponent                 = "iso"
 	prepareComponent               = "image-preload"
 	clusterComponent               = "cluster-upgrade"
 	nodeComponent                  = "node-upgrade"
@@ -129,6 +131,7 @@ type UpgradePlanReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=settings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=harvesterhci.io,resources=virtualmachineimages,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=upgrade.cattle.io,resources=plans,verbs=get;list;watch;create;update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -182,6 +185,7 @@ func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&managementv1beta1.UpgradePlan{}).
 		Owns(&batchv1.Job{}).
+		Owns(&harvesterv1beta1.VirtualMachineImage{}).
 		Owns(&upgradev1.Plan{}).
 		Named("upgradeplan").
 		Complete(r)
@@ -190,9 +194,9 @@ func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *UpgradePlanReconciler) reconcilePhase(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
 	switch upgradePlan.Status.Phase {
 	case "":
-		return r.initialize(upgradePlan)
+		return r.initialize(ctx, upgradePlan)
 	case managementv1beta1.UpgradePlanPhaseInit, managementv1beta1.UpgradePlanPhaseISODownloading:
-		return r.handleISODownload(upgradePlan)
+		return r.handleISODownload(ctx, upgradePlan)
 	case managementv1beta1.UpgradePlanPhaseISODownloaded, managementv1beta1.UpgradePlanPhaseRepoCreating:
 		return r.handleRepoCreate(upgradePlan)
 	case managementv1beta1.UpgradePlanPhaseRepoCreated, managementv1beta1.UpgradePlanPhaseMetadataPopulating:
@@ -210,8 +214,12 @@ func (r *UpgradePlanReconciler) reconcilePhase(ctx context.Context, upgradePlan 
 	}
 }
 
-func (r *UpgradePlanReconciler) initialize(upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
+func (r *UpgradePlanReconciler) initialize(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
 	r.Log.V(1).Info("handle initialize status")
+
+	if err := r.loadVersion(ctx, upgradePlan); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	upgradePlan.Status.PreviousVersion = ptr.To(settings.ServerVersion.Get())
 	upgradePlan.SetCondition(managementv1beta1.UpgradePlanAvailable, metav1.ConditionTrue, "Initialized", "")
@@ -220,22 +228,43 @@ func (r *UpgradePlanReconciler) initialize(upgradePlan *managementv1beta1.Upgrad
 	return ctrl.Result{}, nil
 }
 
-func (r *UpgradePlanReconciler) handleISODownload(upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
+func (r *UpgradePlanReconciler) handleISODownload(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
 	r.Log.V(1).Info("handle iso download")
 
-	// Dummy iso download
-	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseISODownloading {
-		upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseISODownloaded
+	vmimage, err := r.getOrCreateVirtualMachineImage(ctx, upgradePlan)
+	if err != nil {
+		r.Log.Error(err, "unable to retrieve vmimage from upgradeplan")
+		return ctrl.Result{}, err
+	}
+	if upgradePlan.Status.ISOImageID == nil {
+		upgradePlan.Status.ISOImageID = ptr.To(fmt.Sprintf("%s/%s", vmimage.Namespace, vmimage.Name))
+	}
+
+	imported, success := isVirtualMachineImageImported(vmimage)
+
+	// vmimage download still ongoing
+	if !imported {
+		r.Log.V(1).Info("iso image downloading")
+		upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseISODownloading
 		return ctrl.Result{}, nil
 	}
-	upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseISODownloading
+
+	// vmimage download finished but failed
+	if !success {
+		r.Log.V(0).Info("iso image download failed")
+		upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseFailed
+		return ctrl.Result{}, nil
+	}
+
+	// vmimage download finished successfully
+	upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseISODownloaded
 	return ctrl.Result{}, nil
 }
 
 func (r *UpgradePlanReconciler) handleRepoCreate(upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
 	r.Log.V(1).Info("handle repo create")
 
-	// Dummy repo create
+	// TODO: Repo creation
 	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseRepoCreating {
 		upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseRepoCreated
 		return ctrl.Result{}, nil
@@ -355,6 +384,15 @@ func (r *UpgradePlanReconciler) finalize(upgradePlan *managementv1beta1.UpgradeP
 	return ctrl.Result{}, nil
 }
 
+func (r *UpgradePlanReconciler) loadVersion(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) error {
+	var version managementv1beta1.Version
+	if err := r.Get(ctx, types.NamespacedName{Name: upgradePlan.Spec.Version}, &version); err != nil {
+		return err
+	}
+	upgradePlan.Status.Version = &version.Spec
+	return nil
+}
+
 func (r *UpgradePlanReconciler) isSingleNodeCluster(ctx context.Context) (bool, error) {
 	var nodeList corev1.NodeList
 	if err := r.List(ctx, &nodeList, &client.ListOptions{
@@ -365,6 +403,22 @@ func (r *UpgradePlanReconciler) isSingleNodeCluster(ctx context.Context) (bool, 
 		return false, err
 	}
 	return len(nodeList.Items) == 1, nil
+}
+
+func (r *UpgradePlanReconciler) getOrCreateVirtualMachineImage(
+	ctx context.Context,
+	up *managementv1beta1.UpgradePlan,
+) (*harvesterv1beta1.VirtualMachineImage, error) {
+	nn := types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      up.Name,
+	}
+	return getOrCreate(
+		ctx, r.Client, r.Scheme, nn,
+		func() *harvesterv1beta1.VirtualMachineImage { return &harvesterv1beta1.VirtualMachineImage{} },
+		func() *harvesterv1beta1.VirtualMachineImage { return constructVirtualMachineImage(up) },
+		up,
+	)
 }
 
 func (r *UpgradePlanReconciler) getOrCreatePlanForImagePreload(
@@ -534,6 +588,28 @@ func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
 	return upgradePlan.Spec.Version
 }
 
+func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *harvesterv1beta1.VirtualMachineImage {
+	vmimage := &harvesterv1beta1.VirtualMachineImage{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				harvesterUpgradePlanLabel:      upgradePlan.Name,
+				harvesterUpgradeComponentLabel: imageComponent,
+			},
+			Name:      upgradePlan.Name,
+			Namespace: harvesterSystemNamespace,
+		},
+		Spec: harvesterv1beta1.VirtualMachineImageSpec{
+			Backend:     harvesterv1beta1.VMIBackendBackingImage,
+			DisplayName: fmt.Sprintf("%s-%s", upgradePlan.Name, upgradePlan.Spec.Version),
+			SourceType:  harvesterv1beta1.VirtualMachineImageSourceTypeDownload,
+			URL:         upgradePlan.Status.Version.ISODownloadURL,
+			Checksum:    ptr.Deref(upgradePlan.Status.Version.ISOChecksum, ""),
+			Retry:       3,
+		},
+	}
+	return vmimage
+}
+
 func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan) *batchv1.Job {
 	jobName := fmt.Sprintf("%s-cluster-upgrade", upgradePlan.Name)
 	job := &batchv1.Job{
@@ -670,6 +746,20 @@ func constructPlanForNodeUpgrade(upgradePlan *managementv1beta1.UpgradePlan, mai
 	version := getKubernetesVersion(upgradePlan)
 
 	return constructPlan(upgradePlan.Name, nodeComponent, 1, selector, maintenance, container, version)
+}
+
+func isVirtualMachineImageImported(vmimage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {
+	for _, condition := range vmimage.Status.Conditions {
+		if condition.Type == harvesterv1beta1.ImageImported && condition.Status == corev1.ConditionTrue {
+			finished, success = true, true
+			return
+		}
+		if condition.Type == harvesterv1beta1.ImageImported && condition.Status == corev1.ConditionFalse {
+			finished, success = true, false
+			return
+		}
+	}
+	return
 }
 
 func isJobFinished(job *batchv1.Job) (finished, success bool) {
