@@ -42,7 +42,8 @@ const (
 )
 
 const (
-	UpgradePlanPhaseInit               UpgradePlanPhase = "Init"
+	UpgradePlanPhaseInitializing       UpgradePlanPhase = "Initializing"
+	UpgradePlanPhaseInitialized        UpgradePlanPhase = "Initialized"
 	UpgradePlanPhaseISODownloading     UpgradePlanPhase = "ISODownloading"
 	UpgradePlanPhaseISODownloaded      UpgradePlanPhase = "ISODownloaded"
 	UpgradePlanPhaseRepoCreating       UpgradePlanPhase = "RepoCreating"
@@ -57,8 +58,9 @@ const (
 	UpgradePlanPhaseNodeUpgraded       UpgradePlanPhase = "NodeUpgraded"
 	UpgradePlanPhaseCleaningUp         UpgradePlanPhase = "CleaningUp"
 	UpgradePlanPhaseCleanedUp          UpgradePlanPhase = "CleanedUp"
-	UpgradePlanPhaseSucceeded          UpgradePlanPhase = "Succeeded"
-	UpgradePlanPhaseFailed             UpgradePlanPhase = "Failed"
+
+	UpgradePlanPhaseSucceeded UpgradePlanPhase = "Succeeded"
+	UpgradePlanPhaseFailed    UpgradePlanPhase = "Failed"
 )
 
 type NodeUpgradeStatus struct {

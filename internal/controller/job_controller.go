@@ -22,13 +22,15 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
-	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
 const (
@@ -98,20 +100,20 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv1.Job) error {
 	r.Log.V(1).Info("node upgrade status update")
 
-	upgradePlanName, ok := job.Labels[harvesterUpgradePlanLabel]
+	upgradePlanName, ok := job.Labels[upgradeplan.HarvesterUpgradePlanLabel]
 	if !ok {
-		return fmt.Errorf("label %s not found", harvesterUpgradePlanLabel)
+		return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradePlanLabel)
 	}
-	upgradeComponent, ok := job.Labels[harvesterUpgradeComponentLabel]
+	upgradeComponent, ok := job.Labels[upgradeplan.HarvesterUpgradeComponentLabel]
 	if !ok {
-		return fmt.Errorf("label %s not found", harvesterUpgradeComponentLabel)
+		return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradeComponentLabel)
 	}
 	nodeName, ok := job.Labels[nodeLabel]
 	if !ok {
 		return fmt.Errorf("label %s not found", nodeLabel)
 	}
 
-	if upgradeComponent == clusterComponent {
+	if upgradeComponent == upgradeplan.ClusterComponent {
 		return nil
 	}
 
@@ -141,11 +143,11 @@ func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
 		return false
 	}
 
-	if _, upgradePlanLabelExists := job.Labels[harvesterUpgradePlanLabel]; !upgradePlanLabelExists {
+	if _, upgradePlanLabelExists := job.Labels[upgradeplan.HarvesterUpgradePlanLabel]; !upgradePlanLabelExists {
 		return false
 	}
 
-	if _, upgradeComponentLabelExists := job.Labels[harvesterUpgradeComponentLabel]; !upgradeComponentLabelExists {
+	if _, upgradeComponentLabelExists := job.Labels[upgradeplan.HarvesterUpgradeComponentLabel]; !upgradeComponentLabelExists {
 		return false
 	}
 
@@ -158,9 +160,9 @@ func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
 
 func defaultStateFor(component string) string {
 	switch component {
-	case prepareComponent:
+	case upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloading
-	case nodeComponent:
+	case upgradeplan.NodeComponent:
 		return managementv1beta1.NodeStateKubernetesUpgrading
 	default:
 		return ""
@@ -169,9 +171,9 @@ func defaultStateFor(component string) string {
 
 func successStateFor(component string) string {
 	switch component {
-	case prepareComponent:
+	case upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloaded
-	case nodeComponent:
+	case upgradeplan.NodeComponent:
 		return managementv1beta1.NodeStateKubernetesUpgraded
 	default:
 		return ""
