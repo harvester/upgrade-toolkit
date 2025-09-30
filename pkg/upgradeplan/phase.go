@@ -44,7 +44,7 @@ type RepoCreatePhase struct {
 }
 
 func (s *RepoCreatePhase) Run(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
-	return s.h.repoCreate(upgradePlan)
+	return s.h.repoCreate(ctx, upgradePlan)
 }
 func (s *RepoCreatePhase) String() string { return "RepoCreate" }
 

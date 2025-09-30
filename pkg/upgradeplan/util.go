@@ -9,6 +9,13 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
+func getPreviousVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
+	if upgradePlan != nil && upgradePlan.Status.PreviousVersion != nil {
+		return *upgradePlan.Status.PreviousVersion
+	}
+	return upgradePlan.Spec.Version
+}
+
 func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
 	if upgradePlan != nil && upgradePlan.Spec.Upgrade != nil {
 		return *upgradePlan.Spec.Upgrade

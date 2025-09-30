@@ -165,6 +165,7 @@ func main() {
 			DefaultNamespaces: map[string]cache.Config{
 				"harvester-system": {},
 				"cattle-system":    {},
+				"kube-system":      {},
 			},
 		},
 		Scheme:                 scheme,
