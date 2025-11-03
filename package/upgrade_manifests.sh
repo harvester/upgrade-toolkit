@@ -1,6 +1,8 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 UPGRADE_TMP_DIR="/tmp/upgrade"
 
 source $SCRIPT_DIR/lib.sh
@@ -988,7 +990,7 @@ skip_restart_rancher_system_agent() {
   # issue link: https://github.com/rancher/rancher/issues/41965
 
   plan_manifest="$(mktemp --suffix=.yaml)"
-  plan_name="$HARVESTER_UPGRADE_NAME"-skip-restart-rancher-system-agent
+  plan_name="$HARVESTER_UPGRADEPLAN_NAME"-skip-restart-rancher-system-agent
   plan_version="$(openssl rand -hex 4)"
 
   cat > "$plan_manifest" <<EOF

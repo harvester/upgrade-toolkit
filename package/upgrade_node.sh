@@ -1,9 +1,12 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+set -ex
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+UPGRADE_TMP_DIR=$HOST_DIR/usr/local/upgrade_tmp
 
 source $SCRIPT_DIR/lib.sh
-UPGRADE_TMP_DIR=$HOST_DIR/usr/local/upgrade_tmp
+
 STATE_DIR=$HOST_DIR/run/initramfs/cos-state
 MAX_PODS=200
 
