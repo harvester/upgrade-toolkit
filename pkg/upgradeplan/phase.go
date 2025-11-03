@@ -95,7 +95,7 @@ type CleanupPhase struct {
 }
 
 func (s *CleanupPhase) Run(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
-	return s.h.resourceCleanup(upgradePlan)
+	return s.h.resourceCleanup(ctx, upgradePlan)
 }
 func (s *CleanupPhase) String() string { return "Cleanup" }
 

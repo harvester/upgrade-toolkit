@@ -370,11 +370,43 @@ func (h *UpgradePlanPhaseHandler) nodeUpgrade(
 	return ctrl.Result{}, nil
 }
 
-func (h *UpgradePlanPhaseHandler) resourceCleanup(upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
+func (h *UpgradePlanPhaseHandler) resourceCleanup(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) (ctrl.Result, error) {
 	h.log.V(1).Info("handle resource cleanup")
 
-	// TODO: Resource cleanup
+	// Ensure the following resources are wiped out upon successful upgrades:
+	// - iso VirtualMachineImage
+	// - upgrade-repo PersistentVolumeClaim, DaemonSet, and Service
+	// - image-preload Plan
+	// - cluster-upgrade Job
+	// - node-upgrade Plan
 	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseCleaningUp {
+		resourcesToDelete := []struct {
+			obj       client.Object
+			namespace string
+			component string
+		}{
+			{&harvesterv1beta1.VirtualMachineImage{}, harvesterSystemNamespace, imageComponent},
+			{&corev1.PersistentVolumeClaim{}, harvesterSystemNamespace, repoComponent},
+			{&appsv1.DaemonSet{}, harvesterSystemNamespace, repoComponent},
+			{&corev1.Service{}, harvesterSystemNamespace, repoComponent},
+			{&upgradev1.Plan{}, cattleSystemNamespace, PrepareComponent},
+			{&batchv1.Job{}, harvesterSystemNamespace, ClusterComponent},
+			{&upgradev1.Plan{}, cattleSystemNamespace, NodeComponent},
+		}
+
+		for _, r := range resourcesToDelete {
+			namespacedName := types.NamespacedName{
+				Namespace: r.namespace,
+				Name:      fmt.Sprintf("%s-%s", upgradePlan.Name, r.component),
+			}
+			if err := h.deleteResource(ctx, r.obj, namespacedName); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseCleanedUp, "")
 		return ctrl.Result{}, nil
 	}
@@ -556,6 +588,29 @@ func (h *UpgradePlanPhaseHandler) getOrCreatePlanForNodeUpgrade(
 		func() *upgradev1.Plan { return constructPlanForNodeUpgrade(up, !single) },
 		up,
 	)
+}
+
+func (h *UpgradePlanPhaseHandler) deleteResource(
+	ctx context.Context,
+	obj client.Object,
+	namespacedName types.NamespacedName,
+) error {
+	if err := h.client.Get(ctx, namespacedName, obj); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+
+		// Resource already gone, don't bother delete it again.
+		return nil
+	}
+
+	if err := h.client.Delete(ctx, obj, &client.DeleteOptions{
+		PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
+	}); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	return nil
 }
 
 func isAnyPlanJobFailed(plan *upgradev1.Plan) bool {
