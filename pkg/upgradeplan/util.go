@@ -102,9 +102,11 @@ func getDefaultTolerations() []corev1.Toleration {
 
 // finalize wraps up a finished UpgradePlan, whether it's a success or a failure.
 func finalize(upgradePlan *managementv1beta1.UpgradePlan) {
-	markUpgradePlanComplete(upgradePlan)
+	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseCleanedUp {
+		upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseSucceeded
+	}
 
-	upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseSucceeded
+	markUpgradePlanComplete(upgradePlan)
 }
 
 func isTerminalPhase(phase managementv1beta1.UpgradePlanPhase) bool {

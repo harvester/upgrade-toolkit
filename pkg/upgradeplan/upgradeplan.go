@@ -32,6 +32,8 @@ func NewUpgradePlan(handler *UpgradePlanPhaseHandler) *UpgradePlan {
 			managementv1beta1.UpgradePlanPhaseNodeUpgraded:       &CleanupPhase{h: handler},
 			managementv1beta1.UpgradePlanPhaseCleaningUp:         &CleanupPhase{h: handler},
 			managementv1beta1.UpgradePlanPhaseCleanedUp:          &FinalizePhase{h: handler},
+			managementv1beta1.UpgradePlanPhaseSucceeded:          &FinalizePhase{h: handler},
+			managementv1beta1.UpgradePlanPhaseFailed:             &FinalizePhase{h: handler},
 		},
 	}
 }
@@ -42,12 +44,7 @@ func (up *UpgradePlan) ExecutePhase(
 ) (ctrl.Result, error) {
 	phase, exists := up.phases[upgradePlan.Status.Phase]
 	if !exists {
-		switch upgradePlan.Status.Phase {
-		case managementv1beta1.UpgradePlanPhaseSucceeded, managementv1beta1.UpgradePlanPhaseFailed:
-			finalize(upgradePlan)
-		default:
-			// TODO: We cannot do anything because UpgradePlan is in limbo.
-		}
+		// TODO: We cannot do anything because UpgradePlan is in limbo.
 		return ctrl.Result{}, nil
 	}
 
