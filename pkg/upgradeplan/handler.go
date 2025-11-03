@@ -149,18 +149,22 @@ func (h *UpgradePlanPhaseHandler) initialize(
 ) (ctrl.Result, error) {
 	h.log.V(1).Info("handle initialize status")
 
-	upgradePlan.SetCondition(managementv1beta1.UpgradePlanAvailable, metav1.ConditionTrue, "Executable", "")
+	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseInitializing {
+		upgradePlan.SetCondition(managementv1beta1.UpgradePlanAvailable, metav1.ConditionTrue, "Executable", "")
+
+		if err := h.loadVersion(ctx, upgradePlan); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := h.loadPreviousVersion(ctx, upgradePlan); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseInitialized, "")
+		return ctrl.Result{}, nil
+	}
+
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseInitializing, "")
-
-	if err := h.loadVersion(ctx, upgradePlan); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := h.loadPreviousVersion(ctx, upgradePlan); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseInitialized, "")
 	return ctrl.Result{}, nil
 }
 
@@ -170,32 +174,32 @@ func (h *UpgradePlanPhaseHandler) isoDownload(
 ) (ctrl.Result, error) {
 	h.log.V(1).Info("handle iso download")
 
-	vmimage, err := h.getOrCreateVirtualMachineImageForRepo(ctx, upgradePlan)
+	vmImage, err := h.getOrCreateVirtualMachineImageForRepo(ctx, upgradePlan)
 	if err != nil {
 		h.log.Error(err, "unable to retrieve iso vmimage from upgradeplan")
 		return ctrl.Result{}, err
 	}
 	if upgradePlan.Status.ISOImageID == nil {
-		upgradePlan.Status.ISOImageID = ptr.To(fmt.Sprintf("%s/%s", vmimage.Namespace, vmimage.Name))
+		upgradePlan.Status.ISOImageID = ptr.To(fmt.Sprintf("%s/%s", vmImage.Namespace, vmImage.Name))
 	}
 
-	imported, success := isVirtualMachineImageImported(vmimage)
+	imported, success := isVirtualMachineImageImported(vmImage)
 
-	// vmimage download still ongoing
+	// vmImage download still ongoing
 	if !imported {
 		h.log.V(1).Info("iso image downloading")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseISODownloading, "")
 		return ctrl.Result{}, nil
 	}
 
-	// vmimage download finished but failed
+	// vmImage download finished but failed
 	if !success {
 		h.log.V(0).Info("iso image download failed")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "ISO image download failed")
 		return ctrl.Result{}, nil
 	}
 
-	// vmimage download finished successfully
+	// vmImage download finished successfully
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseISODownloaded, "")
 	return ctrl.Result{}, nil
 }
@@ -262,14 +266,18 @@ func (h *UpgradePlanPhaseHandler) repoCreate(
 func (h *UpgradePlanPhaseHandler) metadataPopulate(upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
 	h.log.V(1).Info("handle metadata populate")
 
-	harvesterRelease := newHarvesterRelease(upgradePlan)
-	if err := harvesterRelease.loadReleaseMetadata(); err != nil {
-		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulating, "")
-		return ctrl.Result{}, err
+	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseMetadataPopulating {
+		harvesterRelease := newHarvesterRelease(upgradePlan)
+		if err := harvesterRelease.loadReleaseMetadata(); err != nil {
+			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulating, err.Error())
+			return ctrl.Result{}, err
+		}
+		upgradePlan.Status.ReleaseMetadata = harvesterRelease.ReleaseMetadata
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulated, "")
+		return ctrl.Result{}, nil
 	}
-	upgradePlan.Status.ReleaseMetadata = harvesterRelease.ReleaseMetadata
 
-	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulated, "")
+	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulating, "")
 	return ctrl.Result{}, nil
 }
 
@@ -548,7 +556,7 @@ func (h *UpgradePlanPhaseHandler) getOrCreatePlanForNodeUpgrade(
 
 func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *harvesterv1beta1.VirtualMachineImage {
 	imageName := fmt.Sprintf("%s-%s", upgradePlan.Name, imageComponent)
-	vmimage := &harvesterv1beta1.VirtualMachineImage{
+	vmImage := &harvesterv1beta1.VirtualMachineImage{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      upgradePlan.Name,
@@ -566,7 +574,7 @@ func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *h
 			Retry:       3,
 		},
 	}
-	return vmimage
+	return vmImage
 }
 
 func constructPersistentVolumeClaim(upgradePlan *managementv1beta1.UpgradePlan) *corev1.PersistentVolumeClaim {
@@ -1047,8 +1055,8 @@ func updateProgressingPhase(
 	}
 }
 
-func isVirtualMachineImageImported(vmimage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {
-	for _, condition := range vmimage.Status.Conditions {
+func isVirtualMachineImageImported(vmImage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {
+	for _, condition := range vmImage.Status.Conditions {
 		if condition.Type == harvesterv1beta1.ImageImported && condition.Status == corev1.ConditionTrue {
 			finished, success = true, true
 			return
