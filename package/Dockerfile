@@ -26,6 +26,17 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o up
 
 FROM registry.opensuse.org/isv/rancher/harvester/os/v1.6/main/baseos:v1.6 AS baseos
 
+# Generate addon manifests
+FROM registry.suse.com/bci/golang:1.24 AS addons_generator
+
+WORKDIR /workspace
+
+ENV HARVESTER_ADDONS_VERSION=main
+RUN git clone --branch ${HARVESTER_ADDONS_VERSION} --single-branch --depth 1 https://github.com/harvester/addons.git && \
+    mkdir generated_addons/ && \
+    cd addons/ && \
+    go run . -generateAddons -path ../generated_addons/
+
 # Use the base BCI image to package the upgrade-toolkit binary
 FROM registry.suse.com/bci/bci-base:15.7
 ARG TARGETARCH
@@ -54,7 +65,7 @@ COPY package/upgrade_manifests.sh /usr/local/bin/upgrade_manifests.sh
 COPY package/upgrade_node.sh /usr/local/bin/upgrade_node.sh
 COPY package/extra_manifests /usr/local/share/extra_manifests
 COPY package/migrations /usr/local/share/migrations
-# COPY package/addons /usr/local/share/addons
+COPY --from=addons_generator /workspace/generated_addons /usr/local/share/addons
 # COPY package/upgrade-helper /usr/local/bin/upgrade-helper
 
 ENTRYPOINT ["/usr/local/bin/upgrade-toolkit"]
