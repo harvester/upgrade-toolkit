@@ -180,6 +180,17 @@ func successStateFor(component string) string {
 	}
 }
 
+func failureStateFor(component string) string {
+	switch component {
+	case upgradeplan.PrepareComponent:
+		return managementv1beta1.NodeStateImagePreloadFailed
+	case upgradeplan.NodeComponent:
+		return managementv1beta1.NodeStateKubernetesUpgradeFailed
+	default:
+		return ""
+	}
+}
+
 func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managementv1beta1.NodeUpgradeStatus {
 	status := managementv1beta1.NodeUpgradeStatus{
 		State: defaultStateFor(upgradeComponent),
@@ -196,7 +207,7 @@ func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managemen
 			}
 		case batchv1.JobFailed:
 			return managementv1beta1.NodeUpgradeStatus{
-				State:   defaultStateFor(upgradeComponent),
+				State:   failureStateFor(upgradeComponent),
 				Reason:  condition.Reason,
 				Message: condition.Message,
 			}

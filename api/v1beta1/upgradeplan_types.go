@@ -33,12 +33,15 @@ const (
 )
 
 const (
-	NodeStateImagePreloading     string = "ImagePreloading"
-	NodeStateImagePreloaded      string = "ImagePreloaded"
-	NodeStateKubernetesUpgrading string = "KubernetesUpgrading"
-	NodeStateKubernetesUpgraded  string = "KubernetesUpgraded"
-	NodeStateOSUpgrading         string = "OSUpgrading"
-	NodeStateOSUpgraded          string = "OSUpgraded"
+	NodeStateImagePreloading         string = "ImagePreloading"
+	NodeStateImagePreloaded          string = "ImagePreloaded"
+	NodeStateImagePreloadFailed      string = "ImagePreloadFailed"
+	NodeStateKubernetesUpgrading     string = "KubernetesUpgrading"
+	NodeStateKubernetesUpgraded      string = "KubernetesUpgraded"
+	NodeStateKubernetesUpgradeFailed string = "KubernetesUpgradeFailed"
+	NodeStateOSUpgrading             string = "OSUpgrading"
+	NodeStateOSUpgraded              string = "OSUpgraded"
+	NodeStateOSUpgradeFailed         string = "OSUpgradeFailed"
 )
 
 const (
@@ -94,7 +97,7 @@ type UpgradePlanSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// version refers to the corresponding version resource in the same namespace.
+	// version refers to the corresponding version resource.
 	// +required
 	Version string `json:"version"`
 
@@ -159,7 +162,7 @@ type UpgradePlanStatus struct {
 	// +optional
 	ReleaseMetadata *ReleaseMetadata `json:"releaseMetadata,omitempty"`
 
-	// version is the snapshot of the associated Version resource
+	// version is the snapshot of the associated Version resource.
 	// +optional
 	Version *VersionSpec `json:"version,omitempty"`
 }

@@ -72,8 +72,7 @@ spec:
                   For instance, specifying "dev" for the field can go for the "rancher/harvester-upgrade:dev" image.
                 type: string
               version:
-                description: version refers to the corresponding version resource
-                  in the same namespace.
+                description: version refers to the corresponding version resource.
                 type: string
             required:
             - version
@@ -213,7 +212,7 @@ spec:
                     type: string
                 type: object
               version:
-                description: version is the snapshot of the associated Version resource
+                description: version is the snapshot of the associated Version resource.
                 properties:
                   isoChecksum:
                     type: string
