@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/goccy/go-yaml"
+	"k8s.io/client-go/rest"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
 const (
-	releaseURL = "http://localhost/harvester-release.yaml"
+	defaultReleaseURL = "http://localhost/harvester-release.yaml"
 )
 
 type harvesterRelease struct {
@@ -36,6 +37,17 @@ func newHarvesterRelease(upgradePlan *managementv1beta1.UpgradePlan) *harvesterR
 }
 
 func (h *harvesterRelease) loadReleaseMetadata() error {
+	releaseURL := fmt.Sprintf(
+		"http://%s-%s/harvester-release.yaml",
+		h.Name,
+		repoComponent,
+	)
+
+	_, err := rest.InClusterConfig()
+	if err != nil {
+		releaseURL = defaultReleaseURL
+	}
+
 	req, err := http.NewRequestWithContext(h.ctx, http.MethodGet, releaseURL, nil)
 	if err != nil {
 		return err
