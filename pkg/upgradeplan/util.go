@@ -10,16 +10,30 @@ import (
 )
 
 func getPreviousVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
-	if upgradePlan != nil && upgradePlan.Status.PreviousVersion != nil {
+	if upgradePlan == nil {
+		return "nonexistent"
+	}
+
+	if upgradePlan.Spec.Upgrade != nil {
+		return *upgradePlan.Spec.Upgrade
+	}
+
+	if upgradePlan.Status.PreviousVersion != nil {
 		return *upgradePlan.Status.PreviousVersion
 	}
+
 	return upgradePlan.Spec.Version
 }
 
 func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
-	if upgradePlan != nil && upgradePlan.Spec.Upgrade != nil {
+	if upgradePlan == nil {
+		return "nonexistent"
+	}
+
+	if upgradePlan.Spec.Upgrade != nil {
 		return *upgradePlan.Spec.Upgrade
 	}
+
 	return upgradePlan.Spec.Version
 }
 
