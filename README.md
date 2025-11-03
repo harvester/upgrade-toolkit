@@ -36,31 +36,29 @@ Upgrade Toolkit is the central part of the Harvester upgrade solution. The entir
 
 Upgrade Toolkit supports upgrading a Harvester cluster using other container images for Upgrade Repo and Manager that are not packaged in the ISO image. To do so, please see below.
 
-Create a Version CR. This is the same as before.
+Create a Version CR. This is almost the same as before.
 
 ```bash
-cat <<EOF | kubectl create -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: management.harvesterhci.io/v1beta1
 kind: Version
 metadata:
-  namespace: harvester-system
-  name: v1.6.0
+  name: v1.6.1
 spec:
-  isoURL: http://10.115.49.5/iso/harvester/v1.6.0/harvester-v1.6.0-amd64.iso
+  isoURL: https://releases.rancher.com/harvester/v1.6.1/harvester-v1.6.1-amd64.iso
 EOF
 ```
 
-When creating the UpgradePlan CR, specifying a different container image to use for Upgrade Repo and Manager:
+When creating the UpgradePlan CR, specifying a different container image tag to use for Upgrade Repo and Manager:
 
 ```bash
 cat <<EOF | kubectl create -f -
 apiVersion: management.harvesterhci.io/v1beta1
 kind: UpgradePlan
 metadata:
-  namespace: harvester-system
   generateName: hvst-upgrade-
 spec:
-  version: v1.6.0
+  version: v1.6.1
   upgrade: dev
 EOF
 ```
@@ -71,34 +69,36 @@ A successfully executed UpgradePlan looks like the following:
 apiVersion: management.harvesterhci.io/v1beta1
 kind: UpgradePlan
 metadata:
-  creationTimestamp: "2025-09-24T07:40:30Z"
+  creationTimestamp: "2025-11-03T15:59:51Z"
   generateName: hvst-upgrade-
   generation: 1
-  name: hvst-upgrade-tvncr
-  resourceVersion: "2887729"
-  uid: 73821e35-8512-46b7-8288-21c02ed445b1
+  name: hvst-upgrade-5qx48
+  resourceVersion: "201154"
+  uid: 45e83fc9-1f58-4bb9-b63d-a122101bf80e
 spec:
-  version: v1.6.0
+  upgrade: dev
+  version: v1.6.1
 status:
   conditions:
-  - lastTransitionTime: "2025-09-24T07:45:19Z"
-    message: ""
-    observedGeneration: 1
-    reason: Executed
-    status: "False"
-    type: Available
-  - lastTransitionTime: "2025-09-24T07:45:19Z"
+  - lastTransitionTime: "2025-11-03T16:41:12Z"
     message: UpgradePlan has completed
     observedGeneration: 1
-    reason: CleanedUp
+    reason: Succeeded
     status: "False"
     type: Progressing
-  - lastTransitionTime: "2025-09-24T07:45:19Z"
+  - lastTransitionTime: "2025-11-03T16:41:12Z"
     message: ""
     observedGeneration: 1
     reason: ReconcileSuccess
     status: "False"
     type: Degraded
+  - lastTransitionTime: "2025-11-03T16:41:12Z"
+    message: Entered one of the terminal phases
+    observedGeneration: 1
+    reason: Executed
+    status: "False"
+    type: Available
+  isoImageID: harvester-system/hvst-upgrade-5qx48-iso
   nodeUpgradeStatuses:
     charlie-1-tink-system:
       state: KubernetesUpgraded
@@ -108,42 +108,49 @@ status:
       state: KubernetesUpgraded
   phase: Succeeded
   phaseTransitionTimestamps:
-  - phase: Init
-    phaseTransitionTimestamp: "2025-09-24T07:40:30Z"
+  - phase: Initializing
+    phaseTransitionTimestamp: "2025-11-03T15:59:51Z"
+  - phase: Initialized
+    phaseTransitionTimestamp: "2025-11-03T15:59:52Z"
   - phase: ISODownloading
-    phaseTransitionTimestamp: "2025-09-24T07:40:30Z"
+    phaseTransitionTimestamp: "2025-11-03T15:59:54Z"
   - phase: ISODownloaded
-    phaseTransitionTimestamp: "2025-09-24T07:40:31Z"
+    phaseTransitionTimestamp: "2025-11-03T16:01:03Z"
   - phase: RepoCreating
-    phaseTransitionTimestamp: "2025-09-24T07:40:31Z"
+    phaseTransitionTimestamp: "2025-11-03T16:01:04Z"
   - phase: RepoCreated
-    phaseTransitionTimestamp: "2025-09-24T07:40:31Z"
+    phaseTransitionTimestamp: "2025-11-03T16:10:51Z"
+  - phase: MetadataPopulating
+    phaseTransitionTimestamp: "2025-11-03T16:10:52Z"
   - phase: MetadataPopulated
-    phaseTransitionTimestamp: "2025-09-24T07:40:31Z"
+    phaseTransitionTimestamp: "2025-11-03T16:10:53Z"
   - phase: ImagePreloading
-    phaseTransitionTimestamp: "2025-09-24T07:40:31Z"
+    phaseTransitionTimestamp: "2025-11-03T16:10:54Z"
   - phase: ImagePreloaded
-    phaseTransitionTimestamp: "2025-09-24T07:42:13Z"
+    phaseTransitionTimestamp: "2025-11-03T16:15:26Z"
   - phase: ClusterUpgrading
-    phaseTransitionTimestamp: "2025-09-24T07:42:14Z"
+    phaseTransitionTimestamp: "2025-11-03T16:15:26Z"
   - phase: ClusterUpgraded
-    phaseTransitionTimestamp: "2025-09-24T07:42:48Z"
+    phaseTransitionTimestamp: "2025-11-03T16:24:45Z"
   - phase: NodeUpgrading
-    phaseTransitionTimestamp: "2025-09-24T07:42:48Z"
+    phaseTransitionTimestamp: "2025-11-03T16:24:46Z"
   - phase: NodeUpgraded
-    phaseTransitionTimestamp: "2025-09-24T07:45:18Z"
+    phaseTransitionTimestamp: "2025-11-03T16:41:09Z"
   - phase: CleaningUp
-    phaseTransitionTimestamp: "2025-09-24T07:45:19Z"
+    phaseTransitionTimestamp: "2025-11-03T16:41:09Z"
   - phase: CleanedUp
-    phaseTransitionTimestamp: "2025-09-24T07:45:19Z"
+    phaseTransitionTimestamp: "2025-11-03T16:41:12Z"
   - phase: Succeeded
-    phaseTransitionTimestamp: "2025-09-24T07:45:19Z"
+    phaseTransitionTimestamp: "2025-11-03T16:41:12Z"
+  previousVersion: v1.6.0
   releaseMetadata:
-    harvester: v1.6.0
-    harvesterChart: 1.6.0
-    kubernetes: v1.33.3+rke2r1
+    harvester: v1.6.1
+    harvesterChart: 1.6.1
+    kubernetes: v1.33.5+rke2r1
     minUpgradableVersion: v1.5.0
     monitoringChart: 105.1.2+up61.3.2
-    os: Harvester v1.6.0
-    rancher: v2.12.0
+    os: Harvester v1.6.1
+    rancher: v2.12.2
+  version:
+    isoURL: http://10.115.49.5/iso/harvester/v1.6.1/harvester-v1.6.1-amd64.iso
 ```
