@@ -45,7 +45,7 @@ const (
 	defaultTTLSecondsAfterFinished = 604800 // 7 days
 
 	rke2UpgradeImage    = "rancher/rke2-upgrade"
-	upgradeToolkitImage = "rancher/harvester-upgrade"
+	upgradeToolkitImage = "starbops/harvester-upgrade-toolkit"
 )
 
 var (
