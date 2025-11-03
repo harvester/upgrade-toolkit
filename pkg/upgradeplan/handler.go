@@ -293,10 +293,12 @@ func (h *UpgradePlanPhaseHandler) imagePreload(
 		return ctrl.Result{}, err
 	}
 
-	finished := isPlanFinished(imagePreloadPlan)
+	if !isPlanFinished(imagePreloadPlan) {
+		if isAnyPlanJobFailed(imagePreloadPlan) {
+			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "image-preload plan job(s) failed")
+			return ctrl.Result{}, nil
+		}
 
-	// Plan still running
-	if !finished {
 		h.log.V(1).Info("image-preload plan running")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseImagePreloading, "")
 		return ctrl.Result{}, nil
@@ -352,10 +354,12 @@ func (h *UpgradePlanPhaseHandler) nodeUpgrade(
 		return ctrl.Result{}, err
 	}
 
-	finished := isPlanFinished(nodeUpgradePlan)
+	if !isPlanFinished(nodeUpgradePlan) {
+		if isAnyPlanJobFailed(nodeUpgradePlan) {
+			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "node-upgrade plan job(s) failed")
+			return ctrl.Result{}, nil
+		}
 
-	// Plan still running
-	if !finished {
 		h.log.V(1).Info("node-upgrade plan running")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
 		return ctrl.Result{}, nil
@@ -552,6 +556,17 @@ func (h *UpgradePlanPhaseHandler) getOrCreatePlanForNodeUpgrade(
 		func() *upgradev1.Plan { return constructPlanForNodeUpgrade(up, !single) },
 		up,
 	)
+}
+
+func isAnyPlanJobFailed(plan *upgradev1.Plan) bool {
+	for _, condition := range plan.Status.Conditions {
+		if condition.Type == string(upgradev1.PlanComplete) &&
+			condition.Status == corev1.ConditionFalse &&
+			condition.Reason == string(batchv1.JobFailed) {
+			return true
+		}
+	}
+	return false
 }
 
 func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *harvesterv1beta1.VirtualMachineImage {
