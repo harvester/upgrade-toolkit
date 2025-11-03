@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +40,7 @@ const (
 	longhornStaticStorageClassName = "longhorn-static"
 
 	harvesterManagedLabel = "harvesterhci.io/managed"
+	serviceNameLabel      = "kubernetes.io/service-name"
 	imageComponent        = "iso"
 	repoComponent         = "repo"
 
@@ -1151,20 +1153,29 @@ func isServiceReady(ctx context.Context, c client.Client, svc *corev1.Service) b
 	if svc.Spec.ClusterIP == "" {
 		return false
 	}
-	return hasReadyEndpoints(ctx, c, svc)
+	return isAnyEndpointReady(ctx, c, svc)
 }
 
-// TODO: This should be updated with EndpointSlice since Endpoints is deprecated in Kubernetes v1.33+.
-func hasReadyEndpoints(ctx context.Context, c client.Client, svc *corev1.Service) bool {
-	var ep corev1.Endpoints
-	if err := c.Get(ctx, types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name}, &ep); err != nil {
+func isAnyEndpointReady(ctx context.Context, c client.Client, svc *corev1.Service) bool {
+	var epsList discoveryv1.EndpointSliceList
+	if err := c.List(ctx, &epsList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			serviceNameLabel: svc.Name,
+		}),
+	}); err != nil {
 		return false
 	}
-	for _, subset := range ep.Subsets {
-		if len(subset.Addresses) > 0 {
+
+	if len(epsList.Items) == 0 {
+		return false
+	}
+
+	for _, ep := range epsList.Items[0].Endpoints {
+		if ep.Conditions.Ready != nil && *ep.Conditions.Ready {
 			return true
 		}
 	}
+
 	return false
 }
 
