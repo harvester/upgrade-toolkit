@@ -888,13 +888,11 @@ func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan) *
 							Name:  "apply",
 							Image: fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
 							Command: []string{
-								// "upgrade_manifests.sh",
-								"sleep",
-								"30",
+								"upgrade_manifests.sh",
 							},
 							Env: []corev1.EnvVar{
 								{
-									Name:  "HARVESTER_UPGRADE_PLAN_NAME",
+									Name:  "HARVESTER_UPGRADEPLAN_NAME",
 									Value: upgradePlan.Name,
 								},
 							},
@@ -956,18 +954,14 @@ func constructPlanForImagePreload(upgradePlan *managementv1beta1.UpgradePlan) *u
 		},
 	}
 	container := &upgradev1.ContainerSpec{
-		Image: upgradeToolkitImage,
-		// Command: []string{"do_upgrade_node.sh"},
-		// Args:    []string{"prepare"},
-		// Env: []corev1.EnvVar{
-		// 	{
-		// 		Name:  "HARVESTER_UPGRADEPLAN_NAME",
-		// 		Value: upgradePlan.Name,
-		// 	},
-		// },
-		Command: []string{
-			"sleep",
-			"30",
+		Image:   upgradeToolkitImage,
+		Command: []string{"upgrade_node.sh"},
+		Args:    []string{"prepare"},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "HARVESTER_UPGRADEPLAN_NAME",
+				Value: upgradePlan.Name,
+			},
 		},
 	}
 	version := getUpgradeVersion(upgradePlan)
