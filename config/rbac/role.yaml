@@ -54,6 +54,14 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - discovery
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - harvesterhci.io
   resources:
   - settings
