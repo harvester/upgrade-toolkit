@@ -3,11 +3,12 @@
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+
+source "${SCRIPT_DIR}/lib.sh"
+
 readonly UPGRADE_TMP_DIR="${HOST_DIR}/usr/local/upgrade_tmp"
 readonly STATE_DIR="${HOST_DIR}/run/initramfs/cos-state"
 readonly MAX_PODS=200
-
-source "${SCRIPT_DIR}/lib.sh"
 
 preload_images() {
   export CONTAINER_RUNTIME_ENDPOINT="unix:///${HOST_DIR}/run/k3s/containerd/containerd.sock"
