@@ -112,6 +112,8 @@ type UpgradePlanSpec struct {
 
 	// mode represents the manipulative style of the UpgradePlan. Can be either of "automatic" or "interactive". Default to "automatic".
 	// +optional
+	// +kubebuilder:default:=automatic
+	// +kubebuilder:validation:Enum:=automatic;interactive
 	Mode *string `json:"mode,omitempty"`
 }
 

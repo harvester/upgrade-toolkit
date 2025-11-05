@@ -63,8 +63,12 @@ spec:
                   ignoring any pre-upgrade check failures. Default to "false".
                 type: boolean
               mode:
+                default: automatic
                 description: mode represents the manipulative style of the UpgradePlan.
                   Can be either of "automatic" or "interactive". Default to "automatic".
+                enum:
+                - automatic
+                - interactive
                 type: string
               upgrade:
                 description: |-
