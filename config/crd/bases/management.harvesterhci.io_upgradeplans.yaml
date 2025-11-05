@@ -21,8 +21,8 @@ spec:
     - jsonPath: .spec.version
       name: VERSION
       type: string
-    - jsonPath: .status.phase
-      name: PHASE
+    - jsonPath: .status.currentPhase
+      name: CURRENTPHASE
       type: string
     - jsonPath: .status.conditions[?(@.type=='Available')].status
       name: AVAILABLE
@@ -149,6 +149,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              currentPhase:
+                description: currentPhase shows what overall phase the UpgradePlan
+                  resource is in.
+                type: string
               isoImageID:
                 description: isoImageID refers to the namespaced name of the VM image
                   that will be used for the upgrade.
@@ -167,10 +171,6 @@ spec:
                   specific tasks.
                 type: object
                 x-kubernetes-map-type: atomic
-              phase:
-                description: phase shows what overall phase the UpgradePlan resource
-                  is in.
-                type: string
               phaseTransitionTimestamps:
                 description: phaseTransitionTimestamp is the timestamp of when the
                   last phase change occurred.

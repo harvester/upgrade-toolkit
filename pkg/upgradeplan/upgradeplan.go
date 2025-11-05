@@ -42,7 +42,7 @@ func (up *UpgradePlan) ExecutePhase(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	phase, exists := up.phases[upgradePlan.Status.Phase]
+	phase, exists := up.phases[upgradePlan.Status.CurrentPhase]
 	if !exists {
 		// TODO: We cannot do anything because UpgradePlan is in limbo.
 		return ctrl.Result{}, nil

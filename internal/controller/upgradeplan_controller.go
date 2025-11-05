@@ -128,9 +128,9 @@ func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func setUpgradePlanPhaseTransitionTimestamp(oldUpgradePlan *managementv1beta1.UpgradePlan, newUpgradePlan *managementv1beta1.UpgradePlan) {
-	if oldUpgradePlan.Status.Phase == newUpgradePlan.Status.Phase {
+	if oldUpgradePlan.Status.CurrentPhase == newUpgradePlan.Status.CurrentPhase {
 		for _, transitionTimestamp := range newUpgradePlan.Status.PhaseTransitionTimestamps {
-			if transitionTimestamp.Phase == newUpgradePlan.Status.Phase {
+			if transitionTimestamp.Phase == newUpgradePlan.Status.CurrentPhase {
 				return
 			}
 		}
@@ -138,7 +138,7 @@ func setUpgradePlanPhaseTransitionTimestamp(oldUpgradePlan *managementv1beta1.Up
 
 	now := metav1.NewTime(time.Now())
 	newUpgradePlan.Status.PhaseTransitionTimestamps = append(newUpgradePlan.Status.PhaseTransitionTimestamps, managementv1beta1.UpgradePlanPhaseTransitionTimestamp{
-		Phase:                    newUpgradePlan.Status.Phase,
+		Phase:                    newUpgradePlan.Status.CurrentPhase,
 		PhaseTransitionTimestamp: now,
 	})
 }

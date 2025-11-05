@@ -102,8 +102,8 @@ func getDefaultTolerations() []corev1.Toleration {
 
 // finalize wraps up a finished UpgradePlan, whether it's a success or a failure.
 func finalize(upgradePlan *managementv1beta1.UpgradePlan) {
-	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseCleanedUp {
-		upgradePlan.Status.Phase = managementv1beta1.UpgradePlanPhaseSucceeded
+	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseCleanedUp {
+		upgradePlan.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseSucceeded
 	}
 
 	markUpgradePlanComplete(upgradePlan)
@@ -116,7 +116,7 @@ func isTerminalPhase(phase managementv1beta1.UpgradePlanPhase) bool {
 
 // markUpgradePlanComplete marks UpgradePlan as no longer being processed due to reaching one of the terminating phases.
 func markUpgradePlanComplete(upgradePlan *managementv1beta1.UpgradePlan) {
-	if isTerminalPhase(upgradePlan.Status.Phase) {
+	if isTerminalPhase(upgradePlan.Status.CurrentPhase) {
 		upgradePlan.SetCondition(
 			managementv1beta1.UpgradePlanAvailable,
 			metav1.ConditionFalse,
@@ -126,7 +126,7 @@ func markUpgradePlanComplete(upgradePlan *managementv1beta1.UpgradePlan) {
 		upgradePlan.SetCondition(
 			managementv1beta1.UpgradePlanProgressing,
 			metav1.ConditionFalse,
-			string(upgradePlan.Status.Phase),
+			string(upgradePlan.Status.CurrentPhase),
 			"UpgradePlan has completed",
 		)
 	}

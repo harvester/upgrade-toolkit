@@ -151,7 +151,7 @@ func (h *UpgradePlanPhaseHandler) initialize(
 ) (ctrl.Result, error) {
 	h.log.V(1).Info("handle initialize status")
 
-	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseInitializing {
+	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseInitializing {
 		upgradePlan.SetCondition(managementv1beta1.UpgradePlanAvailable, metav1.ConditionTrue, "Executable", "")
 
 		if err := h.loadVersion(ctx, upgradePlan); err != nil {
@@ -268,7 +268,7 @@ func (h *UpgradePlanPhaseHandler) repoCreate(
 func (h *UpgradePlanPhaseHandler) metadataPopulate(upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error) {
 	h.log.V(1).Info("handle metadata populate")
 
-	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseMetadataPopulating {
+	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseMetadataPopulating {
 		harvesterRelease := newHarvesterRelease(upgradePlan)
 		if err := harvesterRelease.loadReleaseMetadata(); err != nil {
 			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulating, err.Error())
@@ -384,7 +384,7 @@ func (h *UpgradePlanPhaseHandler) resourceCleanup(
 	// - image-preload Plan
 	// - cluster-upgrade Job
 	// - node-upgrade Plan
-	if upgradePlan.Status.Phase == managementv1beta1.UpgradePlanPhaseCleaningUp {
+	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseCleaningUp {
 		resourcesToDelete := []struct {
 			obj       client.Object
 			namespace string
@@ -1117,7 +1117,7 @@ func updateProgressingPhase(
 	phase managementv1beta1.UpgradePlanPhase,
 	message string,
 ) {
-	upgradePlan.Status.Phase = phase
+	upgradePlan.Status.CurrentPhase = phase
 
 	if !upgradePlan.ConditionExists(managementv1beta1.UpgradePlanProgressing) {
 		upgradePlan.SetCondition(managementv1beta1.UpgradePlanProgressing, metav1.ConditionTrue, string(phase), "")
