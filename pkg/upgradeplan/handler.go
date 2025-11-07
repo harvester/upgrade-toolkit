@@ -350,24 +350,75 @@ func (h *UpgradePlanPhaseHandler) nodeUpgrade(
 ) (ctrl.Result, error) {
 	h.log.V(1).Info("handle node upgrade")
 
-	nodeUpgradePlan, err := h.getOrCreatePlanForNodeUpgrade(ctx, upgradePlan)
+	// Node Upgrade rationale
+	//
+	// The Node Upgrade phase consists of two Plans:
+	// - kubernetes-upgrade Plan pre-drains VMs, drains pods, and then upgrades Kubernetes runtime on the node
+	// - os-upgrade Plan pre-drains VMs, drains pods, and then upgrades operating system on the node
+	// This handler keeps track of the two Plans and checks whether both of them complete successfully. Once done and all
+	// nodes' upgrade states are fulfilled, it allows transitioning to the next phase.
+	//
+	// Jobs derived from those Plans can only be created and start running on the nodes after a specific set of labels is
+	// applied to them. Thus, the actual execution order is outlined quite differently, node by node: first the Kubernetes
+	// upgrade, then the OS upgrade, then the next node, and so on.
+	// The Job controller conducts the node labeling mechanism.
+	var kubernetesUpgradePlan, osUpgradePlan *upgradev1.Plan
+
+	kubernetesUpgradePlan, err := h.getOrCreatePlanForKubernetesUpgrade(ctx, upgradePlan)
 	if err != nil {
-		h.log.Error(err, "unable to retrieve node-upgrade plan from upgradeplan")
+		h.log.Error(err, "unable to retrieve kubernetes-upgrade plan from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
-	if !isPlanFinished(nodeUpgradePlan) {
-		if isAnyPlanJobFailed(nodeUpgradePlan) {
-			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "node-upgrade plan job(s) failed")
+	if !isPlanFinished(kubernetesUpgradePlan) {
+		if isAnyPlanJobFailed(kubernetesUpgradePlan) {
+			h.log.V(0).Info("kubernetes-upgrade job failed")
+			updateProgressingPhase(
+				upgradePlan,
+				managementv1beta1.UpgradePlanPhaseFailed,
+				"kubernetes-upgrade plan job(s) failed",
+			)
 			return ctrl.Result{}, nil
 		}
 
-		h.log.V(1).Info("node-upgrade plan running")
+		h.log.V(1).Info("kubernetes-upgrade plan running")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
 		return ctrl.Result{}, nil
 	}
 
-	// Plan finished successfully
+	skip := isSkipOSUpgrade(upgradePlan)
+	if skip {
+		goto checkNodeUpgradeStates
+	}
+
+	osUpgradePlan, err = h.getOrCreatePlanForOSUpgrade(ctx, upgradePlan)
+	if err != nil {
+		h.log.Error(err, "unable to retrieve os-upgrade plan from upgradeplan")
+		return ctrl.Result{}, err
+	}
+
+	if !isPlanFinished(osUpgradePlan) {
+		if isAnyPlanJobFailed(osUpgradePlan) {
+			h.log.V(0).Info("os-upgrade job failed")
+			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "os-upgrade plan job(s) failed")
+			return ctrl.Result{}, nil
+		}
+
+		h.log.V(1).Info("os-upgrade plan running")
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
+		return ctrl.Result{}, nil
+	}
+
+checkNodeUpgradeStates:
+	// Go through each node and ensure they reach the desired node upgrade states
+	for nodeName, status := range upgradePlan.Status.NodeUpgradeStatuses {
+		if !isTerminalState(status, upgradePlan.Spec.SkipOSUpgrade) {
+			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
+			return ctrl.Result{}, nil
+		}
+		h.log.V(1).Info("node has reached the desired node upgrade state", "nodeName", nodeName)
+	}
+
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgraded, "")
 	return ctrl.Result{}, nil
 }
@@ -572,13 +623,13 @@ func (h *UpgradePlanPhaseHandler) getOrCreateJobForClusterUpgrade(
 	)
 }
 
-func (h *UpgradePlanPhaseHandler) getOrCreatePlanForNodeUpgrade(
+func (h *UpgradePlanPhaseHandler) getOrCreatePlanForKubernetesUpgrade(
 	ctx context.Context,
 	up *managementv1beta1.UpgradePlan,
 ) (*upgradev1.Plan, error) {
 	nn := types.NamespacedName{
 		Namespace: cattleSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, NodeComponent),
+		Name:      fmt.Sprintf("%s-%s-%s", up.Name, NodeComponent, NodeUpgradeTypeKubernetes),
 	}
 	single, err := h.isSingleNodeCluster(ctx)
 	if err != nil {
@@ -587,7 +638,27 @@ func (h *UpgradePlanPhaseHandler) getOrCreatePlanForNodeUpgrade(
 	return getOrCreate(
 		ctx, h.client, h.scheme, nn,
 		func() *upgradev1.Plan { return &upgradev1.Plan{} },
-		func() *upgradev1.Plan { return constructPlanForNodeUpgrade(up, !single) },
+		func() *upgradev1.Plan { return constructPlanForKubernetesUpgrade(up, !single) },
+		up,
+	)
+}
+
+func (h *UpgradePlanPhaseHandler) getOrCreatePlanForOSUpgrade(
+	ctx context.Context,
+	up *managementv1beta1.UpgradePlan,
+) (*upgradev1.Plan, error) {
+	nn := types.NamespacedName{
+		Namespace: cattleSystemNamespace,
+		Name:      fmt.Sprintf("%s-%s-%s", up.Name, NodeComponent, NodeUpgradeTypeOS),
+	}
+	single, err := h.isSingleNodeCluster(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return getOrCreate(
+		ctx, h.client, h.scheme, nn,
+		func() *upgradev1.Plan { return &upgradev1.Plan{} },
+		func() *upgradev1.Plan { return constructPlanForOSUpgrade(up, !single) },
 		up,
 	)
 }
@@ -992,6 +1063,7 @@ func constructPlan(
 	concurrency int,
 	nodeSelector *metav1.LabelSelector,
 	maintenance bool,
+	prepare *upgradev1.ContainerSpec,
 	container *upgradev1.ContainerSpec,
 	version string,
 ) *upgradev1.Plan {
@@ -1012,6 +1084,7 @@ func constructPlan(
 			NodeSelector:          nodeSelector,
 			ServiceAccountName:    sucName,
 			Tolerations:           getDefaultTolerations(),
+			Prepare:               prepare,
 			Upgrade:               container,
 			Version:               version,
 		},
@@ -1046,17 +1119,39 @@ func constructPlanForImagePreload(upgradePlan *managementv1beta1.UpgradePlan) *u
 	}
 	version := getUpgradeVersion(upgradePlan)
 
-	return constructPlan(upgradePlan.Name, PrepareComponent, 1, selector, false, container, version)
+	return constructPlan(upgradePlan.Name, PrepareComponent, 1, selector, false, nil, container, version)
 }
 
-func constructPlanForNodeUpgrade(upgradePlan *managementv1beta1.UpgradePlan, maintenance bool) *upgradev1.Plan {
+func constructPlanForKubernetesUpgrade(upgradePlan *managementv1beta1.UpgradePlan, maintenance bool) *upgradev1.Plan {
 	selector := &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
-				Key:      "node-role.kubernetes.io/control-plane",
+				Key:      harvesterManagedLabel,
 				Operator: metav1.LabelSelectorOpIn,
-				Values: []string{
-					"true",
+				Values:   []string{"true"},
+			},
+			{
+				Key:      fmt.Sprintf("%s/%s", LabelPrefix, upgradePlan.Name),
+				Operator: metav1.LabelSelectorOpIn,
+				Values:   []string{KubernetesUpgradeState},
+			},
+		},
+	}
+	prepare := &upgradev1.ContainerSpec{
+		Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+		Command: []string{"upgrade_node.sh"},
+		Args:    []string{"pre-drain"},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "HARVESTER_UPGRADEPLAN_NAME",
+				Value: upgradePlan.Name,
+			},
+			{
+				Name: "HARVESTER_UPGRADE_NODE_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
 				},
 			},
 		},
@@ -1066,7 +1161,81 @@ func constructPlanForNodeUpgrade(upgradePlan *managementv1beta1.UpgradePlan, mai
 	}
 	version := getKubernetesVersion(upgradePlan)
 
-	return constructPlan(upgradePlan.Name, NodeComponent, 1, selector, maintenance, container, version)
+	plan := constructPlan(upgradePlan.Name, NodeComponent, 1, selector, maintenance, prepare, container, version)
+	plan.Name += "-" + NodeUpgradeTypeKubernetes
+	plan.Labels[HarvesterNodeUpgradeTypeLabel] = NodeUpgradeTypeKubernetes
+
+	return plan
+}
+
+func constructPlanForOSUpgrade(upgradePlan *managementv1beta1.UpgradePlan, maintenance bool) *upgradev1.Plan {
+	selector := &metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{
+				Key:      harvesterManagedLabel,
+				Operator: metav1.LabelSelectorOpIn,
+				Values:   []string{"true"},
+			},
+			{
+				Key:      fmt.Sprintf("%s/%s", LabelPrefix, upgradePlan.Name),
+				Operator: metav1.LabelSelectorOpIn,
+				Values:   []string{OSUpgradeState},
+			},
+		},
+	}
+	prepare := &upgradev1.ContainerSpec{
+		Image:   upgradeToolkitImage,
+		Command: []string{"upgrade_node.sh"},
+		Args:    []string{"pre-drain"},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "HARVESTER_UPGRADEPLAN_NAME",
+				Value: upgradePlan.Name,
+			},
+			{
+				Name: "HARVESTER_UPGRADE_NODE_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			},
+		},
+	}
+	container := &upgradev1.ContainerSpec{
+		Image:   upgradeToolkitImage,
+		Command: []string{"upgrade_node.sh"},
+		Args:    []string{"post-drain"},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "HARVESTER_UPGRADEPLAN_NAME",
+				Value: upgradePlan.Name,
+			},
+			{
+				Name: "HARVESTER_UPGRADE_NODE_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "spec.nodeName",
+					},
+				},
+			},
+			{
+				Name: "HARVESTER_UPGRADE_POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+		},
+	}
+	version := getUpgradeVersion(upgradePlan)
+
+	plan := constructPlan(upgradePlan.Name, NodeComponent, 1, selector, maintenance, prepare, container, version)
+	plan.Name += "-" + NodeUpgradeTypeOS
+	plan.Labels[HarvesterNodeUpgradeTypeLabel] = NodeUpgradeTypeOS
+
+	return plan
 }
 
 func createOwnedAndFetch[T client.Object](
@@ -1200,4 +1369,17 @@ func isPlanFinished(plan *upgradev1.Plan) bool {
 		}
 	}
 	return false
+}
+
+func isSkipOSUpgrade(upgradePlan *managementv1beta1.UpgradePlan) bool {
+	return upgradePlan.Spec.SkipOSUpgrade != nil && *upgradePlan.Spec.SkipOSUpgrade
+}
+func isTerminalState(status managementv1beta1.NodeUpgradeStatus, skipOSUpgrade *bool) bool {
+	// The desired node upgrade state is "KubernetesUpgraded" if OS upgrade is skipped
+	if skipOSUpgrade != nil && *skipOSUpgrade {
+		return status.State == managementv1beta1.NodeStateKubernetesUpgraded
+	}
+
+	// Otherwise, it's "OSUpgraded"
+	return status.State == managementv1beta1.NodeStateOSUpgraded
 }

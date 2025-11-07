@@ -62,12 +62,44 @@ clean_up_tmp_files() {
 }
 
 recover_rancher_system_agent() {
+  [[ ! -d "/run/systemd/system/rancher-system-agent.service.d/" ]] && return
+
   chroot "${HOST_DIR}" /bin/bash -c "rm -rf /run/systemd/system/rancher-system-agent.service.d && systemctl daemon-reload && systemctl restart rancher-system-agent.service"
 }
 
+is_rke2_upgraded() {
+  # RKE2 doesn't show '-rcX' in nodeInfo, so we remove '-rcX' in $REPO_RKE2_VERSION.
+  # Warning: we can't upgrade from a '-rcX' to another in the same minor version like v1.22.12-rc1+rke2r1 to v1.22.12-rc2+rke2r1.
+  local repo_rke2_version_without_rc
+  repo_rke2_version_without_rc=$(echo -n "${REPO_RKE2_VERSION}" | sed 's/-rc[[:digit:]]*//g')
+
+  if [[ "$(get_node_rke2_version)" == "${repo_rke2_version_without_rc}" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+wait_rke2_upgrade() {
+  until is_rke2_upgraded; do
+    echo "Waiting for RKE2 to be upgraded..."
+    sleep 5
+  done
+}
+
 wait_longhorn_engines() {
+  if is_rke2_upgraded; then
+    echo "RKE2 already upgraded. Skip waiting Longhorn engines."
+    return
+  fi
+
   local node_count
   node_count=$(kubectl get nodes --selector=harvesterhci.io/managed=true,node-role.harvesterhci.io/witness!=true -o json | jq -r '.items | length')
+
+  if [[ ${node_count} -eq 1 ]]; then
+    echo "Skip waiting Longhorn engines for single-node cluster."
+    return
+  fi
 
   # For each running engine and its volume
   kubectl get engines.longhorn.io -n longhorn-system -o json |
@@ -161,31 +193,6 @@ wait_evacuation_pdb_gone() {
 
 get_node_rke2_version() {
   kubectl get node "${HARVESTER_UPGRADE_NODE_NAME}" -o yaml | yq -e e '.status.nodeInfo.kubeletVersion' -
-}
-
-upgrade_rke2() {
-  local patch_file
-  patch_file=$(mktemp -p "${UPGRADE_TMP_DIR}")
-
-  cat > "${patch_file}" << EOF
-spec:
-  kubernetesVersion: ${REPO_RKE2_VERSION}
-  rkeConfig: {}
-EOF
-
-  kubectl patch clusters.provisioning.cattle.io local -n fleet-local --patch-file "${patch_file}" --type merge
-}
-
-wait_rke2_upgrade() {
-  # RKE2 doesn't show '-rcX' in nodeInfo, so we remove '-rcX' in $REPO_RKE2_VERSION.
-  # Warning: we can't upgrade from a '-rcX' to another in the same minor version like v1.22.12-rc1+rke2r1 to v1.22.12-rc2+rke2r1.
-  local repo_rke2_version_without_rc
-  repo_rke2_version_without_rc=$(echo -n "${REPO_RKE2_VERSION}" | sed 's/-rc[[:digit:]]*//g')
-
-  until [[ "$(get_node_rke2_version)" == "${repo_rke2_version_without_rc}" ]]; do
-    echo "Waiting for RKE2 to be upgraded..."
-    sleep 5
-  done
 }
 
 clean_rke2_archives() {
@@ -378,14 +385,14 @@ EOF
 
 cat >> "${HOST_DIR}/tmp/upgrade-reboot.sh" << 'EOF'
 source /etc/bash.bashrc.local
-pod_id=$(crictl pods --name ${HARVESTER_UPGRADE_POD_NAME} --namespace harvester-system -o json | jq -er '.items[0].id')
+pod_id=$(crictl pods --name ${HARVESTER_UPGRADE_POD_NAME} --namespace cattle-system -o json | jq -er '.items[0].id')
 
 # get 'upgrade' container ID
-container_id=$(crictl ps --pod ${pod_id} --name apply -o json -a | jq -er '.containers[0].id')
+container_id=$(crictl ps --pod ${pod_id} --name upgrade -o json -a | jq -er '.containers[0].id')
 container_state=$(crictl inspect ${container_id} | jq -er '.status.state')
 
 if [[ "${container_state}" == "CONTAINER_EXITED" ]]; then
-  container_exit_code=$(crictl inspect \${container_id} | jq -r '.status.exitCode')
+  container_exit_code=$(crictl inspect ${container_id} | jq -r '.status.exitCode')
 
   if [[ "${container_exit_code}" == "0" ]]; then
     sleep 10
@@ -551,6 +558,9 @@ command_prepare() {
 }
 
 command_pre_drain() {
+  wait_repo
+  detect_repo
+
   recover_rancher_system_agent
   wait_longhorn_engines
 
@@ -587,42 +597,6 @@ command_post_drain() {
 
   kubectl taint node "${HARVESTER_UPGRADE_NODE_NAME}" kubevirt.io/drain- || true
 
-  upgrade_os
-}
-
-command_single_node_upgrade() {
-  echo "Upgrade single node"
-
-  recover_rancher_system_agent
-  wait_repo
-  detect_repo
-  remove_rke2_canal_config
-  disable_rke2_charts
-
-  # Copy OS things, we need to shutdown repo VMs.
-  NEW_OS_SQUASHFS_IMAGE_FILE=$(mktemp -p "${UPGRADE_TMP_DIR}")
-  download_file "${UPGRADE_REPO_SQUASHFS_IMAGE}" "${NEW_OS_SQUASHFS_IMAGE_FILE}"
-
-  # Shut down non-live migratable VMs
-  upgrade-helper vm-live-migrate-detector "${HARVESTER_UPGRADE_NODE_NAME}" --shutdown --upgrade "${HARVESTER_UPGRADEPLAN_NAME}"
-  wait_vms_out_or_shutdown
-
-  echo "wait for fleet bundles before upgrading RKE2"
-  # wait all fleet bundles in limited time
-  wait_for_fleet_bundles
-
-  # update max-pods to 200
-  set_max_pods
-  set_reserved_resource
-  set_rke2_device_permissions
-  set_oem_cleanup_kubelet
-
-  # Upgrade RKE2
-  upgrade_rke2
-  wait_rke2_upgrade
-  clean_rke2_archives
-
-  # Upgrade OS
   upgrade_os
 }
 

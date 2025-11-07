@@ -70,6 +70,10 @@ spec:
                 - automatic
                 - interactive
                 type: string
+              skipOSUpgrade:
+                description: skipOSUpgrade indicates whether to skip the operating
+                  system upgrade. Default to "false" (OS will be upgraded).
+                type: boolean
               upgrade:
                 description: |-
                   upgrade can be specified to opt for any other specific upgrade image. If not provided, the version resource name is used.

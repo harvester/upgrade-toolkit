@@ -984,6 +984,10 @@ pause_all_charts() {
   done
 }
 
+disable_cluster_version_management() {
+  kubectl annotate clusters.management local rancher.io/imported-cluster-version-management="false" --overwrite=true
+}
+
 skip_restart_rancher_system_agent() {
   # to prevent rke2-server/agent from restarting during the rancher upgrade.
   # by adding an env var to temporarily make rancher-system-agent on each node skip restarting rke2-server/agent.
@@ -1243,6 +1247,7 @@ detect_repo
 detect_upgrade
 pre_upgrade_manifest
 pause_all_charts
+disable_cluster_version_management
 skip_restart_rancher_system_agent
 upgrade_rancher
 patch_local_cluster_details

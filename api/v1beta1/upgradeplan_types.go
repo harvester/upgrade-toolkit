@@ -115,6 +115,10 @@ type UpgradePlanSpec struct {
 	// +kubebuilder:default:=automatic
 	// +kubebuilder:validation:Enum:=automatic;interactive
 	Mode *string `json:"mode,omitempty"`
+
+	// skipOSUpgrade indicates whether to skip the operating system upgrade. Default to "false" (OS will be upgraded).
+	// +optional
+	SkipOSUpgrade *bool `json:"skipOSUpgrade,omitempty"`
 }
 
 // UpgradePlanStatus defines the observed state of UpgradePlan.

@@ -1,9 +1,18 @@
 package upgradeplan
 
 const (
-	HarvesterUpgradePlanLabel      = "management.harvesterhci.io/upgrade-plan"
-	HarvesterUpgradeComponentLabel = "management.harvesterhci.io/upgrade-component"
+	LabelPrefix               = "management.harvesterhci.io"
+	HarvesterUpgradePlanLabel = LabelPrefix + "/" + "upgrade-plan"
+
+	HarvesterUpgradeComponentLabel = LabelPrefix + "/" + "upgrade-component"
 	PrepareComponent               = "image-preload"
 	ClusterComponent               = "cluster-upgrade"
 	NodeComponent                  = "node-upgrade"
+
+	KubernetesUpgradeState = "k8s"
+	OSUpgradeState         = "os"
+
+	HarvesterNodeUpgradeTypeLabel = LabelPrefix + "/" + "node-upgrade-type"
+	NodeUpgradeTypeKubernetes     = KubernetesUpgradeState
+	NodeUpgradeTypeOS             = OSUpgradeState
 )

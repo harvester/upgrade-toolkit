@@ -68,7 +68,7 @@ type UpgradePlanReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.Log.V(1).Info("reconciling upgradeplan")
+	r.Log.V(2).Info("reconciling upgradeplan")
 
 	var upgradePlan managementv1beta1.UpgradePlan
 	if err := r.Get(ctx, req.NamespacedName, &upgradePlan); err != nil {
