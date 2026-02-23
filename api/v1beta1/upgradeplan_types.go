@@ -178,9 +178,9 @@ type UpgradePlanStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=up;ups
 // +kubebuilder:printcolumn:name="VERSION",type="string",JSONPath=`.spec.version`
 // +kubebuilder:printcolumn:name="CURRENTPHASE",type="string",JSONPath=`.status.currentPhase`
-// +kubebuilder:printcolumn:name="AVAILABLE",type=string,JSONPath=`.status.conditions[?(@.type=='Available')].status`
-// +kubebuilder:printcolumn:name="PROGRESSING",type=string,JSONPath=`.status.conditions[?(@.type=='Progressing')].status`
-// +kubebuilder:printcolumn:name="DEGRADED",type=string,JSONPath=`.status.conditions[?(@.type=='Degraded')].status`
+// +kubebuilder:printcolumn:name="AVAILABLE",type="string",JSONPath=`.status.conditions[?(@.type=='Available')].status`
+// +kubebuilder:printcolumn:name="PROGRESSING",type="string",JSONPath=`.status.conditions[?(@.type=='Progressing')].status`
+// +kubebuilder:printcolumn:name="DEGRADED",type="string",JSONPath=`.status.conditions[?(@.type=='Degraded')].status`
 
 // UpgradePlan is the Schema for the upgradeplans API
 type UpgradePlan struct {
