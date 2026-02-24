@@ -40,9 +40,9 @@ import (
 // UpgradePlanReconciler reconciles a UpgradePlan object
 type UpgradePlanReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	Log         logr.Logger
-	upgradePlan *upgradeplan.UpgradePlan
+	Scheme   *runtime.Scheme
+	Log      logr.Logger
+	pipeline *upgradeplan.Pipeline
 }
 
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradeplans,verbs=get;list;watch;create;update;patch;delete
@@ -60,10 +60,6 @@ type UpgradePlanReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the UpgradePlan object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
@@ -90,7 +86,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	result, err := r.upgradePlan.ExecutePhase(ctx, upgradePlanCopy)
+	result, err := r.pipeline.Execute(ctx, upgradePlanCopy)
 	if err != nil {
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionTrue, "ReconcileError", err.Error())
 	} else {
@@ -113,8 +109,12 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	handler := upgradeplan.NewUpgradePlanPhaseHandler(r.Client, r.Scheme, r.Log)
-	r.upgradePlan = upgradeplan.NewUpgradePlan(handler)
+	deps := &upgradeplan.PhaseDeps{
+		Client: r.Client,
+		Scheme: r.Scheme,
+		Log:    r.Log,
+	}
+	r.pipeline = upgradeplan.NewPipeline(deps)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&managementv1beta1.UpgradePlan{}).
 		Owns(&appsv1.DaemonSet{}).
