@@ -8,6 +8,7 @@ rules:
   - ""
   resources:
   - nodes
+  - secrets
   verbs:
   - get
   - list
@@ -54,6 +55,14 @@ rules:
   - jobs/status
   verbs:
   - get
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - machines
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - discovery
   resources:
@@ -111,6 +120,16 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - provisioning.cattle.io
+  resources:
+  - clusters
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - upgrade.cattle.io
   resources:

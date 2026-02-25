@@ -227,6 +227,7 @@ func (c *ManagerCommand) Run() error {
 				"harvester-system": {},
 				"cattle-system":    {},
 				"kube-system":      {},
+				"fleet-local":      {},
 			},
 		},
 		Scheme:                 scheme,
@@ -276,6 +277,15 @@ func (c *ManagerCommand) Run() error {
 		Log:    logf.FromContext(ctx).WithName("job-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Job")
+		return err
+	}
+	if err := (&controller.SecretReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		Log:              logf.FromContext(ctx).WithName("secret-controller"),
+		NodeNameResolver: &controller.MachineNodeNameResolver{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Secret")
 		return err
 	}
 	// +kubebuilder:scaffold:builder

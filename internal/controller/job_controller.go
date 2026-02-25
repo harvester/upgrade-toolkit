@@ -51,15 +51,6 @@ type reconcileFuncs func(context.Context, *batchv1.Job) error
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradeplans/status,verbs=get;update;patch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Job object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.Log.V(2).Info("reconciling job")
 
@@ -81,7 +72,6 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	reconcilers := []reconcileFuncs{
 		r.nodeUpgradeStatusUpdate,
-		r.nodeLabelUpdate,
 	}
 
 	for _, reconciler := range reconcilers {
@@ -142,55 +132,6 @@ func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv
 	return nil
 }
 
-func (r *JobReconciler) nodeLabelUpdate(ctx context.Context, job *batchv1.Job) error {
-	r.Log.V(1).Info("node label update")
-
-	upgradePlanName, ok := job.Labels[upgradeplan.HarvesterUpgradePlanLabel]
-	if !ok {
-		return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradePlanLabel)
-	}
-	upgradeComponent, ok := job.Labels[upgradeplan.HarvesterUpgradeComponentLabel]
-	if !ok {
-		return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradeComponentLabel)
-	}
-	nodeName, ok := job.Labels[nodeLabel]
-	if !ok {
-		return fmt.Errorf("label %s not found", nodeLabel)
-	}
-
-	if upgradeComponent != upgradeplan.NodeComponent {
-		return nil
-	}
-
-	finished, success := isJobFinished(job)
-
-	// Job still running or failed
-	if !finished || !success {
-		return nil
-	}
-
-	var node corev1.Node
-	if err := r.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
-		return err
-	}
-
-	var upgradePlan managementv1beta1.UpgradePlan
-	if err := r.Get(ctx, types.NamespacedName{Name: upgradePlanName}, &upgradePlan); err != nil {
-		return err
-	}
-
-	// Nudge the node to the next upgrade state once the Job has finished successfully
-	if err := updateNodeLabel(&node, &upgradePlan); err != nil {
-		return err
-	}
-
-	if err := r.Update(ctx, &node); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
 	if job.Labels == nil {
 		return false
@@ -211,47 +152,47 @@ func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
 	return true
 }
 
-func defaultStateFor(component, t string) string {
+func defaultStateFor(component, hookType string) string {
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloading
-	case component == upgradeplan.NodeComponent && t == upgradeplan.NodeUpgradeTypeKubernetes:
-		return managementv1beta1.NodeStateKubernetesUpgrading
-	case component == upgradeplan.NodeComponent && t == upgradeplan.NodeUpgradeTypeOS:
-		return managementv1beta1.NodeStateOSUpgrading
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
+		return managementv1beta1.NodeStatePreDraining
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
+		return managementv1beta1.NodeStatePostDraining
 	default:
 		return ""
 	}
 }
 
-func successStateFor(component, t string) string {
+func successStateFor(component, hookType string) string {
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloaded
-	case component == upgradeplan.NodeComponent && t == upgradeplan.NodeUpgradeTypeKubernetes:
-		return managementv1beta1.NodeStateKubernetesUpgraded
-	case component == upgradeplan.NodeComponent && t == upgradeplan.NodeUpgradeTypeOS:
-		return managementv1beta1.NodeStateOSUpgraded
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
+		return managementv1beta1.NodeStatePreDrained
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
+		return managementv1beta1.NodeStatePostDrained
 	default:
 		return ""
 	}
 }
 
-func failureStateFor(component, t string) string {
+func failureStateFor(component, hookType string) string {
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloadFailed
-	case component == upgradeplan.NodeComponent && t == upgradeplan.NodeUpgradeTypeKubernetes:
-		return managementv1beta1.NodeStateKubernetesUpgradeFailed
-	case component == upgradeplan.NodeComponent && t == upgradeplan.NodeUpgradeTypeOS:
-		return managementv1beta1.NodeStateOSUpgradeFailed
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
+		return managementv1beta1.NodeStatePreDrainFailed
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
+		return managementv1beta1.NodeStatePostDrainFailed
 	default:
 		return ""
 	}
 }
 
 func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managementv1beta1.NodeUpgradeStatus {
-	jobType := job.Labels[upgradeplan.HarvesterNodeUpgradeTypeLabel]
+	hookType := job.Labels[upgradeplan.HarvesterDrainHookTypeLabel]
 
 	for _, condition := range job.Status.Conditions {
 		if condition.Status != corev1.ConditionTrue {
@@ -260,11 +201,11 @@ func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managemen
 		switch condition.Type {
 		case batchv1.JobComplete:
 			return managementv1beta1.NodeUpgradeStatus{
-				State: successStateFor(upgradeComponent, jobType),
+				State: successStateFor(upgradeComponent, hookType),
 			}
 		case batchv1.JobFailed:
 			return managementv1beta1.NodeUpgradeStatus{
-				State:   failureStateFor(upgradeComponent, jobType),
+				State:   failureStateFor(upgradeComponent, hookType),
 				Reason:  condition.Reason,
 				Message: condition.Message,
 			}
@@ -272,68 +213,6 @@ func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managemen
 	}
 
 	return managementv1beta1.NodeUpgradeStatus{
-		State: defaultStateFor(upgradeComponent, jobType),
+		State: defaultStateFor(upgradeComponent, hookType),
 	}
-}
-
-func isJobFinished(job *batchv1.Job) (finished, success bool) {
-	for _, condition := range job.Status.Conditions {
-		if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
-			finished, success = true, true
-			return
-		}
-		if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
-			finished, success = true, false
-			return
-		}
-	}
-	return
-}
-
-func updateNodeLabel(node *corev1.Node, upgradePlan *managementv1beta1.UpgradePlan) error {
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-
-	nodeUpgradeDesiredStateLabelKey := fmt.Sprintf("%s/%s", upgradeplan.LabelPrefix, upgradePlan.Name)
-	desiredState, ok := node.Labels[nodeUpgradeDesiredStateLabelKey]
-	if !ok {
-		return nil
-	}
-
-	switch desiredState {
-	case upgradeplan.KubernetesUpgradeState:
-		// If the desired upgrade state for the node is KubernetesUpgradeState and the node is already at
-		// NodeStateKubernetesUpgraded, nudge the node to enter OSUpgradeState.
-		currentStatus, ok := upgradePlan.Status.NodeUpgradeStatuses[node.Name]
-		if !ok {
-			return fmt.Errorf("node %s not found in the node upgrade statuses map", node.Name)
-		}
-		if currentStatus.State != managementv1beta1.NodeStateKubernetesUpgraded {
-			return nil
-		}
-
-		if upgradePlan.Spec.SkipOSUpgrade != nil && *upgradePlan.Spec.SkipOSUpgrade {
-			delete(node.Labels, nodeUpgradeDesiredStateLabelKey)
-			return nil
-		}
-
-		node.Labels[nodeUpgradeDesiredStateLabelKey] = upgradeplan.OSUpgradeState
-	case upgradeplan.OSUpgradeState:
-		// If the desired upgrade state for the node is OSUpgradeState and the node is already at
-		// NodeStateOSUpgraded, the node is considered fully upgraded.
-		currentStatus, ok := upgradePlan.Status.NodeUpgradeStatuses[node.Name]
-		if !ok {
-			return fmt.Errorf("node %s not found in the node upgrade statuses map", node.Name)
-		}
-		if currentStatus.State != managementv1beta1.NodeStateOSUpgraded {
-			return nil
-		}
-
-		delete(node.Labels, nodeUpgradeDesiredStateLabelKey)
-	default:
-		return fmt.Errorf("unrecognized %s label value: %s", nodeUpgradeDesiredStateLabelKey, desiredState)
-	}
-
-	return nil
 }

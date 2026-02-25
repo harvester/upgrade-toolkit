@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,7 +15,8 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
-// NodeUpgradePhase performs sequential k8s + OS upgrades per node via Plans.
+// NodeUpgradePhase triggers Rancher V2 Provisioning to upgrade each node's
+// Kubernetes runtime, using pre/post-drain hooks for custom workloads.
 type NodeUpgradePhase struct {
 	*PhaseDeps
 }
@@ -26,57 +27,57 @@ func NewNodeUpgradePhase(deps *PhaseDeps) *NodeUpgradePhase {
 
 func (p *NodeUpgradePhase) Name() string { return "NodeUpgrade" }
 
+// PreRun initializes NodeUpgradeStatuses for all Harvester-managed nodes.
+func (p *NodeUpgradePhase) PreRun(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	if upgradePlan.Status.NodeUpgradeStatuses == nil {
+		upgradePlan.Status.NodeUpgradeStatuses = make(map[string]managementv1beta1.NodeUpgradeStatus)
+	}
+
+	var nodeList corev1.NodeList
+	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			harvesterManagedLabel: "true",
+		}),
+	}); err != nil {
+		return err
+	}
+
+	for _, node := range nodeList.Items {
+		if _, exists := upgradePlan.Status.NodeUpgradeStatuses[node.Name]; !exists {
+			upgradePlan.Status.NodeUpgradeStatuses[node.Name] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStateImagePreloaded,
+			}
+		}
+	}
+
+	return nil
+}
+
 func (p *NodeUpgradePhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle node upgrade")
+	p.Log.V(1).Info("handle node upgrade via Rancher V2 Provisioning")
 
-	kubernetesUpgradePlan, err := p.getOrCreatePlanForKubernetesUpgrade(ctx, upgradePlan)
-	if err != nil {
-		p.Log.Error(err, "unable to retrieve kubernetes-upgrade plan from upgradeplan")
+	if err := p.ensureClusterPatched(ctx, upgradePlan); err != nil {
+		p.Log.Error(err, "unable to patch Cluster resource for Kubernetes upgrade")
 		return ctrl.Result{}, err
 	}
 
-	if !isPlanFinished(kubernetesUpgradePlan) {
-		if isAnyPlanJobFailed(kubernetesUpgradePlan) {
-			p.Log.V(0).Info("kubernetes-upgrade job failed")
+	// Check per-node statuses
+	for nodeName, status := range upgradePlan.Status.NodeUpgradeStatuses {
+		if IsNodeUpgradeFailure(status) {
 			updateProgressingPhase(
 				upgradePlan,
 				managementv1beta1.UpgradePlanPhaseFailed,
-				"kubernetes-upgrade plan job(s) failed",
+				fmt.Sprintf("node %s upgrade failed: %s", nodeName, status.Message),
 			)
 			return ctrl.Result{}, nil
 		}
-
-		p.Log.V(1).Info("kubernetes-upgrade plan running")
-		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
-		return ctrl.Result{}, nil
-	}
-
-	if !isSkipOSUpgrade(upgradePlan) {
-		osUpgradePlan, err := p.getOrCreatePlanForOSUpgrade(ctx, upgradePlan)
-		if err != nil {
-			p.Log.Error(err, "unable to retrieve os-upgrade plan from upgradeplan")
-			return ctrl.Result{}, err
-		}
-
-		if !isPlanFinished(osUpgradePlan) {
-			if isAnyPlanJobFailed(osUpgradePlan) {
-				p.Log.V(0).Info("os-upgrade job failed")
-				updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "os-upgrade plan job(s) failed")
-				return ctrl.Result{}, nil
-			}
-
-			p.Log.V(1).Info("os-upgrade plan running")
-			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
-			return ctrl.Result{}, nil
-		}
-	}
-
-	// Check that all nodes reached their desired terminal upgrade state
-	for nodeName, status := range upgradePlan.Status.NodeUpgradeStatuses {
-		if !isTerminalState(status, upgradePlan.Spec.SkipOSUpgrade) {
+		if !isTerminalState(status) {
 			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
 			return ctrl.Result{}, nil
 		}
@@ -87,170 +88,136 @@ func (p *NodeUpgradePhase) Run(
 	return ctrl.Result{}, nil
 }
 
-func (p *NodeUpgradePhase) getOrCreatePlanForKubernetesUpgrade(
+// ensureClusterPatched patches the provisioning.cattle.io/v1 Cluster resource
+// to trigger Rancher's Kubernetes upgrade with drain hooks.
+func (p *NodeUpgradePhase) ensureClusterPatched(
 	ctx context.Context,
-	up *managementv1beta1.UpgradePlan,
-) (*upgradev1.Plan, error) {
-	nn := types.NamespacedName{
-		Namespace: cattleSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s-%s", up.Name, NodeComponent, NodeUpgradeTypeKubernetes),
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	cluster := &unstructured.Unstructured{}
+	cluster.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "provisioning.cattle.io",
+		Version: "v1",
+		Kind:    "Cluster",
+	})
+
+	if err := p.Client.Get(ctx, types.NamespacedName{
+		Namespace: FleetLocalNamespace,
+		Name:      LocalClusterName,
+	}, cluster); err != nil {
+		return fmt.Errorf("failed to get Cluster resource: %w", err)
 	}
-	single, err := p.isSingleNodeCluster(ctx)
-	if err != nil {
-		return nil, err
+
+	targetK8sVersion := getKubernetesVersion(upgradePlan)
+	if targetK8sVersion == "" {
+		return fmt.Errorf("kubernetes version not found in release metadata")
 	}
-	return getOrCreate(
-		ctx, p.Client, p.Scheme, nn,
-		func() *upgradev1.Plan { return &upgradev1.Plan{} },
-		func() *upgradev1.Plan { return constructPlanForKubernetesUpgrade(up, !single) },
-		up,
+
+	// Check if already patched for this upgrade (idempotency).
+	// We cannot compare kubernetesVersion because same-version upgrades are valid;
+	// instead, we check for a status field that records the provisionGeneration we set.
+	if upgradePlan.Status.ProvisionGeneration != nil {
+		return nil
+	}
+
+	patch := client.MergeFrom(cluster.DeepCopy())
+
+	// Set Kubernetes version
+	if err := unstructured.SetNestedField(cluster.Object, targetK8sVersion, "spec", "kubernetesVersion"); err != nil {
+		return fmt.Errorf("failed to set kubernetesVersion: %w", err)
+	}
+
+	// Increment provisionGeneration
+	currentGeneration, _, _ := unstructured.NestedInt64(
+		cluster.Object, "spec", "rkeConfig", "provisionGeneration",
 	)
+	if err := unstructured.SetNestedField(
+		cluster.Object, currentGeneration+1,
+		"spec", "rkeConfig", "provisionGeneration",
+	); err != nil {
+		return fmt.Errorf("failed to set provisionGeneration: %w", err)
+	}
+
+	// Set upgrade strategy concurrency
+	strategyPath := []string{"spec", "rkeConfig", "upgradeStrategy"}
+	if err := unstructured.SetNestedField(
+		cluster.Object, "1",
+		append(strategyPath, "controlPlaneConcurrency")...,
+	); err != nil {
+		return fmt.Errorf("failed to set controlPlaneConcurrency: %w", err)
+	}
+	if err := unstructured.SetNestedField(
+		cluster.Object, "1",
+		append(strategyPath, "workerConcurrency")...,
+	); err != nil {
+		return fmt.Errorf("failed to set workerConcurrency: %w", err)
+	}
+
+	// Configure drain options for control plane
+	cpDrainPath := []string{"spec", "rkeConfig", "upgradeStrategy", "controlPlaneDrainOptions"}
+	if err := setDrainOptions(cluster, cpDrainPath); err != nil {
+		return err
+	}
+
+	// Configure drain options for workers
+	workerDrainPath := []string{"spec", "rkeConfig", "upgradeStrategy", "workerDrainOptions"}
+	if err := setDrainOptions(cluster, workerDrainPath); err != nil {
+		return err
+	}
+
+	// Add drain hooks
+	if err := ensureDrainHooks(cluster, append(cpDrainPath, "preHooks"), PreHookAnnotation); err != nil {
+		return err
+	}
+	if err := ensureDrainHooks(cluster, append(cpDrainPath, "postHooks"), PostHookAnnotation); err != nil {
+		return err
+	}
+	if err := ensureDrainHooks(cluster, append(workerDrainPath, "preHooks"), PreHookAnnotation); err != nil {
+		return err
+	}
+	if err := ensureDrainHooks(cluster, append(workerDrainPath, "postHooks"), PostHookAnnotation); err != nil {
+		return err
+	}
+
+	if err := p.Client.Patch(ctx, cluster, patch); err != nil {
+		return fmt.Errorf("failed to patch Cluster resource: %w", err)
+	}
+
+	// Record the provisionGeneration we set so subsequent reconciles skip this patch.
+	// The reconciler's Status().Update() persists this atomically with other status changes.
+	newGeneration := currentGeneration + 1
+	upgradePlan.Status.ProvisionGeneration = &newGeneration
+	return nil
 }
 
-func (p *NodeUpgradePhase) getOrCreatePlanForOSUpgrade(
-	ctx context.Context,
-	up *managementv1beta1.UpgradePlan,
-) (*upgradev1.Plan, error) {
-	nn := types.NamespacedName{
-		Namespace: cattleSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s-%s", up.Name, NodeComponent, NodeUpgradeTypeOS),
+func setDrainOptions(cluster *unstructured.Unstructured, path []string) error {
+	fields := map[string]interface{}{
+		"enabled":            true,
+		"deleteEmptyDirData": true,
+		"force":              true,
+		"ignoreDaemonSets":   true,
 	}
-	single, err := p.isSingleNodeCluster(ctx)
-	if err != nil {
-		return nil, err
+	for k, v := range fields {
+		if err := unstructured.SetNestedField(cluster.Object, v, append(path, k)...); err != nil {
+			return fmt.Errorf("failed to set %v.%s: %w", path, k, err)
+		}
 	}
-	return getOrCreate(
-		ctx, p.Client, p.Scheme, nn,
-		func() *upgradev1.Plan { return &upgradev1.Plan{} },
-		func() *upgradev1.Plan { return constructPlanForOSUpgrade(up, !single) },
-		up,
-	)
+	return nil
 }
 
-func (p *NodeUpgradePhase) isSingleNodeCluster(ctx context.Context) (bool, error) {
-	var nodeList corev1.NodeList
-	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			harvesterManagedLabel: "true",
-		}),
-	}); err != nil {
-		return false, err
-	}
-	return len(nodeList.Items) == 1, nil
-}
+func ensureDrainHooks(cluster *unstructured.Unstructured, path []string, annotation string) error {
+	hooks, _, _ := unstructured.NestedSlice(cluster.Object, path...)
 
-func constructPlanForKubernetesUpgrade(upgradePlan *managementv1beta1.UpgradePlan, maintenance bool) *upgradev1.Plan {
-	selector := &metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{
-				Key:      harvesterManagedLabel,
-				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"true"},
-			},
-			{
-				Key:      fmt.Sprintf("%s/%s", LabelPrefix, upgradePlan.Name),
-				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{KubernetesUpgradeState},
-			},
-		},
+	// Check if the hook already exists
+	for _, hook := range hooks {
+		hookMap, ok := hook.(map[string]interface{})
+		if ok && hookMap["annotation"] == annotation {
+			return nil
+		}
 	}
-	prepare := &upgradev1.ContainerSpec{
-		Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
-		Command: []string{"upgrade_node.sh"},
-		Args:    []string{"pre-drain"},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "HARVESTER_UPGRADEPLAN_NAME",
-				Value: upgradePlan.Name,
-			},
-			{
-				Name: "HARVESTER_UPGRADE_NODE_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
-					},
-				},
-			},
-		},
-	}
-	container := &upgradev1.ContainerSpec{
-		Image: rke2UpgradeImage,
-	}
-	version := getKubernetesVersion(upgradePlan)
 
-	plan := constructPlan(upgradePlan.Name, NodeComponent, 1, selector, maintenance, prepare, container, version)
-	plan.Name += "-" + NodeUpgradeTypeKubernetes
-	plan.Labels[HarvesterNodeUpgradeTypeLabel] = NodeUpgradeTypeKubernetes
-
-	return plan
-}
-
-func constructPlanForOSUpgrade(upgradePlan *managementv1beta1.UpgradePlan, maintenance bool) *upgradev1.Plan {
-	selector := &metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{
-				Key:      harvesterManagedLabel,
-				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"true"},
-			},
-			{
-				Key:      fmt.Sprintf("%s/%s", LabelPrefix, upgradePlan.Name),
-				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{OSUpgradeState},
-			},
-		},
-	}
-	prepare := &upgradev1.ContainerSpec{
-		Image:   upgradeToolkitImage,
-		Command: []string{"upgrade_node.sh"},
-		Args:    []string{"pre-drain"},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "HARVESTER_UPGRADEPLAN_NAME",
-				Value: upgradePlan.Name,
-			},
-			{
-				Name: "HARVESTER_UPGRADE_NODE_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
-					},
-				},
-			},
-		},
-	}
-	container := &upgradev1.ContainerSpec{
-		Image:   upgradeToolkitImage,
-		Command: []string{"upgrade_node.sh"},
-		Args:    []string{"post-drain"},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "HARVESTER_UPGRADEPLAN_NAME",
-				Value: upgradePlan.Name,
-			},
-			{
-				Name: "HARVESTER_UPGRADE_NODE_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "spec.nodeName",
-					},
-				},
-			},
-			{
-				Name: "HARVESTER_UPGRADE_POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			},
-		},
-	}
-	version := getUpgradeVersion(upgradePlan)
-
-	plan := constructPlan(upgradePlan.Name, NodeComponent, 1, selector, maintenance, prepare, container, version)
-	plan.Name += "-" + NodeUpgradeTypeOS
-	plan.Labels[HarvesterNodeUpgradeTypeLabel] = NodeUpgradeTypeOS
-
-	return plan
+	hooks = append(hooks, map[string]interface{}{
+		"annotation": annotation,
+	})
+	return unstructured.SetNestedSlice(cluster.Object, hooks, path...)
 }

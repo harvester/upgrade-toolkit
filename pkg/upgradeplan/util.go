@@ -26,6 +26,7 @@ import (
 const (
 	harvesterSystemNamespace       = "harvester-system"
 	cattleSystemNamespace          = "cattle-system"
+	CattleSystemNamespace          = cattleSystemNamespace
 	kubeSystemNamespace            = "kube-system"
 	harvesterName                  = "harvester"
 	serverVersionSettingName       = "server-version"
@@ -40,27 +41,10 @@ const (
 
 	defaultTTLSecondsAfterFinished = 604800 // 7 days
 
-	rke2UpgradeImage    = "rancher/rke2-upgrade"
 	upgradeToolkitImage = "starbops/harvester-upgrade-toolkit"
 )
 
 // Version helpers
-
-func getPreviousVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
-	if upgradePlan == nil {
-		return "nonexistent"
-	}
-
-	if upgradePlan.Spec.Upgrade != nil {
-		return *upgradePlan.Spec.Upgrade
-	}
-
-	if upgradePlan.Status.PreviousVersion != nil {
-		return *upgradePlan.Status.PreviousVersion
-	}
-
-	return upgradePlan.Spec.Version
-}
 
 func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
 	if upgradePlan == nil {
@@ -265,15 +249,114 @@ func isAnyPlanJobFailed(plan *upgradev1.Plan) bool {
 	return false
 }
 
-func isSkipOSUpgrade(upgradePlan *managementv1beta1.UpgradePlan) bool {
-	return upgradePlan.Spec.SkipOSUpgrade != nil && *upgradePlan.Spec.SkipOSUpgrade
+func isTerminalState(status managementv1beta1.NodeUpgradeStatus) bool {
+	return status.State == managementv1beta1.NodeStatePostDrained
 }
 
-func isTerminalState(status managementv1beta1.NodeUpgradeStatus, skipOSUpgrade *bool) bool {
-	if skipOSUpgrade != nil && *skipOSUpgrade {
-		return status.State == managementv1beta1.NodeStateKubernetesUpgraded
+func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
+	switch status.State {
+	case managementv1beta1.NodeStatePreDrainFailed,
+		managementv1beta1.NodeStatePostDrainFailed,
+		managementv1beta1.NodeStateKubernetesUpgradeFailed,
+		managementv1beta1.NodeStateOSUpgradeFailed:
+		return true
 	}
-	return status.State == managementv1beta1.NodeStateOSUpgraded
+	return false
+}
+
+// ConstructDrainJob builds a Job for pre-drain or post-drain hooks.
+func ConstructDrainJob(
+	upgradePlan *managementv1beta1.UpgradePlan,
+	nodeName, jobName, hookType string,
+) *batchv1.Job {
+	args := "pre-drain"
+	containerName := "pre-drain"
+	if hookType == DrainHookTypePostDrain {
+		args = "post-drain"
+		containerName = "post-drain"
+	}
+
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "HARVESTER_UPGRADEPLAN_NAME",
+			Value: upgradePlan.Name,
+		},
+		{
+			Name:  "HARVESTER_UPGRADE_NODE_NAME",
+			Value: nodeName,
+		},
+	}
+
+	if hookType == DrainHookTypePostDrain {
+		envVars = append(envVars, corev1.EnvVar{
+			Name: "HARVESTER_UPGRADE_POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		})
+	}
+
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: cattleSystemNamespace,
+			Labels: map[string]string{
+				HarvesterUpgradePlanLabel:      upgradePlan.Name,
+				HarvesterUpgradeComponentLabel: NodeComponent,
+				HarvesterDrainHookTypeLabel:    hookType,
+				"upgrade.cattle.io/node":       nodeName,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			TTLSecondsAfterFinished: ptr.To[int32](defaultTTLSecondsAfterFinished),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						HarvesterUpgradePlanLabel:      upgradePlan.Name,
+						HarvesterUpgradeComponentLabel: NodeComponent,
+						HarvesterDrainHookTypeLabel:    hookType,
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy:      corev1.RestartPolicyNever,
+					NodeName:           nodeName,
+					ServiceAccountName: harvesterName,
+					HostPID:            true,
+					Tolerations:        getDefaultTolerations(),
+					Containers: []corev1.Container{
+						{
+							Name:    containerName,
+							Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							Command: []string{"upgrade_node.sh"},
+							Args:    []string{args},
+							Env:     envVars,
+							SecurityContext: &corev1.SecurityContext{
+								Privileged: ptr.To(true),
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "host-root",
+									MountPath: "/host",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "host-root",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // Generic resource helpers

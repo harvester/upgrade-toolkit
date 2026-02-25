@@ -42,6 +42,14 @@ const (
 	NodeStateOSUpgrading             string = "OSUpgrading"
 	NodeStateOSUpgraded              string = "OSUpgraded"
 	NodeStateOSUpgradeFailed         string = "OSUpgradeFailed"
+
+	// Drain-hook lifecycle states (Rancher V2 Provisioning)
+	NodeStatePreDraining     string = "PreDraining"
+	NodeStatePreDrained      string = "PreDrained"
+	NodeStatePreDrainFailed  string = "PreDrainFailed"
+	NodeStatePostDraining    string = "PostDraining"
+	NodeStatePostDrained     string = "PostDrained"
+	NodeStatePostDrainFailed string = "PostDrainFailed"
 )
 
 const (
@@ -167,6 +175,12 @@ type UpgradePlanStatus struct {
 	// releaseMetadata reflects the essential metadata extracted from the artifact.
 	// +optional
 	ReleaseMetadata *ReleaseMetadata `json:"releaseMetadata,omitempty"`
+
+	// provisionGeneration records the provisionGeneration value set on the
+	// Cluster resource during the NodeUpgrade phase. Used as an idempotency
+	// guard so the Cluster is patched exactly once per upgrade.
+	// +optional
+	ProvisionGeneration *int64 `json:"provisionGeneration,omitempty"`
 
 	// version is the snapshot of the associated Version resource.
 	// +optional

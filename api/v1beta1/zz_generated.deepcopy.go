@@ -204,6 +204,11 @@ func (in *UpgradePlanStatus) DeepCopyInto(out *UpgradePlanStatus) {
 		*out = new(ReleaseMetadata)
 		**out = **in
 	}
+	if in.ProvisionGeneration != nil {
+		in, out := &in.ProvisionGeneration, &out.ProvisionGeneration
+		*out = new(int64)
+		**out = **in
+	}
 	if in.Version != nil {
 		in, out := &in.Version, &out.Version
 		*out = new(VersionSpec)
