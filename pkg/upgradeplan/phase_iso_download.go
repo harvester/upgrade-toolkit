@@ -77,6 +77,9 @@ func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *h
 	imageName := fmt.Sprintf("%s-%s", upgradePlan.Name, imageComponent)
 	vmImage := &harvesterv1beta1.VirtualMachineImage{
 		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				HarvesterUpgradeImageAnnotation: "True",
+			},
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      upgradePlan.Name,
 				HarvesterUpgradeComponentLabel: imageComponent,

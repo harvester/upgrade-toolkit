@@ -1,7 +1,13 @@
 package upgradeplan
 
 const (
-	LabelPrefix               = "management.harvesterhci.io"
+	AnnotationPrefix = "management.harvesterhci.io"
+	LabelPrefix      = AnnotationPrefix
+	// TODO: This is to cooperate with the upstream implementation. It should be removed eventually.
+	UpstreamAnnotationPrefix = "harvesterhci.io"
+
+	HarvesterUpgradeImageAnnotation = UpstreamAnnotationPrefix + "/" + "os-upgrade-image"
+
 	HarvesterUpgradePlanLabel = LabelPrefix + "/" + "upgrade-plan"
 
 	HarvesterUpgradeComponentLabel = LabelPrefix + "/" + "upgrade-component"

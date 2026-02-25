@@ -37,6 +37,7 @@ func TestConstructVirtualMachineImage(t *testing.T) {
 	assert.Equal(t, testISOChecksum, vmImage.Spec.Checksum)
 	assert.Equal(t, 3, vmImage.Spec.Retry)
 	assert.Equal(t, testUpgradePlanName+"-"+testVersion, vmImage.Spec.DisplayName)
+	assert.Equal(t, "True", vmImage.Annotations[HarvesterUpgradeImageAnnotation])
 	assert.Equal(t, testUpgradePlanName, vmImage.Labels[HarvesterUpgradePlanLabel])
 	assert.Equal(t, imageComponent, vmImage.Labels[HarvesterUpgradeComponentLabel])
 }
