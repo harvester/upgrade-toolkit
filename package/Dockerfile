@@ -1,5 +1,5 @@
 # Build the upgrade-toolkit binary
-FROM registry.suse.com/bci/golang:1.24 AS builder
+FROM registry.suse.com/bci/golang:1.25 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -24,10 +24,10 @@ COPY pkg/ pkg/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o upgrade-toolkit cmd/main.go
 
-FROM registry.opensuse.org/isv/rancher/harvester/os/v1.6/main/baseos:v1.6 AS baseos
+FROM registry.opensuse.org/isv/rancher/harvester/os/v1.7/main/baseos:v1.7 AS baseos
 
 # Generate addon manifests
-FROM registry.suse.com/bci/golang:1.24 AS addons_generator
+FROM registry.suse.com/bci/golang:1.25 AS addons_generator
 
 WORKDIR /workspace
 
@@ -45,8 +45,8 @@ RUN zypper rm -y container-suseconnect && \
     zypper --no-gpg-checks ref && \
     zypper in -y curl e2fsprogs rsync awk zstd jq helm zip unzip nginx && zypper clean -a
 
-ENV KUBECTL_VERSION=v1.32.3
-ENV KUBEVIRT_VERSION=v1.4.0
+ENV KUBECTL_VERSION=v1.33.5
+ENV KUBEVIRT_VERSION=v1.6.0
 ENV WHARFIE_VERSION=v0.6.8
 RUN curl -sfL https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl -o /usr/bin/kubectl && chmod +x /usr/bin/kubectl && \
     curl -sfL https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/virtctl-${KUBEVIRT_VERSION}-linux-${TARGETARCH} -o /usr/bin/virtctl && chmod +x /usr/bin/virtctl && \
