@@ -45,8 +45,7 @@ func (p *FinalizePhase) PreRun(
 		component string
 	}{
 		{&harvesterv1beta1.VirtualMachineImage{}, harvesterSystemNamespace, imageComponent},
-		{&corev1.PersistentVolumeClaim{}, harvesterSystemNamespace, repoComponent},
-		{&appsv1.DaemonSet{}, harvesterSystemNamespace, repoComponent},
+		{&appsv1.Deployment{}, harvesterSystemNamespace, repoComponent},
 		{&corev1.Service{}, harvesterSystemNamespace, repoComponent},
 		{&upgradev1.Plan{}, cattleSystemNamespace, PrepareComponent},
 		{&batchv1.Job{}, harvesterSystemNamespace, ClusterComponent},

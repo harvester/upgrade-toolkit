@@ -17,7 +17,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims
   - services
   verbs:
   - create
@@ -30,7 +29,7 @@ rules:
 - apiGroups:
   - apps
   resources:
-  - daemonsets
+  - deployments
   verbs:
   - create
   - delete

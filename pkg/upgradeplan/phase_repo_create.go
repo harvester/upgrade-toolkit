@@ -1,25 +1,36 @@
 package upgradeplan
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"strings"
-	"text/template"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
-// RepoCreatePhase creates PVC, DaemonSet, and Service for the upgrade repo.
+var (
+	repoScript = `
+#!/usr/bin/env sh
+set -e
+
+echo "Mounting ISO and starting Nginx..."
+mkdir -p /srv/www/htdocs/harvester-iso
+mount -o loop,ro /iso/disk.img /srv/www/htdocs/harvester-iso
+echo "iso mounted successfully to /srv/www/htdocs/harvester-iso"
+nginx -g "daemon off;"
+`
+)
+
+// RepoCreatePhase creates a Deployment and Service for the upgrade repo.
 type RepoCreatePhase struct {
 	*PhaseDeps
 }
@@ -36,36 +47,26 @@ func (p *RepoCreatePhase) Run(
 ) (ctrl.Result, error) {
 	p.Log.V(1).Info("handle repo create")
 
-	pvc, err := p.getOrCreatePersistentVolumeClaimForRepo(ctx, upgradePlan)
+	replicas, err := p.getDeploymentReplicaCount(ctx)
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve repo persistentvolumeclaim from upgradeplan")
+		p.Log.Error(err, "unable to determine deployment replica count")
 		return ctrl.Result{}, err
 	}
 
-	bound := isPersistentVolumeClaimBound(pvc)
-
-	if !bound {
-		p.Log.V(1).Info("upgrade-repo persistentvolumeclaim not bound")
-		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseRepoCreating, "upgrade-repo pvc not bound")
-		return ctrl.Result{}, nil
-	}
-
-	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseRepoCreating, "upgrade-repo pvc bound")
-
-	repo, err := p.getOrCreateDaemonSetForRepo(ctx, upgradePlan, pvc)
+	deploy, err := p.getOrCreateDeploymentForRepo(ctx, upgradePlan, replicas)
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve repo daemonset from upgradeplan")
+		p.Log.Error(err, "unable to retrieve repo deployment from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
-	ready := isDaemonSetReady(repo)
+	ready := isDeploymentReady(deploy)
 
 	if !ready {
-		p.Log.V(1).Info("upgrade-repo daemonset not ready")
+		p.Log.V(1).Info("upgrade-repo deployment not ready")
 		updateProgressingPhase(
 			upgradePlan,
 			managementv1beta1.UpgradePlanPhaseRepoCreating,
-			"upgrade-repo daemonset not ready",
+			"upgrade-repo deployment not ready",
 		)
 		return ctrl.Result{}, nil
 	}
@@ -88,39 +89,19 @@ func (p *RepoCreatePhase) Run(
 	return ctrl.Result{}, nil
 }
 
-func (p *RepoCreatePhase) getOrCreatePersistentVolumeClaimForRepo(
+func (p *RepoCreatePhase) getOrCreateDeploymentForRepo(
 	ctx context.Context,
 	up *managementv1beta1.UpgradePlan,
-) (*corev1.PersistentVolumeClaim, error) {
+	replicas *int32,
+) (*appsv1.Deployment, error) {
 	nn := types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
 		Name:      fmt.Sprintf("%s-%s", up.Name, repoComponent),
 	}
 	return getOrCreate(
 		ctx, p.Client, p.Scheme, nn,
-		func() *corev1.PersistentVolumeClaim { return &corev1.PersistentVolumeClaim{} },
-		func() *corev1.PersistentVolumeClaim { return constructPersistentVolumeClaim(up) },
-		up,
-	)
-}
-
-func (p *RepoCreatePhase) getOrCreateDaemonSetForRepo(
-	ctx context.Context,
-	up *managementv1beta1.UpgradePlan,
-	pvc *corev1.PersistentVolumeClaim,
-) (*appsv1.DaemonSet, error) {
-	nn := types.NamespacedName{
-		Namespace: harvesterSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, repoComponent),
-	}
-	ca, err := p.getCA(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return getOrCreate(
-		ctx, p.Client, p.Scheme, nn,
-		func() *appsv1.DaemonSet { return &appsv1.DaemonSet{} },
-		func() *appsv1.DaemonSet { return constructDaemonSet(up, pvc, ca) },
+		func() *appsv1.Deployment { return &appsv1.Deployment{} },
+		func() *appsv1.Deployment { return constructDeployment(up, replicas) },
 		up,
 	)
 }
@@ -141,92 +122,59 @@ func (p *RepoCreatePhase) getOrCreateServiceForRepo(
 	)
 }
 
-func (p *RepoCreatePhase) getCA(ctx context.Context) (string, error) {
-	var caSecret corev1.Secret
-	if err := p.Client.Get(
-		ctx,
-		types.NamespacedName{Namespace: kubeSystemNamespace, Name: caName},
-		&caSecret,
-	); err != nil {
-		return "", err
+func (p *RepoCreatePhase) getDeploymentReplicaCount(ctx context.Context) (*int32, error) {
+	var nodeList corev1.NodeList
+	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			harvesterManagedLabel: "true",
+		}),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 
-	caPem, ok := caSecret.Data[corev1.TLSCertKey]
-	if !ok {
-		return "nil", fmt.Errorf("tls.crt not found")
+	nonWitnessCount := 0
+	for i := range nodeList.Items {
+		if nodeList.Items[i].Labels[witnessNodeRoleLabel] != "true" {
+			nonWitnessCount++
+		}
 	}
 
-	return string(caPem), nil
+	if nonWitnessCount == 0 {
+		return nil, fmt.Errorf("no non-witness managed nodes found in the cluster")
+	}
+
+	var replicas int32
+	if nonWitnessCount == 1 {
+		replicas = 1
+	} else {
+		replicas = 2
+	}
+
+	return &replicas, nil
 }
 
-func constructPersistentVolumeClaim(upgradePlan *managementv1beta1.UpgradePlan) *corev1.PersistentVolumeClaim {
-	pvcName := fmt.Sprintf("%s-%s", upgradePlan.Name, repoComponent)
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				HarvesterUpgradePlanLabel:      upgradePlan.Name,
-				HarvesterUpgradeComponentLabel: repoComponent,
-			},
-			Name:      pvcName,
-			Namespace: harvesterSystemNamespace,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteMany,
-			},
-			VolumeMode: ptr.To(corev1.PersistentVolumeFilesystem),
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: *resource.NewQuantity(10*1024*1024*1024, resource.BinarySI),
-				},
-			},
-			StorageClassName: ptr.To(longhornStaticStorageClassName),
-		},
-	}
-	return pvc
-}
-
-func constructDaemonSet(
+func constructDeployment(
 	upgradePlan *managementv1beta1.UpgradePlan,
-	persistentVolumeClaim *corev1.PersistentVolumeClaim,
-	cert string,
-) *appsv1.DaemonSet {
-	dsName := fmt.Sprintf("%s-%s", upgradePlan.Name, repoComponent)
-	vmImageNamespace, vmImageName, _ := strings.Cut(
-		ptr.Deref(upgradePlan.Status.ISOImageID, "nonexistent/nonexistent"),
-		"/",
-	)
+	replicas *int32,
+) *appsv1.Deployment {
+	deployName := fmt.Sprintf("%s-%s", upgradePlan.Name, repoComponent)
+	pvcName := fmt.Sprintf("%s-%s", upgradePlan.Name, imageComponent)
 
-	var (
-		t   *template.Template
-		buf bytes.Buffer
-	)
-	t = template.Must(template.New("script").Parse(isoDownloaderScriptTemplate))
-	_ = t.Execute(&buf, nil)
-	renderedISODownloadScript := buf.String()
-
-	ds := &appsv1.DaemonSet{
+	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      upgradePlan.Name,
 				HarvesterUpgradeComponentLabel: repoComponent,
 			},
-			Name:      dsName,
+			Name:      deployName,
 			Namespace: harvesterSystemNamespace,
 		},
-		Spec: appsv1.DaemonSetSpec{
+		Spec: appsv1.DeploymentSpec{
+			Replicas: replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					HarvesterUpgradePlanLabel:      upgradePlan.Name,
 					HarvesterUpgradeComponentLabel: repoComponent,
-				},
-			},
-			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-				Type: appsv1.RollingUpdateDaemonSetStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-					MaxUnavailable: &intstr.IntOrString{
-						IntVal: 1,
-					},
 				},
 			},
 			Template: corev1.PodTemplateSpec{
@@ -237,93 +185,35 @@ func constructDaemonSet(
 					},
 				},
 				Spec: corev1.PodSpec{
-					Tolerations: []corev1.Toleration{
-						{
-							Key:      "node-role.kubernetes.io/control-plane",
-							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoSchedule,
-						},
-						{
-							Key:      "node-role.kubernetes.io/master",
-							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoSchedule,
-						},
-					},
-					InitContainers: []corev1.Container{
-						{
-							Name:  "iso-downloader",
-							Image: fmt.Sprintf("%s:%s", upgradeToolkitImage, getPreviousVersion(upgradePlan)),
-							Command: []string{
-								"sh",
-								"-c",
-								renderedISODownloadScript,
-							},
-							Env: []corev1.EnvVar{
+					Affinity: &corev1.Affinity{
+						PodAntiAffinity: &corev1.PodAntiAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
 								{
-									Name: "POD_NAME",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "metadata.name",
+									Weight: 100,
+									PodAffinityTerm: corev1.PodAffinityTerm{
+										LabelSelector: &metav1.LabelSelector{
+											MatchLabels: map[string]string{
+												HarvesterUpgradePlanLabel:      upgradePlan.Name,
+												HarvesterUpgradeComponentLabel: repoComponent,
+											},
 										},
+										TopologyKey: corev1.LabelHostname,
 									},
-								},
-								{
-									Name:  "VM_IMAGE_NS",
-									Value: vmImageNamespace,
-								},
-								{
-									Name:  "VM_IMAGE_NAME",
-									Value: vmImageName,
-								},
-								{
-									Name:  "CA_CERT",
-									Value: cert,
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "iso",
-									MountPath: "/iso",
-								},
-							},
-						},
-						{
-							Name:  "preloader",
-							Image: fmt.Sprintf("%s:%s", upgradeToolkitImage, getPreviousVersion(upgradePlan)),
-							Command: []string{
-								"sh",
-								"-c",
-								preloaderScript,
-							},
-							SecurityContext: &corev1.SecurityContext{
-								Privileged: ptr.To(true),
-							},
-							Env: []corev1.EnvVar{
-								{
-									Name:  "HOST_DIR",
-									Value: "/host",
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "host-root",
-									MountPath: "/host",
-								},
-								{
-									Name:      "iso",
-									MountPath: "/iso",
 								},
 							},
 						},
 					},
 					Containers: []corev1.Container{
 						{
-							Name:  "iso-mounter",
-							Image: fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
-							Command: []string{
-								"sh",
-								"-c",
-								isoMounterScript,
+							Name:            "nginx-iso-server",
+							Image:           fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Command:         []string{"sh", "-c", repoScript},
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 80,
+									Protocol:      corev1.ProtocolTCP,
+								},
 							},
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: ptr.To(true),
@@ -333,86 +223,35 @@ func constructDaemonSet(
 									Name:      "iso",
 									MountPath: "/iso",
 								},
-								{
-									Name:             "share-mount",
-									MountPath:        "/share-mount",
-									MountPropagation: ptr.To(corev1.MountPropagationBidirectional),
-								},
-							},
-						},
-						{
-							Name:  "repo",
-							Image: fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
-							Command: []string{
-								"sh",
-								"-c",
-								repoScript,
-							},
-							Ports: []corev1.ContainerPort{
-								{
-									ContainerPort: 80,
-								},
 							},
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									Exec: &corev1.ExecAction{
 										Command: []string{
-											"sh",
-											"-c",
-											"cat /srv/www/htdocs/harvester-release.yaml 2>&1 /dev/null",
+											"sh", "-c",
+											"cat /srv/www/htdocs/harvester-iso/harvester-release.yaml 2>&1 /dev/null",
 										},
 									},
 								},
-								PeriodSeconds:    10,
-								TimeoutSeconds:   5,
-								FailureThreshold: 3,
 							},
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/harvester-release.yaml",
-										Port: intstr.FromInt(80),
+										Path:   "/harvester-iso/harvester-release.yaml",
+										Port:   intstr.FromInt(80),
+										Scheme: corev1.URISchemeHTTP,
 									},
-								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       10,
-								TimeoutSeconds:      5,
-								SuccessThreshold:    1,
-								FailureThreshold:    1,
-							},
-							SecurityContext: &corev1.SecurityContext{
-								Privileged: ptr.To(true),
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:             "share-mount",
-									MountPath:        "/srv/www/htdocs",
-									MountPropagation: ptr.To(corev1.MountPropagationBidirectional),
 								},
 							},
 						},
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "host-root",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/",
-								},
-							},
-						},
-						{
 							Name: "iso",
 							VolumeSource: corev1.VolumeSource{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: persistentVolumeClaim.Name,
+									ClaimName: pvcName,
 								},
-							},
-						},
-						{
-							Name: "share-mount",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 					},
@@ -420,7 +259,7 @@ func constructDaemonSet(
 			},
 		},
 	}
-	return ds
+	return deploy
 }
 
 func constructService(upgradePlan *managementv1beta1.UpgradePlan) *corev1.Service {

@@ -85,12 +85,13 @@ func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *h
 			Namespace: harvesterSystemNamespace,
 		},
 		Spec: harvesterv1beta1.VirtualMachineImageSpec{
-			Backend:     harvesterv1beta1.VMIBackendBackingImage,
-			DisplayName: fmt.Sprintf("%s-%s", upgradePlan.Name, upgradePlan.Spec.Version),
-			SourceType:  harvesterv1beta1.VirtualMachineImageSourceTypeDownload,
-			URL:         upgradePlan.Status.Version.ISODownloadURL,
-			Checksum:    ptr.Deref(upgradePlan.Status.Version.ISOChecksum, ""),
-			Retry:       3,
+			Backend:                harvesterv1beta1.VMIBackendCDI,
+			DisplayName:            fmt.Sprintf("%s-%s", upgradePlan.Name, upgradePlan.Spec.Version),
+			SourceType:             harvesterv1beta1.VirtualMachineImageSourceTypeDownload,
+			URL:                    upgradePlan.Status.Version.ISODownloadURL,
+			Checksum:               ptr.Deref(upgradePlan.Status.Version.ISOChecksum, ""),
+			Retry:                  3,
+			TargetStorageClassName: longhornStaticStorageClassName,
 		},
 	}
 	return vmImage

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultReleaseURL = "http://localhost/harvester-release.yaml"
+	defaultReleaseURL = "http://localhost/harvester-iso/harvester-release.yaml"
 )
 
 type harvesterRelease struct {
@@ -38,7 +38,7 @@ func newHarvesterRelease(upgradePlan *managementv1beta1.UpgradePlan) *harvesterR
 
 func (h *harvesterRelease) loadReleaseMetadata() error {
 	releaseURL := fmt.Sprintf(
-		"http://%s-%s/harvester-release.yaml",
+		"http://%s-%s/harvester-iso/harvester-release.yaml",
 		h.Name,
 		repoComponent,
 	)

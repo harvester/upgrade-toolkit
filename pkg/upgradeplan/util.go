@@ -30,10 +30,10 @@ const (
 	harvesterName                  = "harvester"
 	serverVersionSettingName       = "server-version"
 	sucName                        = "system-upgrade-controller"
-	caName                         = "serving-ca"
 	longhornStaticStorageClassName = "longhorn-static"
 
 	harvesterManagedLabel = "harvesterhci.io/managed"
+	witnessNodeRoleLabel  = "node-role.harvesterhci.io/witness"
 	serviceNameLabel      = "kubernetes.io/service-name"
 	imageComponent        = "iso"
 	repoComponent         = "repo"
@@ -42,87 +42,6 @@ const (
 
 	rke2UpgradeImage    = "rancher/rke2-upgrade"
 	upgradeToolkitImage = "starbops/harvester-upgrade-toolkit"
-)
-
-var (
-	isoDownloaderScriptTemplate = `
-#!/usr/bin/env sh
-set -e
-
-WORK_DIR="/iso"
-LOCK_FILE="leader.lock"
-READY_FLAG="harvester.iso.ready"
-
-if mkdir "$WORK_DIR"/"$LOCK_FILE" 2>/dev/null; then
-  trap "rmdir $WORK_DIR/$LOCK_FILE; rm -vf $WORK_DIR/$READY_FLAG; exit 1" EXIT
-
-  echo "$POD_NAME is the leader, start preparing the ISO image..."
-  CA_FILE=$(mktemp)
-  echo "$CA_CERT" > "$CA_FILE"
-  curl -sSfL --cacert "$CA_FILE" \
-    "https://harvester:8443/v1/harvester/harvesterhci.io.virtualmachineimages/$VM_IMAGE_NS/$VM_IMAGE_NAME/download" \
-    -o harvester.iso.gz
-
-  echo "Download completed, extracting harvester.iso..."
-  gzip -dc harvester.iso.gz > "$WORK_DIR"/harvester.iso
-
-  echo "harvester.iso is ready"
-  touch "$WORK_DIR"/"$READY_FLAG"
-
-  trap - EXIT
-else
-  echo "$POD_NAME is a follower, waiting for harvester.iso downloaded..."
-
-  if [ -f "$WORK_DIR"/"$READY_FLAG" ]; then
-    echo "harvester.iso already exists"
-  else
-    until [ -f "$WORK_DIR"/"$READY_FLAG" ]; do
-      echo "harvester.iso is not ready yet, waiting..."
-      sleep 10
-    done
-    echo "harvester.iso is ready"
-  fi
-fi
-`
-	preloaderScript = `
-#!/usr/bin/env sh
-set -e
-
-HOST_DIR="${HOST_DIR:-/host}"
-export CONTAINER_RUNTIME_ENDPOINT=unix:///$HOST_DIR/run/k3s/containerd/containerd.sock
-export CONTAINERD_ADDRESS=$HOST_DIR/run/k3s/containerd/containerd.sock
-
-CTR="$HOST_DIR/$(readlink $HOST_DIR/var/lib/rancher/rke2/bin)/ctr"
-if [ -z "$CTR" ];then
-  echo "Fail to get host ctr binary."
-  exit 1
-fi
-
-mount -o loop,ro /iso/harvester.iso /mnt
-echo "harvester.iso mounted successfully"
-
-echo "Start preloading images to containerd..."
-for archive in $(yq e '.images.common[].archive' /mnt/bundle/metadata.yaml); do
-  echo "Importing $archive"
-  zstd -dc /mnt/bundle/"$archive" | $CTR -n k8s.io images import --no-unpack -
-done
-`
-	isoMounterScript = `
-#!/usr/bin/env sh
-set -e
-
-mount -o loop,ro /iso/harvester.iso /share-mount
-echo "harvester.iso mounted successfully"
-trap "umount -v /iso/harvester.iso; exit 0" EXIT
-while true; do sleep 30; done
-`
-	repoScript = `
-#!/usr/bin/env sh
-set -e
-
-echo "Starting Nginx..."
-nginx -g "daemon off;"
-`
 )
 
 // Version helpers
@@ -275,12 +194,11 @@ func isVirtualMachineImageImported(vmImage *harvesterv1beta1.VirtualMachineImage
 	return
 }
 
-func isPersistentVolumeClaimBound(pvc *corev1.PersistentVolumeClaim) bool {
-	return pvc.Status.Phase == corev1.ClaimBound
-}
-
-func isDaemonSetReady(ds *appsv1.DaemonSet) bool {
-	return ds.Status.DesiredNumberScheduled > 0 && ds.Status.NumberReady == ds.Status.DesiredNumberScheduled
+func isDeploymentReady(deploy *appsv1.Deployment) bool {
+	if deploy.Spec.Replicas == nil {
+		return false
+	}
+	return deploy.Status.AvailableReplicas >= *deploy.Spec.Replicas
 }
 
 func isServiceReady(ctx context.Context, c client.Client, svc *corev1.Service) bool {
