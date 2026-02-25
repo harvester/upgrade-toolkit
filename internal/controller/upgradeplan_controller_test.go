@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	upgradeplanpkg "github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
 var _ = Describe("UpgradePlan Controller", func() {
@@ -68,9 +70,16 @@ var _ = Describe("UpgradePlan Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &UpgradePlanReconciler{
+			deps := &upgradeplanpkg.PhaseDeps{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Log:    logr.Discard(),
+			}
+			controllerReconciler := &UpgradePlanReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Log:      logr.Discard(),
+				pipeline: upgradeplanpkg.NewPipeline(deps),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
