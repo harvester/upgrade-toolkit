@@ -126,10 +126,12 @@ var _ = Describe("Job Controller", func() {
 		labels := map[string]string{
 			upgradeplan.HarvesterUpgradePlanLabel:      upgradePlanName,
 			upgradeplan.HarvesterUpgradeComponentLabel: component,
-			nodeLabel: testNodeName,
 		}
-		if hookType != "" {
+		if hookType == "" {
+			labels[upgradeplan.SUCNodeLabel] = testNodeName
+		} else {
 			labels[upgradeplan.HarvesterDrainHookTypeLabel] = hookType
+			labels[upgradeplan.HarvesterUpgradeNodeLabel] = testNodeName
 		}
 
 		job := &batchv1.Job{

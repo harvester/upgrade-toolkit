@@ -5,6 +5,7 @@ const (
 	LabelPrefix      = AnnotationPrefix
 	// TODO: This is to cooperate with the upstream implementation. It should be removed eventually.
 	UpstreamAnnotationPrefix = "harvesterhci.io"
+	SUCLabelPrefix           = "upgrade.cattle.io"
 
 	HarvesterUpgradeImageAnnotation = UpstreamAnnotationPrefix + "/" + "os-upgrade-image"
 
@@ -14,6 +15,9 @@ const (
 	PrepareComponent               = "image-preload"
 	ClusterComponent               = "cluster-upgrade"
 	NodeComponent                  = "node-upgrade"
+
+	// Label on image-preload Jobs set by SUC
+	SUCNodeLabel = SUCLabelPrefix + "/" + "node"
 
 	// Rancher V2 Provisioning
 	FleetLocalNamespace = "fleet-local"
@@ -31,6 +35,7 @@ const (
 	PendingOSImageAnnotation = AnnotationPrefix + "/" + "pendingOSImage"
 
 	// Labels for drain-hook Jobs
+	HarvesterUpgradeNodeLabel   = LabelPrefix + "/" + "node"
 	HarvesterDrainHookTypeLabel = LabelPrefix + "/" + "drain-hook-type"
 	DrainHookTypePreDrain       = "pre-drain"
 	DrainHookTypePostDrain      = "post-drain"

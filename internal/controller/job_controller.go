@@ -34,10 +34,6 @@ import (
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
-const (
-	nodeLabel = "upgrade.cattle.io/node"
-)
-
 // JobReconciler reconciles a Job object
 type JobReconciler struct {
 	client.Client
@@ -106,13 +102,21 @@ func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv
 	if !ok {
 		return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradeComponentLabel)
 	}
-	nodeName, ok := job.Labels[nodeLabel]
-	if !ok {
-		return fmt.Errorf("label %s not found", nodeLabel)
-	}
 
-	if upgradeComponent == upgradeplan.ClusterComponent {
+	var nodeName string
+	switch upgradeComponent {
+	case upgradeplan.PrepareComponent:
+		nodeName, ok = job.Labels[upgradeplan.SUCNodeLabel]
+		if !ok {
+			return fmt.Errorf("label %s not found", upgradeplan.SUCNodeLabel)
+		}
+	case upgradeplan.ClusterComponent:
 		return nil
+	case upgradeplan.NodeComponent:
+		nodeName, ok = job.Labels[upgradeplan.HarvesterUpgradeNodeLabel]
+		if !ok {
+			return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradeNodeLabel)
+		}
 	}
 
 	var upgradePlan managementv1beta1.UpgradePlan
@@ -177,10 +181,6 @@ func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
 	}
 
 	if _, upgradeComponentLabelExists := job.Labels[upgradeplan.HarvesterUpgradeComponentLabel]; !upgradeComponentLabelExists {
-		return false
-	}
-
-	if _, nodeLabelExists := job.Labels[nodeLabel]; !nodeLabelExists {
 		return false
 	}
 

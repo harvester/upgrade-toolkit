@@ -306,7 +306,7 @@ func ConstructDrainJob(
 				HarvesterUpgradePlanLabel:      upgradePlan.Name,
 				HarvesterUpgradeComponentLabel: NodeComponent,
 				HarvesterDrainHookTypeLabel:    hookType,
-				"upgrade.cattle.io/node":       nodeName,
+				HarvesterUpgradeNodeLabel:      nodeName,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -317,6 +317,7 @@ func ConstructDrainJob(
 						HarvesterUpgradePlanLabel:      upgradePlan.Name,
 						HarvesterUpgradeComponentLabel: NodeComponent,
 						HarvesterDrainHookTypeLabel:    hookType,
+						HarvesterUpgradeNodeLabel:      nodeName,
 					},
 				},
 				Spec: corev1.PodSpec{

@@ -231,7 +231,7 @@ var _ = Describe("Secret Controller", func() {
 						upgradeplan.HarvesterUpgradePlanLabel:      upgradePlanName,
 						upgradeplan.HarvesterUpgradeComponentLabel: upgradeplan.NodeComponent,
 						upgradeplan.HarvesterDrainHookTypeLabel:    upgradeplan.DrainHookTypePreDrain,
-						nodeLabel:                                  testNodeName,
+						upgradeplan.HarvesterUpgradeNodeLabel:      testNodeName,
 					},
 				},
 				Spec: batchv1.JobSpec{
