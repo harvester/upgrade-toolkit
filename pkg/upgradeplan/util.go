@@ -241,7 +241,7 @@ func isAnyPlanJobFailed(plan *upgradev1.Plan) bool {
 	for _, condition := range plan.Status.Conditions {
 		if condition.Type == string(upgradev1.PlanComplete) &&
 			condition.Status == corev1.ConditionFalse &&
-			condition.Reason == string(batchv1.JobFailed) {
+			condition.Reason == "JobFailed" {
 			return true
 		}
 	}
