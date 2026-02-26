@@ -331,6 +331,43 @@ var _ = Describe("Secret Controller", func() {
 		})
 	})
 
+	Context("When node is in WaitingReboot state with post-drain annotation", func() {
+		It("should not acknowledge the post-drain hook", func() {
+			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
+
+			// Set node to WaitingReboot
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			up.Status.NodeUpgradeStatuses[testNodeName] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStateWaitingReboot,
+			}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createMachinePlanSecret(map[string]string{
+				upgradeplan.RKE2PreDrainAnnotation:  "drain-1",
+				upgradeplan.PreHookAnnotation:       "drain-1",
+				upgradeplan.RKE2PostDrainAnnotation: "drain-1",
+			})
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: fleetLocalNamespace,
+					Name:      testSecretName,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Verify the post-drain hook was NOT acknowledged
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: fleetLocalNamespace,
+				Name:      testSecretName,
+			}, secret)).To(Succeed())
+			Expect(secret.Annotations).NotTo(HaveKey(upgradeplan.PostHookAnnotation))
+		})
+	})
+
 	Context("When reconciling idempotently", func() {
 		It("should not create duplicate Jobs on repeated reconciles", func() {
 			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)

@@ -1,0 +1,253 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controller
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
+)
+
+var _ = Describe("Node Controller", func() {
+	const (
+		upgradePlanName  = "test-upgrade-node"
+		testNodeName     = "test-node-reboot"
+		testVersion      = "test-version"
+		testOSVersion    = "test-os-version"
+		testOldOSVersion = "test-old-os-version"
+	)
+
+	var (
+		reconciler *NodeReconciler
+	)
+
+	BeforeEach(func() {
+		reconciler = &NodeReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+		}
+	})
+
+	AfterEach(func() {
+		// Clean up UpgradePlans
+		upList := &managementv1beta1.UpgradePlanList{}
+		_ = k8sClient.List(ctx, upList)
+		for i := range upList.Items {
+			_ = k8sClient.Delete(ctx, &upList.Items[i])
+		}
+
+		// Clean up test nodes
+		var node corev1.Node
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: testNodeName}, &node); err == nil {
+			_ = k8sClient.Delete(ctx, &node)
+		}
+	})
+
+	createUpgradePlan := func(nodeState string) *managementv1beta1.UpgradePlan {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: upgradePlanName,
+			},
+			Spec: managementv1beta1.UpgradePlanSpec{
+				Version: testVersion,
+			},
+		}
+		Expect(k8sClient.Create(ctx, up)).To(Succeed())
+
+		up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseNodeUpgrading
+		up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+			testNodeName: {State: nodeState},
+		}
+		up.Status.ReleaseMetadata = &managementv1beta1.ReleaseMetadata{
+			OS: testOSVersion,
+		}
+		Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+		return up
+	}
+
+	createNode := func(osImage string, annotations map[string]string) *corev1.Node {
+		node := &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        testNodeName,
+				Annotations: annotations,
+			},
+		}
+		Expect(k8sClient.Create(ctx, node)).To(Succeed())
+
+		// NodeSystemInfo is in status, which must be updated via status subresource
+		node.Status.NodeInfo = corev1.NodeSystemInfo{
+			OSImage: osImage,
+		}
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+
+		return node
+	}
+
+	reconcileNode := func() (ctrl.Result, error) {
+		return reconciler.Reconcile(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: testNodeName},
+		})
+	}
+
+	Context("When the node has no PendingOSImage annotation", func() {
+		It("should return early without changes", func() {
+			createUpgradePlan(managementv1beta1.NodeStateWaitingReboot)
+			createNode(testOldOSVersion, nil)
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// UpgradePlan should be unchanged
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateWaitingReboot))
+		})
+	})
+
+	Context("When the node has PendingOSImage annotation but OS does not match", func() {
+		It("should return early without changes", func() {
+			createUpgradePlan(managementv1beta1.NodeStateWaitingReboot)
+			createNode(testOldOSVersion, map[string]string{
+				upgradeplan.PendingOSImageAnnotation: testOSVersion,
+			})
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// UpgradePlan should be unchanged
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateWaitingReboot))
+
+			// Annotation should still be present
+			node := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: testNodeName}, node)).To(Succeed())
+			Expect(node.Annotations).To(HaveKey(upgradeplan.PendingOSImageAnnotation))
+		})
+	})
+
+	Context("When the node has PendingOSImage annotation and OS matches", func() {
+		It("should transition node to PostDrained and remove the annotation", func() {
+			createUpgradePlan(managementv1beta1.NodeStateWaitingReboot)
+			createNode(testOSVersion, map[string]string{
+				upgradeplan.PendingOSImageAnnotation: testOSVersion,
+			})
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// UpgradePlan node state should be PostDrained
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStatePostDrained))
+
+			// PendingOSImage annotation should be removed
+			node := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: testNodeName}, node)).To(Succeed())
+			Expect(node.Annotations).NotTo(HaveKey(upgradeplan.PendingOSImageAnnotation))
+		})
+	})
+
+	Context("When there is no active UpgradePlan in NodeUpgrading phase", func() {
+		It("should return early without changes", func() {
+			// Create an UpgradePlan in a different phase
+			up := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: upgradePlanName,
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: testVersion,
+				},
+			}
+			Expect(k8sClient.Create(ctx, up)).To(Succeed())
+			up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseClusterUpgrading
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createNode(testOSVersion, map[string]string{
+				upgradeplan.PendingOSImageAnnotation: testOSVersion,
+			})
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Annotation should still be present
+			node := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: testNodeName}, node)).To(Succeed())
+			Expect(node.Annotations).To(HaveKey(upgradeplan.PendingOSImageAnnotation))
+		})
+	})
+
+	Context("When the node is not in WaitingReboot state", func() {
+		It("should return early without changes", func() {
+			createUpgradePlan(managementv1beta1.NodeStatePostDraining)
+			createNode(testOSVersion, map[string]string{
+				upgradeplan.PendingOSImageAnnotation: testOSVersion,
+			})
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// State should remain PostDraining
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStatePostDraining))
+		})
+	})
+
+	Context("When the node does not exist in NodeUpgradeStatuses", func() {
+		It("should return early without changes", func() {
+			// Create UpgradePlan but without this node in statuses
+			up := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: upgradePlanName,
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: testVersion,
+				},
+			}
+			Expect(k8sClient.Create(ctx, up)).To(Succeed())
+			up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseNodeUpgrading
+			up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createNode(testOSVersion, map[string]string{
+				upgradeplan.PendingOSImageAnnotation: testOSVersion,
+			})
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Annotation should still be present
+			node := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: testNodeName}, node)).To(Succeed())
+			Expect(node.Annotations).To(HaveKey(upgradeplan.PendingOSImageAnnotation))
+		})
+	})
+})

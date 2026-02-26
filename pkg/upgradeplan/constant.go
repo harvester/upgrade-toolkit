@@ -27,6 +27,9 @@ const (
 	PreHookAnnotation  = AnnotationPrefix + "/" + "pre-hook"
 	PostHookAnnotation = AnnotationPrefix + "/" + "post-hook"
 
+	// Annotation on Node objects to track expected OS version during reboot
+	PendingOSImageAnnotation = AnnotationPrefix + "/" + "pendingOSImage"
+
 	// Labels for drain-hook Jobs
 	HarvesterDrainHookTypeLabel = LabelPrefix + "/" + "drain-hook-type"
 	DrainHookTypePreDrain       = "pre-drain"

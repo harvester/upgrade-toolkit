@@ -48,6 +48,7 @@ const (
 	NodeStatePreDrained      string = "PreDrained"
 	NodeStatePreDrainFailed  string = "PreDrainFailed"
 	NodeStatePostDraining    string = "PostDraining"
+	NodeStateWaitingReboot   string = "WaitingReboot"
 	NodeStatePostDrained     string = "PostDrained"
 	NodeStatePostDrainFailed string = "PostDrainFailed"
 )

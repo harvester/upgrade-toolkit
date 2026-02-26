@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,6 +77,9 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 	for _, reconciler := range reconcilers {
 		if err := reconciler(ctx, jobCopy); err != nil {
+			if apierrors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 	}
@@ -126,10 +130,41 @@ func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv
 	upgradePlanCopy.Status.NodeUpgradeStatuses[nodeName] = nodeUpgradeStatus
 
 	if !reflect.DeepEqual(upgradePlan.Status, upgradePlanCopy.Status) {
-		return r.Status().Update(ctx, upgradePlanCopy)
+		if err := r.Status().Update(ctx, upgradePlanCopy); err != nil {
+			return err
+		}
+	}
+
+	// When entering WaitingReboot, annotate the Node with the expected OS version
+	if nodeUpgradeStatus.State == managementv1beta1.NodeStateWaitingReboot {
+		if err := r.setNodePendingOSImage(ctx, nodeName, &upgradePlan); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func (r *JobReconciler) setNodePendingOSImage(ctx context.Context, nodeName string, upgradePlan *managementv1beta1.UpgradePlan) error {
+	expectedOS := ""
+	if upgradePlan.Status.ReleaseMetadata != nil {
+		expectedOS = upgradePlan.Status.ReleaseMetadata.OS
+	}
+	if expectedOS == "" {
+		return nil
+	}
+
+	var node corev1.Node
+	if err := r.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+		return err
+	}
+
+	patch := client.MergeFrom(node.DeepCopy())
+	if node.Annotations == nil {
+		node.Annotations = make(map[string]string)
+	}
+	node.Annotations[upgradeplan.PendingOSImageAnnotation] = expectedOS
+	return r.Patch(ctx, &node, patch)
 }
 
 func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
@@ -172,7 +207,7 @@ func successStateFor(component, hookType string) string {
 	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
 		return managementv1beta1.NodeStatePreDrained
 	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
-		return managementv1beta1.NodeStatePostDrained
+		return managementv1beta1.NodeStateWaitingReboot
 	default:
 		return ""
 	}
