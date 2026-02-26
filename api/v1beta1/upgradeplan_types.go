@@ -33,15 +33,12 @@ const (
 )
 
 const (
-	NodeStateImagePreloading         string = "ImagePreloading"
-	NodeStateImagePreloaded          string = "ImagePreloaded"
-	NodeStateImagePreloadFailed      string = "ImagePreloadFailed"
-	NodeStateKubernetesUpgrading     string = "KubernetesUpgrading"
-	NodeStateKubernetesUpgraded      string = "KubernetesUpgraded"
-	NodeStateKubernetesUpgradeFailed string = "KubernetesUpgradeFailed"
-	NodeStateOSUpgrading             string = "OSUpgrading"
-	NodeStateOSUpgraded              string = "OSUpgraded"
-	NodeStateOSUpgradeFailed         string = "OSUpgradeFailed"
+	// Node-specific upgrade states
+
+	// Image-preload lifecycle stats (SUC)
+	NodeStateImagePreloading    string = "ImagePreloading"
+	NodeStateImagePreloaded     string = "ImagePreloaded"
+	NodeStateImagePreloadFailed string = "ImagePreloadFailed"
 
 	// Drain-hook lifecycle states (Rancher V2 Provisioning)
 	NodeStatePreDraining     string = "PreDraining"
@@ -54,6 +51,7 @@ const (
 )
 
 const (
+	// Overall UpgradePlan phases
 	UpgradePlanPhaseInitializing       UpgradePlanPhase = "Initializing"
 	UpgradePlanPhaseInitialized        UpgradePlanPhase = "Initialized"
 	UpgradePlanPhaseISODownloading     UpgradePlanPhase = "ISODownloading"

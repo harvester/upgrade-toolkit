@@ -256,9 +256,7 @@ func isTerminalState(status managementv1beta1.NodeUpgradeStatus) bool {
 func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
 	switch status.State {
 	case managementv1beta1.NodeStatePreDrainFailed,
-		managementv1beta1.NodeStatePostDrainFailed,
-		managementv1beta1.NodeStateKubernetesUpgradeFailed,
-		managementv1beta1.NodeStateOSUpgradeFailed:
+		managementv1beta1.NodeStatePostDrainFailed:
 		return true
 	}
 	return false
