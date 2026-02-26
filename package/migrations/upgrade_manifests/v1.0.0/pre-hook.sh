@@ -1,8 +1,8 @@
 #!/bin/bash -e
 
 prepare_plan_manifest=$(mktemp --suffix=.yaml)
-plan_name=${HARVESTER_UPGRADE_NAME}-prepare-again
-plan_version=${HARVESTER_UPGRADE_NAME}
+plan_name=${HARVESTER_UPGRADEPLAN_NAME}-prepare-again
+plan_version=${HARVESTER_UPGRADEPLAN_NAME}
 
 cat > $prepare_plan_manifest <<EOF
 apiVersion: upgrade.cattle.io/v1
@@ -43,8 +43,8 @@ spec:
     command:
     - upgrade_node.sh
     envs:
-    - name: HARVESTER_UPGRADE_NAME
-      value: ${HARVESTER_UPGRADE_NAME}
+    - name: HARVESTER_UPGRADEPLAN_NAME
+      value: ${HARVESTER_UPGRADEPLAN_NAME}
     image: rancher/harvester-upgrade:${REPO_HARVESTER_VERSION}
   version: ${plan_version}
 EOF

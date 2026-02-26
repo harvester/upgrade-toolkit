@@ -1,10 +1,11 @@
 package upgradeplan
 
 const (
-	AnnotationPrefix = "management.harvesterhci.io"
-	LabelPrefix      = AnnotationPrefix
-	// TODO: This is to cooperate with the upstream implementation. It should be removed eventually.
-	UpstreamAnnotationPrefix = "harvesterhci.io"
+	HarvesterSystemNamespace = harvesterSystemNamespace
+
+	AnnotationPrefix         = "management.harvesterhci.io"
+	LabelPrefix              = AnnotationPrefix
+	UpstreamAnnotationPrefix = "harvesterhci.io" // TODO: For backward compatibility. Should be removed eventually.
 	SUCLabelPrefix           = "upgrade.cattle.io"
 
 	HarvesterUpgradeImageAnnotation = UpstreamAnnotationPrefix + "/" + "os-upgrade-image"

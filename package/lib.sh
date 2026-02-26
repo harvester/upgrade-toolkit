@@ -1,9 +1,10 @@
 UPGRADE_NAMESPACE="harvester-system"
-UPGRADE_REPO_URL=http://$HARVESTER_UPGRADEPLAN_NAME-repo.$UPGRADE_NAMESPACE
-UPGRADE_REPO_RELEASE_FILE="$UPGRADE_REPO_URL/harvester-iso/harvester-release.yaml"
-UPGRADE_REPO_SQUASHFS_IMAGE="$UPGRADE_REPO_URL/harvester-iso/rootfs.squashfs"
-UPGRADE_REPO_BUNDLE_ROOT="$UPGRADE_REPO_URL/harvester-iso/bundle"
-UPGRADE_REPO_BUNDLE_METADATA="$UPGRADE_REPO_URL/harvester-iso/bundle/metadata.yaml"
+UPGRADE_REPO_URL=http://$HARVESTER_UPGRADEPLAN_NAME-repo.$UPGRADE_NAMESPACE/harvester-iso
+UPGRADE_REPO_VM_NAME="upgrade-repo-$HARVESTER_UPGRADEPLAN_NAME"
+UPGRADE_REPO_RELEASE_FILE="$UPGRADE_REPO_URL/harvester-release.yaml"
+UPGRADE_REPO_SQUASHFS_IMAGE="$UPGRADE_REPO_URL/rootfs.squashfs"
+UPGRADE_REPO_BUNDLE_ROOT="$UPGRADE_REPO_URL/bundle"
+UPGRADE_REPO_BUNDLE_METADATA="$UPGRADE_REPO_URL/bundle/metadata.yaml"
 CACHED_BUNDLE_METADATA=""
 HOST_DIR="${HOST_DIR:-/host}"
 
@@ -133,20 +134,106 @@ check_version()
   fi
 
   local ret=0
-  # upgrade-helper version-guard "$HARVESTER_UPGRADEPLAN_NAME" || ret=$?
+  upgrade-helper version-guard "$HARVESTER_UPGRADEPLAN_NAME" || ret=$?
   if [ $ret -ne 0 ]; then
     echo "Version checking failed. Abort."
     exit $ret
   fi
 }
 
+get_repo_deployment_status()
+{
+  local deployment_name="$HARVESTER_UPGRADEPLAN_NAME-repo"
+  kubectl get deployment $deployment_name -n $UPGRADE_NAMESPACE -o=jsonpath='{.status.conditions[?(@.type=="Available")].status}'
+}
+
+get_repo_vm_status()
+{
+  kubectl get virtualmachines.kubevirt.io $UPGRADE_REPO_VM_NAME -n $UPGRADE_NAMESPACE -o=jsonpath='{.status.printableStatus}'
+}
+
+# Detect which type of upgrade repo is being used
+detect_repo_type()
+{
+  local deployment_name="$HARVESTER_UPGRADEPLAN_NAME-repo"
+
+  if kubectl get deployment $deployment_name -n $UPGRADE_NAMESPACE &>/dev/null; then
+    echo "deployment"
+    return
+  fi
+
+  if kubectl get virtualmachines.kubevirt.io $UPGRADE_REPO_VM_NAME -n $UPGRADE_NAMESPACE &>/dev/null; then
+    echo "vm"
+    return
+  fi
+
+  # Return empty if neither exists
+  echo ""
+}
+
+# Wait for deployment to be ready
+wait_repo_deployment()
+{
+  echo "Waiting for upgrade repo deployment to be ready..."
+
+  # Wait for deployment to exist and be available
+  until [[ "$(get_repo_deployment_status)" == "True" ]]
+  do
+    echo "Upgrade repo deployment is not ready yet, waiting..."
+    sleep 10
+  done
+
+  echo "Upgrade repo deployment is ready."
+}
+
+# Wait for VM to be running
+wait_repo_vm()
+{
+  echo "Waiting for upgrade repo VM to be running..."
+
+  # Start upgrade repo VM in case it's shut down due to migration timeout or job failure
+  until [[ "$(get_repo_vm_status)" == "Running" ]]
+  do
+    echo "Try to bring up the upgrade repo VM..."
+    virtctl start $UPGRADE_REPO_VM_NAME -n $UPGRADE_NAMESPACE || true
+    sleep 10
+  done
+
+  echo "Upgrade repo VM is running."
+}
+
+# Wait for upgrade repo to be ready
 wait_repo()
 {
+  local repo_type=""
+
+  # Wait until either Deployment or VM resource exists
+  echo "Waiting for upgrade repo resource (Deployment or VM) to be created..."
+  until [[ -n "$repo_type" ]]; do
+    repo_type=$(detect_repo_type)
+    echo "Upgrade repo resource not found yet, waiting..."
+    sleep 10
+  done
+
+  echo "Detected upgrade repo type: $repo_type"
+
+  # Wait for the specific resource to be ready
+  if [[ "$repo_type" == "deployment" ]]; then
+    # v1.7.0+ Deployment-based repo
+    wait_repo_deployment
+  else
+    # v1.6.x and earlier VM-based repo
+    wait_repo_vm
+  fi
+
+  # Wait for HTTP endpoint to be accessible
   until curl -sfL $UPGRADE_REPO_RELEASE_FILE
   do
-    echo "Wait for upgrade repo ready..."
+    echo "Wait for upgrade repo HTTP endpoint ready..."
     sleep 5
   done
+
+  echo "Upgrade repo is fully ready and accessible."
 }
 
 import_image_archives_from_repo() {
@@ -216,6 +303,20 @@ detect_upgrade()
 
   UPGRADEPLAN_PREVIOUS_VERSION=$(echo "$upgradeplan_obj" | yq e .status.previousVersion -)
   SKIP_VERSION_CHECK=$(echo "$upgradeplan_obj" | yq e '.metadata.annotations."harvesterhci.io/skip-version-check"' -)
+}
+
+# refer https://github.com/harvester/harvester/issues/3098
+detect_node_current_harvester_version()
+{
+  NODE_CURRENT_HARVESTER_VERSION=""
+  local harvester_release_file=/host/etc/harvester-release.yaml
+
+  if [ -f "$harvester_release_file" ]; then
+    NODE_CURRENT_HARVESTER_VERSION=$(yq e '.harvester' $harvester_release_file)
+    echo "NODE_CURRENT_HARVESTER_VERSION is: $NODE_CURRENT_HARVESTER_VERSION"
+  else
+    echo "$harvester_release_file is not existing, NODE_CURRENT_HARVESTER_VERSION is set as empty"
+  fi
 }
 
 upgrade_addon()
@@ -664,7 +765,7 @@ EOF
   # wait for managedchart to be ready before updating the addon
   wait_managedchart_ready "kubeovn-operator-crd"
 
-  ## addon patch
+  ## addon patch 
   patch=$(cat /usr/local/share/addons/kubeovn-operator.yaml | yq '{"spec": .spec | pick(["version"])}')
   cat > addon-patch.yaml <<EOF
 $patch

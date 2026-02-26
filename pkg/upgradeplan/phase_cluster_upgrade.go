@@ -108,7 +108,7 @@ func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan) *
 							},
 						},
 					},
-					ServiceAccountName: harvesterName,
+					ServiceAccountName: harvesterServiceAccountName,
 					Tolerations:        getDefaultTolerations(),
 				},
 			},

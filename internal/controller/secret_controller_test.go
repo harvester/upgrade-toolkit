@@ -67,7 +67,7 @@ var _ = Describe("Secret Controller", func() {
 		}
 
 		// Ensure required namespaces exist
-		for _, nsName := range []string{fleetLocalNamespace, "cattle-system"} {
+		for _, nsName := range []string{fleetLocalNamespace, "harvester-system"} {
 			ns := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: nsName},
 			}
@@ -85,7 +85,7 @@ var _ = Describe("Secret Controller", func() {
 
 		// Clean up Jobs in cattle-system
 		jobList := &batchv1.JobList{}
-		_ = k8sClient.List(ctx, jobList, client.InNamespace("cattle-system"))
+		_ = k8sClient.List(ctx, jobList, client.InNamespace("harvester-system"))
 		for i := range jobList.Items {
 			_ = k8sClient.Delete(ctx, &jobList.Items[i], client.PropagationPolicy(metav1.DeletePropagationBackground))
 		}
@@ -177,7 +177,7 @@ var _ = Describe("Secret Controller", func() {
 
 			// Verify no Jobs were created
 			jobList := &batchv1.JobList{}
-			Expect(k8sClient.List(ctx, jobList, client.InNamespace("cattle-system"))).To(Succeed())
+			Expect(k8sClient.List(ctx, jobList, client.InNamespace("harvester-system"))).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
 		})
 	})
@@ -203,7 +203,7 @@ var _ = Describe("Secret Controller", func() {
 				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, testNodeName)
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Namespace: "cattle-system",
+				Namespace: "harvester-system",
 				Name:      expectedJobName,
 			}, job)).To(Succeed())
 
@@ -226,7 +226,7 @@ var _ = Describe("Secret Controller", func() {
 			job := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      jobName,
-					Namespace: "cattle-system",
+					Namespace: "harvester-system",
 					Labels: map[string]string{
 						upgradeplan.HarvesterUpgradePlanLabel:      upgradePlanName,
 						upgradeplan.HarvesterUpgradeComponentLabel: upgradeplan.NodeComponent,
@@ -323,7 +323,7 @@ var _ = Describe("Secret Controller", func() {
 				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, testNodeName)
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Namespace: "cattle-system",
+				Namespace: "harvester-system",
 				Name:      expectedJobName,
 			}, job)).To(Succeed())
 
@@ -395,7 +395,7 @@ var _ = Describe("Secret Controller", func() {
 
 			// Verify only one Job exists
 			jobList := &batchv1.JobList{}
-			Expect(k8sClient.List(ctx, jobList, client.InNamespace("cattle-system"),
+			Expect(k8sClient.List(ctx, jobList, client.InNamespace("harvester-system"),
 				client.MatchingLabels{
 					upgradeplan.HarvesterDrainHookTypeLabel: upgradeplan.DrainHookTypePreDrain,
 				})).To(Succeed())

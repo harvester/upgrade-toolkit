@@ -235,7 +235,7 @@ func (r *SecretReconciler) ensureDrainJob(
 	nodeName, jobName, hookType string,
 ) error {
 	nn := types.NamespacedName{
-		Namespace: upgradeplan.CattleSystemNamespace,
+		Namespace: upgradeplan.HarvesterSystemNamespace,
 		Name:      jobName,
 	}
 	var existing batchv1.Job

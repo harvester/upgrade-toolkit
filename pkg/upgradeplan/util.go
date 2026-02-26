@@ -26,9 +26,8 @@ import (
 const (
 	harvesterSystemNamespace       = "harvester-system"
 	cattleSystemNamespace          = "cattle-system"
-	CattleSystemNamespace          = cattleSystemNamespace
 	kubeSystemNamespace            = "kube-system"
-	harvesterName                  = "harvester"
+	harvesterServiceAccountName    = "harvester"
 	serverVersionSettingName       = "server-version"
 	sucName                        = "system-upgrade-controller"
 	longhornStaticStorageClassName = "longhorn-static"
@@ -299,7 +298,7 @@ func ConstructDrainJob(
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
-			Namespace: cattleSystemNamespace,
+			Namespace: harvesterSystemNamespace,
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      upgradePlan.Name,
 				HarvesterUpgradeComponentLabel: NodeComponent,
@@ -321,7 +320,7 @@ func ConstructDrainJob(
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyNever,
 					NodeName:           nodeName,
-					ServiceAccountName: harvesterName,
+					ServiceAccountName: harvesterServiceAccountName,
 					HostPID:            true,
 					Tolerations:        getDefaultTolerations(),
 					Containers: []corev1.Container{

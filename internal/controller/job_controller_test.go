@@ -56,7 +56,7 @@ var _ = Describe("Job Controller", func() {
 
 		// Ensure required namespace exists
 		ns := &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{Name: "cattle-system"},
+			ObjectMeta: metav1.ObjectMeta{Name: "harvester-system"},
 		}
 		_ = k8sClient.Create(ctx, ns)
 	})
@@ -64,7 +64,7 @@ var _ = Describe("Job Controller", func() {
 	AfterEach(func() {
 		// Clean up Jobs in cattle-system
 		jobList := &batchv1.JobList{}
-		_ = k8sClient.List(ctx, jobList, client.InNamespace("cattle-system"))
+		_ = k8sClient.List(ctx, jobList, client.InNamespace("harvester-system"))
 		for i := range jobList.Items {
 			_ = k8sClient.Delete(ctx, &jobList.Items[i], client.PropagationPolicy(metav1.DeletePropagationBackground))
 		}
@@ -137,7 +137,7 @@ var _ = Describe("Job Controller", func() {
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      jobName,
-				Namespace: "cattle-system",
+				Namespace: "harvester-system",
 				Labels:    labels,
 			},
 			Spec: batchv1.JobSpec{
