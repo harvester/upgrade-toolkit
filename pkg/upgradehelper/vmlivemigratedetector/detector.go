@@ -2,12 +2,11 @@ package vmlivemigratedetector
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
 
+	wranglername "github.com/rancher/wrangler/v3/pkg/name"
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -21,7 +20,6 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
-
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/kubecli"
 
@@ -324,25 +322,8 @@ func (d *VMLiveMigrateDetector) recordUpgradeEvent(eventType, reason, message st
 }
 
 // GetRestoreVMConfigMapName returns the ConfigMap name used to store VM names for restoration.
-// This mirrors upstream's name.SafeConcatName behavior: join parts with "-", and if the
-// result exceeds 63 characters, truncate and append a short hash for uniqueness.
 func GetRestoreVMConfigMapName(upgradeName string) string {
-	return safeConcatName(upgradeName, restoreVMConfigMapPrefix)
-}
-
-const maxNameLength = 63
-
-// safeConcatName concatenates name parts with "-" and ensures the result is at most 63
-// characters. If truncation is needed, a 5-character hex hash of the full name is appended
-// to preserve uniqueness. This matches the behavior of wrangler's name.SafeConcatName.
-func safeConcatName(parts ...string) string {
-	fullName := strings.Join(parts, "-")
-	if len(fullName) <= maxNameLength {
-		return fullName
-	}
-	hash := sha256.Sum256([]byte(fullName))
-	hashStr := hex.EncodeToString(hash[:])[:8]
-	return fullName[:maxNameLength-9] + "-" + hashStr
+	return wranglername.SafeConcatName(upgradeName, restoreVMConfigMapPrefix)
 }
 
 // splitNamespacedName splits "namespace/name" into its parts.

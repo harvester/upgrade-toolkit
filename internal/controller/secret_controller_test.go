@@ -18,10 +18,10 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -199,7 +199,7 @@ var _ = Describe("Secret Controller", func() {
 			Expect(result).To(Equal(ctrl.Result{}))
 
 			// Verify a pre-drain Job was created
-			expectedJobName := fmt.Sprintf("%s-%s-%s-%s",
+			expectedJobName := name.SafeConcatName(
 				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, testNodeName)
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -221,7 +221,7 @@ var _ = Describe("Secret Controller", func() {
 			})
 
 			// Create a completed pre-drain Job
-			jobName := fmt.Sprintf("%s-%s-%s-%s",
+			jobName := name.SafeConcatName(
 				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, testNodeName)
 			job := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
@@ -319,8 +319,60 @@ var _ = Describe("Secret Controller", func() {
 			Expect(result).To(Equal(ctrl.Result{}))
 
 			// Verify a post-drain Job was created
-			expectedJobName := fmt.Sprintf("%s-%s-%s-%s",
+			expectedJobName := name.SafeConcatName(
 				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, testNodeName)
+			job := &batchv1.Job{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: "harvester-system",
+				Name:      expectedJobName,
+			}, job)).To(Succeed())
+
+			Expect(job.Labels[upgradeplan.HarvesterDrainHookTypeLabel]).To(Equal(upgradeplan.DrainHookTypePostDrain))
+		})
+	})
+
+	Context("When the node name is long enough to exceed 63-character limit", func() {
+		const longNodeName = "charlie-1-tink-system-with-extra-long-suffix"
+
+		It("should create a post-drain Job with a truncated name", func() {
+			// Use a reconciler with the long node name
+			longNameReconciler := &SecretReconciler{
+				Client:           k8sClient,
+				Scheme:           k8sClient.Scheme(),
+				Log:              logf.Log.WithName("test-secret-controller-long"),
+				NodeNameResolver: &staticNodeNameResolver{nodeName: longNodeName},
+			}
+
+			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
+
+			// Mark the node as PreDrained so the post-drain guard allows Job creation
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			up.Status.NodeUpgradeStatuses[longNodeName] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStatePreDrained,
+			}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createMachinePlanSecret(map[string]string{
+				upgradeplan.RKE2PreDrainAnnotation:  "drain-1",
+				upgradeplan.PreHookAnnotation:       "drain-1",
+				upgradeplan.RKE2PostDrainAnnotation: "drain-1",
+			})
+
+			result, err := longNameReconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: fleetLocalNamespace,
+					Name:      testSecretName,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Verify a post-drain Job was created with a safe name
+			expectedJobName := name.SafeConcatName(
+				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, longNodeName)
+			Expect(len(expectedJobName)).To(BeNumerically("<=", 63))
+
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: "harvester-system",

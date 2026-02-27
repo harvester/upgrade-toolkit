@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -188,10 +189,7 @@ func (r *SecretReconciler) handlePreDrain(
 	}
 
 	// Create or retrieve the pre-drain Job
-	jobName := fmt.Sprintf(
-		"%s-%s-%s-%s",
-		up.Name, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, nodeName,
-	)
+	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, nodeName)
 	return r.ensureDrainJob(ctx, up, nodeName, jobName, upgradeplan.DrainHookTypePreDrain)
 }
 
@@ -222,10 +220,7 @@ func (r *SecretReconciler) handlePostDrain(
 	}
 
 	// Create or retrieve the post-drain Job
-	jobName := fmt.Sprintf(
-		"%s-%s-%s-%s",
-		up.Name, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, nodeName,
-	)
+	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, nodeName)
 	return r.ensureDrainJob(ctx, up, nodeName, jobName, upgradeplan.DrainHookTypePostDrain)
 }
 
