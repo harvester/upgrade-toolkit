@@ -12,7 +12,7 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY cmd/main.go cmd/main.go
+COPY cmd/ cmd/
 COPY api/ api/
 COPY internal/ internal/
 COPY pkg/ pkg/
@@ -22,7 +22,7 @@ COPY pkg/ pkg/
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o upgrade-toolkit cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o upgrade-toolkit ./cmd/
 
 FROM registry.opensuse.org/isv/rancher/harvester/os/v1.7/main/baseos:v1.7 AS baseos
 
@@ -66,7 +66,6 @@ COPY package/upgrade_node.sh /usr/local/bin/upgrade_node.sh
 COPY package/extra_manifests /usr/local/share/extra_manifests
 COPY package/migrations /usr/local/share/migrations
 COPY --from=addons_generator /workspace/generated_addons /usr/local/share/addons
-# COPY package/upgrade-helper /usr/local/bin/upgrade-helper
 
 ENTRYPOINT ["/usr/local/bin/upgrade-toolkit"]
 CMD ["manager"]

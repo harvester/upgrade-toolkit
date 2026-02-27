@@ -134,7 +134,7 @@ check_version()
   fi
 
   local ret=0
-  upgrade-helper version-guard "$HARVESTER_UPGRADEPLAN_NAME" || ret=$?
+  upgrade-toolkit version-guard "$HARVESTER_UPGRADEPLAN_NAME" || ret=$?
   if [ $ret -ne 0 ]; then
     echo "Version checking failed. Abort."
     exit $ret

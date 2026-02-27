@@ -68,7 +68,9 @@ type Command interface {
 
 var commands = []Command{
 	&ManagerCommand{},
-	// Add new commands here
+	&VMLiveMigrateDetectorCommand{},
+	&VersionGuardCommand{},
+	&RestoreVMCommand{},
 }
 
 func main() {
