@@ -16,7 +16,9 @@ const (
 // GetAllNonLiveMigratableVMINames returns the namespaced names (namespace/name) of VMIs
 // that cannot be live-migrated to another node. This is a reimplementation of the upstream
 // harvester/harvester/pkg/util/virtualmachineinstance.GetAllNonLiveMigratableVMINames.
-func GetAllNonLiveMigratableVMINames(vmis []*kubevirtv1.VirtualMachineInstance, nodes []*corev1.Node) ([]string, error) {
+func GetAllNonLiveMigratableVMINames(
+	vmis []*kubevirtv1.VirtualMachineInstance, nodes []*corev1.Node,
+) ([]string, error) {
 	var nonLiveMigratableVMINames []string
 
 	nonWitnessNodes := excludeWitnessNodes(nodes)
@@ -87,7 +89,9 @@ func migratableByNodeAffinity(vmi *kubevirtv1.VirtualMachineInstance, nodes []*c
 			continue
 		}
 
-		if vmi.Spec.Affinity != nil && vmi.Spec.Affinity.NodeAffinity != nil && vmi.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+		affinity := vmi.Spec.Affinity
+		if affinity != nil && affinity.NodeAffinity != nil &&
+			affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 			nodeSelectorTerms := vmi.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 
 			var err error

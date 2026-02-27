@@ -142,9 +142,12 @@ func TestGetAllNonLiveMigratableVMINames(t *testing.T) {
 			expected: []string{"default/vm-unsched"},
 		},
 		{
-			name:     "no VMIs",
-			vmis:     []*kubevirtv1.VirtualMachineInstance{},
-			nodes:    []*corev1.Node{{ObjectMeta: metav1.ObjectMeta{Name: "node1"}}, {ObjectMeta: metav1.ObjectMeta{Name: "node2"}}},
+			name: "no VMIs",
+			vmis: []*kubevirtv1.VirtualMachineInstance{},
+			nodes: []*corev1.Node{
+				{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+			},
 			expected: nil,
 		},
 	}

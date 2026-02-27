@@ -33,7 +33,10 @@ func (c *VersionGuardCommand) FlagSet() *flag.FlagSet {
 	if c.fs == nil {
 		c.fs = flag.NewFlagSet("version-guard", flag.ExitOnError)
 		c.fs.BoolVar(&c.strict, "strict", true, "Enable strict mode (prohibit dev-to-release upgrades)")
-		c.fs.StringVar(&c.minUpgradableVer, "min-upgradable-version", "", "Override minimum upgradable version from the upgrade object")
+		c.fs.StringVar(
+			&c.minUpgradableVer, "min-upgradable-version", "",
+			"Override minimum upgradable version from the upgrade object",
+		)
 		c.fs.StringVar(&c.kubeconfig, "kubeconfig", os.Getenv("KUBECONFIG"), "Path to kubeconfig file")
 		c.fs.BoolVar(&c.debug, "debug", false, "Enable debug logging")
 	}
@@ -48,7 +51,10 @@ func (c *VersionGuardCommand) Run() error {
 
 	args := c.fs.Args()
 	if len(args) < 1 {
-		return fmt.Errorf("usage: upgrade-toolkit version-guard UPGRADEPLANNAME [--strict] [--min-upgradable-version VERSION]")
+		return fmt.Errorf(
+			"usage: upgrade-toolkit version-guard UPGRADEPLANNAME" +
+				" [--strict] [--min-upgradable-version VERSION]",
+		)
 	}
 	upgradePlanName := args[0]
 
@@ -70,7 +76,7 @@ func getUpgradePlan(restConfig *rest.Config, name string) (*managementv1beta1.Up
 	_ = managementv1beta1.AddToScheme(s)
 
 	crdConfig := *restConfig
-	crdConfig.ContentConfig.GroupVersion = &managementv1beta1.GroupVersion
+	crdConfig.GroupVersion = &managementv1beta1.GroupVersion
 	crdConfig.APIPath = "/apis"
 	crdConfig.NegotiatedSerializer = serializer.NewCodecFactory(s)
 

@@ -81,7 +81,10 @@ func NewRestoreVMHandler(kubeConfig, kubeContext, nodeName, upgrade string) (*Re
 	_ = managementv1beta1.AddToScheme(s)
 
 	broadcaster := record.NewBroadcaster()
-	broadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: k8sClient.CoreV1().Events(harvesterSystemNamespace)})
+	eventSink := &typedcorev1.EventSinkImpl{
+		Interface: k8sClient.CoreV1().Events(harvesterSystemNamespace),
+	}
+	broadcaster.StartRecordingToSink(eventSink)
 	recorder := broadcaster.NewRecorder(
 		s,
 		corev1.EventSource{Component: "restore-vm", Host: nodeName},
@@ -138,16 +141,22 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 		logrus.Infof("Starting VM %s/%s...", ns, name)
 		if err := h.startVM(ctx, ns, name); err != nil {
 			logrus.Errorf("Failed to start VM %s/%s: %v", ns, name, err)
-			h.recordUpgradeEvent(corev1.EventTypeWarning, RestoreVMFailed,
-				fmt.Sprintf("Failed to restore VM %s/%s for node %s during upgrade %s: %v", ns, name, h.nodeName, h.upgradeName, err))
+			msg := fmt.Sprintf(
+				"Failed to restore VM %s/%s for node %s during upgrade %s: %v",
+				ns, name, h.nodeName, h.upgradeName, err,
+			)
+			h.recordUpgradeEvent(corev1.EventTypeWarning, RestoreVMFailed, msg)
 			vmFailedCnt++
 		} else {
 			vmSuccessCnt++
 		}
 	}
 
-	h.recordUpgradeEvent(corev1.EventTypeNormal, RestoreVMCompleted,
-		fmt.Sprintf("Restored %d VMs for node %s during upgrade %s, success: %d, failed: %d", len(vmNames), h.nodeName, h.upgradeName, vmSuccessCnt, vmFailedCnt))
+	msg := fmt.Sprintf(
+		"Restored %d VMs for node %s during upgrade %s, success: %d, failed: %d",
+		len(vmNames), h.nodeName, h.upgradeName, vmSuccessCnt, vmFailedCnt,
+	)
+	h.recordUpgradeEvent(corev1.EventTypeNormal, RestoreVMCompleted, msg)
 	return nil
 }
 

@@ -86,7 +86,8 @@ func TestCheck(t *testing.T) {
 			strictMode: true,
 		},
 		{
-			name: "upgrading from v1.2.2-rc2 to v1.2.2-rc1 with minimum upgradable version v1.2.1 (effectively downgrade from rc to rc)",
+			name: "upgrading from v1.2.2-rc2 to v1.2.2-rc1 with minimum upgradable version v1.2.1" +
+				" (effectively downgrade from rc to rc)",
 			upgradePlan: &managementv1beta1.UpgradePlan{
 				Status: managementv1beta1.UpgradePlanStatus{
 					PreviousVersion: ptr.To("v1.2.2-rc2"),

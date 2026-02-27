@@ -110,7 +110,10 @@ func (d *VMLiveMigrateDetector) Init() error {
 	_ = managementv1beta1.AddToScheme(s)
 
 	broadcaster := record.NewBroadcaster()
-	broadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: d.k8sClient.CoreV1().Events(harvesterSystemNamespace)})
+	eventSink := &typedcorev1.EventSinkImpl{
+		Interface: d.k8sClient.CoreV1().Events(harvesterSystemNamespace),
+	}
+	broadcaster.StartRecordingToSink(eventSink)
 	d.recorder = broadcaster.NewRecorder(
 		s,
 		corev1.EventSource{Component: "vm-live-migrate-detector", Host: d.nodeName},
@@ -174,8 +177,11 @@ func (d *VMLiveMigrateDetector) Run(ctx context.Context) error {
 		}
 	}
 
-	d.recordUpgradeEvent(corev1.EventTypeNormal, VMShutdownCompleted,
-		fmt.Sprintf("Shutdown completed for %d VM(s) on node %s, success: %d, failed: %d ", len(nonLiveMigratableVMNames), d.nodeName, vmSuccessCnt, vmFailedCnt))
+	msg := fmt.Sprintf(
+		"Shutdown completed for %d VM(s) on node %s, success: %d, failed: %d ",
+		len(nonLiveMigratableVMNames), d.nodeName, vmSuccessCnt, vmFailedCnt,
+	)
+	d.recordUpgradeEvent(corev1.EventTypeNormal, VMShutdownCompleted, msg)
 
 	return nil
 }
@@ -203,17 +209,17 @@ func getRestoreVMNames(vmis []*kubevirtv1.VirtualMachineInstance, candidateVMNam
 	restoreVMs := make([]string, 0)
 
 	excludeVMs := make(map[string]struct{})
-	for _, vmi := range vmis {
+	for _, instance := range vmis {
 		// Exclude paused VMs and upgrade repo VMs
 		isPaused := false
-		for _, cond := range vmi.Status.Conditions {
+		for _, cond := range instance.Status.Conditions {
 			if string(cond.Type) == "Paused" && cond.Status == corev1.ConditionTrue {
 				isPaused = true
 				break
 			}
 		}
-		if isPaused || vmi.Labels[upgradeLabel] != "" {
-			namespacedName := fmt.Sprintf("%s/%s", vmi.Namespace, vmi.Name)
+		if isPaused || instance.Labels[upgradeLabel] != "" {
+			namespacedName := fmt.Sprintf("%s/%s", instance.Namespace, instance.Name)
 			excludeVMs[namespacedName] = struct{}{}
 		}
 	}
@@ -286,7 +292,9 @@ func (d *VMLiveMigrateDetector) createOrUpdateConfigMap(ctx context.Context, res
 		})
 }
 
-func (d *VMLiveMigrateDetector) getUpgradePlan(ctx context.Context, name string) (*managementv1beta1.UpgradePlan, error) {
+func (d *VMLiveMigrateDetector) getUpgradePlan(
+	ctx context.Context, name string,
+) (*managementv1beta1.UpgradePlan, error) {
 	upgradePlan := &managementv1beta1.UpgradePlan{}
 	result := d.k8sClient.CoreV1().RESTClient().Get().
 		AbsPath("/apis", managementv1beta1.GroupVersion.Group, managementv1beta1.GroupVersion.Version, "upgradeplans", name).
