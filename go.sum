@@ -312,6 +312,8 @@ github.com/prometheus/procfs v0.15.1 h1:YagwOFzUgYfKKHX6Dr+sHT7km/hxC76UB0leargg
 github.com/prometheus/procfs v0.15.1/go.mod h1:fB45yRUv8NstnjriLhBQLuOUt+WW4BsoGhij/e3PBqk=
 github.com/rancher/lasso v0.2.3 h1:74/z/C/O3ykhyMrRuEgc9kVyYiSoS7kp5BAijlcyXDg=
 github.com/rancher/lasso v0.2.3/go.mod h1:G+KeeOaKRjp+qGp0bV6VbLhYrq1vHbJPbDh40ejg5yE=
+github.com/rancher/rancher/pkg/apis v0.0.0-20250828140533-07a90f09a491 h1:Amn78nZN3LwiZKt2w7qsDcjKaimjkfl6yX5q93pzQ80=
+github.com/rancher/rancher/pkg/apis v0.0.0-20250828140533-07a90f09a491/go.mod h1:vpYFO2/R6ec2c5+BHzXWmfYxQmg9hRv6JCCZ7tvKKjk=
 github.com/rancher/system-upgrade-controller/pkg/apis v0.0.0-20250903002123-a8d5a372d82c h1:nIqJzprk1yysK/Yk+sPP96yYfGGMm640XrZjslbPqyo=
 github.com/rancher/system-upgrade-controller/pkg/apis v0.0.0-20250903002123-a8d5a372d82c/go.mod h1:VfRrgue4yl6O0GYakMGYgyByu7ySooPQWWRxTt2MIEI=
 github.com/rancher/wrangler v1.1.2 h1:oXbXo9k7y/H4drUpb4RM1c++vT9O3rpoNEfyusGykiU=
@@ -756,6 +758,8 @@ kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6
 kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90/go.mod h1:018lASpFYBsYN6XwmA2TIrPCx6e0gviTd/ZNtSitKgc=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.32.1 h1:Cf+ed5N8038zbsaXFO7mKQDi/+VcSRafb0jM84KX5so=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.32.1/go.mod h1:Ve9uj1L+deCXFrPOk1LpFXqTg7LCFzFso6PA48q/XZw=
+sigs.k8s.io/cluster-api v1.9.5 h1:68164Q201Y5ANVkhyrOZenoMbfL2SEBjVYZs/ihhSro=
+sigs.k8s.io/cluster-api v1.9.5/go.mod h1:DyqyZ4jRvKGKewDRn1Q4OCHaVjsdTogymbO6mrgHEDI=
 sigs.k8s.io/controller-runtime v0.19.7 h1:DLABZfMr20A+AwCZOHhcbcu+TqBXnJZaVBri9K3EO48=
 sigs.k8s.io/controller-runtime v0.19.7/go.mod h1:iRmWllt8IlaLjvTTDLhRBXIEtkCK6hwVBJJsYS9Ajf4=
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd/go.mod h1:B8JuhiUyNFVKdsE8h686QcCxMaH6HrOAZj4vswFpcB0=

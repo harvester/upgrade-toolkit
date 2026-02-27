@@ -7,7 +7,7 @@ replace (
 	github.com/google/gnostic-models => github.com/google/gnostic-models v0.6.9
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20191219222812-2987a591a72c
 	github.com/openshift/client-go => github.com/openshift/client-go v0.0.0-20210112165513-ebc401615f47
-	github.com/rancher/rancher/pkg/apis => github.com/rancher/rancher/pkg/apis v0.0.0-20240919204204-3da2ae0cabd1
+	github.com/rancher/rancher/pkg/apis => github.com/rancher/rancher/pkg/apis v0.0.0-20250828140533-07a90f09a491
 	k8s.io/api => k8s.io/api v0.32.5
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.32.5
 	k8s.io/apimachinery => k8s.io/apimachinery v0.32.5
@@ -25,6 +25,7 @@ require (
 	github.com/harvester/harvester v1.7.1
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
+	github.com/rancher/rancher/pkg/apis v0.0.0
 	github.com/rancher/system-upgrade-controller/pkg/apis v0.0.0-20250903002123-a8d5a372d82c
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
@@ -139,6 +140,7 @@ require (
 	kubevirt.io/containerized-data-importer-api v1.62.0 // indirect
 	kubevirt.io/controller-lifecycle-operator-sdk/api v0.0.0-20220329064328-f3cc58c6ed90 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.32.1 // indirect
+	sigs.k8s.io/cluster-api v1.9.5 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect

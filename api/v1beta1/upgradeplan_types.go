@@ -179,7 +179,7 @@ type UpgradePlanStatus struct {
 	// Cluster resource during the NodeUpgrade phase. Used as an idempotency
 	// guard so the Cluster is patched exactly once per upgrade.
 	// +optional
-	ProvisionGeneration *int64 `json:"provisionGeneration,omitempty"`
+	ProvisionGeneration *int `json:"provisionGeneration,omitempty"`
 
 	// version is the snapshot of the associated Version resource.
 	// +optional

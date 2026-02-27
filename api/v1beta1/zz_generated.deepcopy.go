@@ -206,7 +206,7 @@ func (in *UpgradePlanStatus) DeepCopyInto(out *UpgradePlanStatus) {
 	}
 	if in.ProvisionGeneration != nil {
 		in, out := &in.ProvisionGeneration, &out.ProvisionGeneration
-		*out = new(int64)
+		*out = new(int)
 		**out = **in
 	}
 	if in.Version != nil {

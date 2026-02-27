@@ -205,7 +205,6 @@ spec:
                   provisionGeneration records the provisionGeneration value set on the
                   Cluster resource during the NodeUpgrade phase. Used as an idempotency
                   guard so the Cluster is patched exactly once per upgrade.
-                format: int64
                 type: integer
               releaseMetadata:
                 description: releaseMetadata reflects the essential metadata extracted

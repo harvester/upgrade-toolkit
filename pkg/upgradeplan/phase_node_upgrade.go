@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
+	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -94,17 +95,11 @@ func (p *NodeUpgradePhase) ensureClusterPatched(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
-	cluster := &unstructured.Unstructured{}
-	cluster.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "provisioning.cattle.io",
-		Version: "v1",
-		Kind:    "Cluster",
-	})
-
+	var cluster provisioningv1.Cluster
 	if err := p.Client.Get(ctx, types.NamespacedName{
 		Namespace: FleetLocalNamespace,
 		Name:      LocalClusterName,
-	}, cluster); err != nil {
+	}, &cluster); err != nil {
 		return fmt.Errorf("failed to get Cluster resource: %w", err)
 	}
 
@@ -123,101 +118,35 @@ func (p *NodeUpgradePhase) ensureClusterPatched(
 	patch := client.MergeFrom(cluster.DeepCopy())
 
 	// Set Kubernetes version
-	if err := unstructured.SetNestedField(cluster.Object, targetK8sVersion, "spec", "kubernetesVersion"); err != nil {
-		return fmt.Errorf("failed to set kubernetesVersion: %w", err)
-	}
+	cluster.Spec.KubernetesVersion = targetK8sVersion
 
 	// Increment provisionGeneration
-	currentGeneration, _, _ := unstructured.NestedInt64(
-		cluster.Object, "spec", "rkeConfig", "provisionGeneration",
-	)
-	if err := unstructured.SetNestedField(
-		cluster.Object, currentGeneration+1,
-		"spec", "rkeConfig", "provisionGeneration",
-	); err != nil {
-		return fmt.Errorf("failed to set provisionGeneration: %w", err)
+	newGeneration := cluster.Spec.RKEConfig.ProvisionGeneration + 1
+	cluster.Spec.RKEConfig.ProvisionGeneration = newGeneration
+
+	// Set upgrade strategy
+	drainOpts := rkev1.DrainOptions{
+		Enabled:            true,
+		Force:              true,
+		IgnoreDaemonSets:   ptr.To(true),
+		DeleteEmptyDirData: true,
+		PreDrainHooks:      []rkev1.DrainHook{{Annotation: PreHookAnnotation}},
+		PostDrainHooks:     []rkev1.DrainHook{{Annotation: PostHookAnnotation}},
 	}
 
-	// Set upgrade strategy concurrency
-	strategyPath := []string{"spec", "rkeConfig", "upgradeStrategy"}
-	if err := unstructured.SetNestedField(
-		cluster.Object, "1",
-		append(strategyPath, "controlPlaneConcurrency")...,
-	); err != nil {
-		return fmt.Errorf("failed to set controlPlaneConcurrency: %w", err)
-	}
-	if err := unstructured.SetNestedField(
-		cluster.Object, "1",
-		append(strategyPath, "workerConcurrency")...,
-	); err != nil {
-		return fmt.Errorf("failed to set workerConcurrency: %w", err)
+	cluster.Spec.RKEConfig.UpgradeStrategy = rkev1.ClusterUpgradeStrategy{
+		ControlPlaneConcurrency:  "1",
+		ControlPlaneDrainOptions: drainOpts,
+		WorkerConcurrency:        "1",
+		WorkerDrainOptions:       drainOpts,
 	}
 
-	// Configure drain options for control plane
-	cpDrainPath := []string{"spec", "rkeConfig", "upgradeStrategy", "controlPlaneDrainOptions"}
-	if err := setDrainOptions(cluster, cpDrainPath); err != nil {
-		return err
-	}
-
-	// Configure drain options for workers
-	workerDrainPath := []string{"spec", "rkeConfig", "upgradeStrategy", "workerDrainOptions"}
-	if err := setDrainOptions(cluster, workerDrainPath); err != nil {
-		return err
-	}
-
-	// Add drain hooks
-	if err := ensureDrainHooks(cluster, append(cpDrainPath, "preHooks"), PreHookAnnotation); err != nil {
-		return err
-	}
-	if err := ensureDrainHooks(cluster, append(cpDrainPath, "postHooks"), PostHookAnnotation); err != nil {
-		return err
-	}
-	if err := ensureDrainHooks(cluster, append(workerDrainPath, "preHooks"), PreHookAnnotation); err != nil {
-		return err
-	}
-	if err := ensureDrainHooks(cluster, append(workerDrainPath, "postHooks"), PostHookAnnotation); err != nil {
-		return err
-	}
-
-	if err := p.Client.Patch(ctx, cluster, patch); err != nil {
+	if err := p.Client.Patch(ctx, &cluster, patch); err != nil {
 		return fmt.Errorf("failed to patch Cluster resource: %w", err)
 	}
 
 	// Record the provisionGeneration we set so subsequent reconciles skip this patch.
 	// The reconciler's Status().Update() persists this atomically with other status changes.
-	newGeneration := currentGeneration + 1
 	upgradePlan.Status.ProvisionGeneration = &newGeneration
 	return nil
-}
-
-func setDrainOptions(cluster *unstructured.Unstructured, path []string) error {
-	fields := map[string]interface{}{
-		"enabled":            true,
-		"deleteEmptyDirData": true,
-		"force":              true,
-		"ignoreDaemonSets":   true,
-	}
-	for k, v := range fields {
-		if err := unstructured.SetNestedField(cluster.Object, v, append(path, k)...); err != nil {
-			return fmt.Errorf("failed to set %v.%s: %w", path, k, err)
-		}
-	}
-	return nil
-}
-
-func ensureDrainHooks(cluster *unstructured.Unstructured, path []string, annotation string) error {
-	hooks, _, _ := unstructured.NestedSlice(cluster.Object, path...)
-
-	// Check if the hook already exists
-	for _, hook := range hooks {
-		hookMap, ok := hook.(map[string]interface{})
-		if ok && hookMap["annotation"] == annotation {
-			return nil
-		}
-	}
-
-	hooks = append(hooks, map[string]interface{}{
-		"annotation": annotation,
-	})
-	return unstructured.SetNestedSlice(cluster.Object, hooks, path...)
 }

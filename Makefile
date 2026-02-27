@@ -106,7 +106,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 .PHONY: build
 build: manifests generate fmt vet ## Build upgrade-toolkit binary.
-	go build -o bin/upgrade-toolkit cmd/
+	go build -o bin/upgrade-toolkit ./cmd/
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
