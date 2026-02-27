@@ -51,7 +51,7 @@ ENV WHARFIE_VERSION=v0.6.8
 RUN curl -sfL https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl -o /usr/bin/kubectl && chmod +x /usr/bin/kubectl && \
     curl -sfL https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/virtctl-${KUBEVIRT_VERSION}-linux-${TARGETARCH} -o /usr/bin/virtctl && chmod +x /usr/bin/virtctl && \
     curl -sfL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${TARGETARCH} -o /usr/bin/yq && chmod +x /usr/bin/yq && \
-    curl -sfL https://github.com/rancher/wharfie/releases/download/${WHARFIE_VERSION}/wharfie-${TARGETARCH}  -o /usr/bin/wharfie && chmod +x /usr/bin/wharfie
+    curl -sfL https://github.com/rancher/wharfie/releases/download/${WHARFIE_VERSION}/wharfie-${TARGETARCH} -o /usr/bin/wharfie && chmod +x /usr/bin/wharfie
 
 WORKDIR /
 COPY --from=builder /workspace/upgrade-toolkit /usr/local/bin/upgrade-toolkit

@@ -32,23 +32,53 @@ const (
 	UpgradePlanDegraded string = "Degraded"
 )
 
-const (
-	// Node-specific upgrade states
+// NodeUpgradeState represents a node's position in the upgrade lifecycle.
+type NodeUpgradeState string
 
-	// Image-preload lifecycle stats (SUC)
-	NodeStateImagePreloading    string = "ImagePreloading"
-	NodeStateImagePreloaded     string = "ImagePreloaded"
-	NodeStateImagePreloadFailed string = "ImagePreloadFailed"
+const (
+	// Image-preload lifecycle states (SUC)
+	NodeStateImagePreloading    NodeUpgradeState = "ImagePreloading"
+	NodeStateImagePreloaded     NodeUpgradeState = "ImagePreloaded"
+	NodeStateImagePreloadFailed NodeUpgradeState = "ImagePreloadFailed"
 
 	// Drain-hook lifecycle states (Rancher V2 Provisioning)
-	NodeStatePreDraining     string = "PreDraining"
-	NodeStatePreDrained      string = "PreDrained"
-	NodeStatePreDrainFailed  string = "PreDrainFailed"
-	NodeStatePostDraining    string = "PostDraining"
-	NodeStateWaitingReboot   string = "WaitingReboot"
-	NodeStatePostDrained     string = "PostDrained"
-	NodeStatePostDrainFailed string = "PostDrainFailed"
+	NodeStatePreDraining     NodeUpgradeState = "PreDraining"
+	NodeStatePreDrained      NodeUpgradeState = "PreDrained"
+	NodeStatePreDrainFailed  NodeUpgradeState = "PreDrainFailed"
+	NodeStatePostDraining    NodeUpgradeState = "PostDraining"
+	NodeStateWaitingReboot   NodeUpgradeState = "WaitingReboot"
+	NodeStatePostDrained     NodeUpgradeState = "PostDrained"
+	NodeStatePostDrainFailed NodeUpgradeState = "PostDrainFailed"
 )
+
+// nodeUpgradeStateGroups defines the forward-progress ordering of node upgrade states.
+// States within the same group share the same ordinal (e.g., success and failure at a stage).
+var nodeUpgradeStateGroups = [][]NodeUpgradeState{
+	{NodeStateImagePreloading},                             // 0
+	{NodeStateImagePreloaded, NodeStateImagePreloadFailed}, // 1
+	{NodeStatePreDraining},                                 // 2
+	{NodeStatePreDrained, NodeStatePreDrainFailed},         // 3
+	{NodeStatePostDraining},                                // 4
+	{NodeStateWaitingReboot},                               // 5
+	{NodeStatePostDrained, NodeStatePostDrainFailed},       // 6
+}
+
+var nodeUpgradeStateIndex map[NodeUpgradeState]int
+
+func init() {
+	nodeUpgradeStateIndex = make(map[NodeUpgradeState]int, len(nodeUpgradeStateGroups)*2)
+	for i, group := range nodeUpgradeStateGroups {
+		for _, state := range group {
+			nodeUpgradeStateIndex[state] = i
+		}
+	}
+}
+
+// IsNodeUpgradeStateAhead reports whether current is strictly ahead of proposed
+// in the node upgrade lifecycle.
+func IsNodeUpgradeStateAhead(current, proposed NodeUpgradeState) bool {
+	return nodeUpgradeStateIndex[current] > nodeUpgradeStateIndex[proposed]
+}
 
 const (
 	// Overall UpgradePlan phases
@@ -74,9 +104,9 @@ const (
 )
 
 type NodeUpgradeStatus struct {
-	State   string `json:"state,omitempty"`
-	Reason  string `json:"reason,omitempty"`
-	Message string `json:"message,omitempty"`
+	State   NodeUpgradeState `json:"state,omitempty"`
+	Reason  string           `json:"reason,omitempty"`
+	Message string           `json:"message,omitempty"`
 }
 
 // UpgradePlanPhase defines what overall phase UpgradePlan is in

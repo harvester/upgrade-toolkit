@@ -270,4 +270,70 @@ var _ = Describe("Job Controller", func() {
 			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStatePostDrainFailed))
 		})
 	})
+
+	Context("When a completed pre-drain job is reconciled after node has progressed to PostDraining", func() {
+		It("should not regress the node state", func() {
+			up := createUpgradePlan()
+			// Simulate: node has already progressed to PostDraining
+			up.Status.NodeUpgradeStatuses[testNodeName] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStatePostDraining,
+			}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			// The stale pre-drain job that already completed
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain)
+			markJobComplete(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Verify node state is still PostDraining, not regressed to PreDrained
+			fresh := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, fresh)).To(Succeed())
+			Expect(fresh.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStatePostDraining))
+		})
+	})
+
+	Context("When a completed pre-drain job is reconciled after node has progressed to WaitingReboot", func() {
+		It("should not regress the node state", func() {
+			up := createUpgradePlan()
+			up.Status.NodeUpgradeStatuses[testNodeName] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStateWaitingReboot,
+			}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain)
+			markJobComplete(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			fresh := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, fresh)).To(Succeed())
+			Expect(fresh.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateWaitingReboot))
+		})
+	})
+
+	Context("When a completed image-preload job is reconciled after node has progressed to PreDrained", func() {
+		It("should not regress the node state", func() {
+			up := createUpgradePlan()
+			up.Status.NodeUpgradeStatuses[testNodeName] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStatePreDrained,
+			}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			job := createJob(upgradeplan.PrepareComponent, "")
+			markJobComplete(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			fresh := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, fresh)).To(Succeed())
+			Expect(fresh.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStatePreDrained))
+		})
+	})
 })

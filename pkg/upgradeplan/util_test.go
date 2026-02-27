@@ -71,7 +71,7 @@ func TestIsDeploymentReady(t *testing.T) {
 func TestIsTerminalState(t *testing.T) {
 	testCases := []struct {
 		name     string
-		state    string
+		state    managementv1beta1.NodeUpgradeState
 		expected bool
 	}{
 		{

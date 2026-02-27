@@ -173,6 +173,8 @@ spec:
                     reason:
                       type: string
                     state:
+                      description: NodeUpgradeState represents a node's position in
+                        the upgrade lifecycle.
                       type: string
                   type: object
                 description: nodeStatuses reflect each node's upgrade status for node

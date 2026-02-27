@@ -128,6 +128,13 @@ func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv
 
 	nodeUpgradeStatus := buildNodeUpgradeStatus(job, upgradeComponent)
 
+	// Forward-progress guard: skip update if the node has already progressed past this state.
+	if currentStatus, exists := upgradePlan.Status.NodeUpgradeStatuses[nodeName]; exists {
+		if managementv1beta1.IsNodeUpgradeStateAhead(currentStatus.State, nodeUpgradeStatus.State) {
+			return nil
+		}
+	}
+
 	if upgradePlan.Status.NodeUpgradeStatuses == nil {
 		upgradePlanCopy.Status.NodeUpgradeStatuses = make(map[string]managementv1beta1.NodeUpgradeStatus)
 	}
@@ -187,7 +194,7 @@ func isHarvesterUpgradePlanJobs(job *batchv1.Job) bool {
 	return true
 }
 
-func defaultStateFor(component, hookType string) string {
+func defaultStateFor(component, hookType string) managementv1beta1.NodeUpgradeState {
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloading
@@ -200,7 +207,7 @@ func defaultStateFor(component, hookType string) string {
 	}
 }
 
-func successStateFor(component, hookType string) string {
+func successStateFor(component, hookType string) managementv1beta1.NodeUpgradeState {
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloaded
@@ -213,7 +220,7 @@ func successStateFor(component, hookType string) string {
 	}
 }
 
-func failureStateFor(component, hookType string) string {
+func failureStateFor(component, hookType string) managementv1beta1.NodeUpgradeState {
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloadFailed

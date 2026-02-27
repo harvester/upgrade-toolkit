@@ -63,7 +63,7 @@ var _ = Describe("Node Controller", func() {
 		}
 	})
 
-	createUpgradePlan := func(nodeState string) *managementv1beta1.UpgradePlan {
+	createUpgradePlan := func(nodeState managementv1beta1.NodeUpgradeState) *managementv1beta1.UpgradePlan {
 		up := &managementv1beta1.UpgradePlan{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: upgradePlanName,
