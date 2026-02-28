@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,9 +62,9 @@ func (p *ClusterUpgradePhase) getOrCreateJobForClusterUpgrade(
 ) (*batchv1.Job, error) {
 	nn := types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, ClusterComponent),
+		Name:      name.SafeConcatName(up.Name, ClusterComponent),
 	}
-	return getOrCreate(
+	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
 		func() *batchv1.Job { return constructJobForClusterUpgrade(up) },
@@ -72,7 +73,7 @@ func (p *ClusterUpgradePhase) getOrCreateJobForClusterUpgrade(
 }
 
 func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan) *batchv1.Job {
-	jobName := fmt.Sprintf("%s-%s", upgradePlan.Name, ClusterComponent)
+	jobName := name.SafeConcatName(upgradePlan.Name, ClusterComponent)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{

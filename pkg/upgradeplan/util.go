@@ -7,6 +7,7 @@ import (
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -382,7 +383,7 @@ func createOwnedAndFetch[T client.Object](
 	return obj, nil
 }
 
-func getOrCreate[T client.Object](
+func GetOrCreate[T client.Object](
 	ctx context.Context,
 	c client.Client,
 	scheme *runtime.Scheme,
@@ -412,7 +413,7 @@ func constructPlan(
 	container *upgradev1.ContainerSpec,
 	version string,
 ) *upgradev1.Plan {
-	planName := fmt.Sprintf("%s-%s", upgradePlanName, componentName)
+	planName := name.SafeConcatName(upgradePlanName, componentName)
 
 	plan := &upgradev1.Plan{
 		ObjectMeta: metav1.ObjectMeta{

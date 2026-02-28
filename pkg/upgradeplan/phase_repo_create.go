@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/rancher/wrangler/v3/pkg/name"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,9 +97,9 @@ func (p *RepoCreatePhase) getOrCreateDeploymentForRepo(
 ) (*appsv1.Deployment, error) {
 	nn := types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, repoComponent),
+		Name:      name.SafeConcatName(up.Name, repoComponent),
 	}
-	return getOrCreate(
+	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *appsv1.Deployment { return &appsv1.Deployment{} },
 		func() *appsv1.Deployment { return constructDeployment(up, replicas) },
@@ -112,9 +113,9 @@ func (p *RepoCreatePhase) getOrCreateServiceForRepo(
 ) (*corev1.Service, error) {
 	nn := types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, repoComponent),
+		Name:      name.SafeConcatName(up.Name, repoComponent),
 	}
-	return getOrCreate(
+	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *corev1.Service { return &corev1.Service{} },
 		func() *corev1.Service { return constructService(up) },
@@ -157,8 +158,8 @@ func constructDeployment(
 	upgradePlan *managementv1beta1.UpgradePlan,
 	replicas *int32,
 ) *appsv1.Deployment {
-	deployName := fmt.Sprintf("%s-%s", upgradePlan.Name, repoComponent)
-	pvcName := fmt.Sprintf("%s-%s", upgradePlan.Name, imageComponent)
+	deployName := name.SafeConcatName(upgradePlan.Name, repoComponent)
+	pvcName := name.SafeConcatName(upgradePlan.Name, imageComponent)
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -263,7 +264,7 @@ func constructDeployment(
 }
 
 func constructService(upgradePlan *managementv1beta1.UpgradePlan) *corev1.Service {
-	svcName := fmt.Sprintf("%s-%s", upgradePlan.Name, repoComponent)
+	svcName := name.SafeConcatName(upgradePlan.Name, repoComponent)
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{

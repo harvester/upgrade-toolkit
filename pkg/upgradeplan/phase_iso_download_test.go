@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/utils/ptr"
 
@@ -28,7 +29,7 @@ func TestConstructVirtualMachineImage(t *testing.T) {
 
 	vmImage := constructVirtualMachineImage(up)
 
-	assert.Equal(t, testUpgradePlanName+"-iso", vmImage.Name)
+	assert.Equal(t, name.SafeConcatName(testUpgradePlanName, imageComponent), vmImage.Name)
 	assert.Equal(t, harvesterSystemNamespace, vmImage.Namespace)
 	assert.Equal(t, harvesterv1beta1.VMIBackendCDI, vmImage.Spec.Backend)
 	assert.Equal(t, longhornStaticStorageClassName, vmImage.Spec.TargetStorageClassName)

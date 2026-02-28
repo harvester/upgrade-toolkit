@@ -25,7 +25,6 @@ import (
 	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -314,15 +313,13 @@ func (r *SecretReconciler) ensureDrainJob(
 		Namespace: upgradeplan.HarvesterSystemNamespace,
 		Name:      jobName,
 	}
-	var existing batchv1.Job
-	if err := r.Get(ctx, nn, &existing); err != nil {
-		if apierrors.IsNotFound(err) {
-			job := upgradeplan.ConstructDrainJob(up, nodeName, jobName, hookType)
-			return r.Create(ctx, job)
-		}
-		return err
-	}
-	return nil
+	_, err := upgradeplan.GetOrCreate(
+		ctx, r.Client, r.Scheme, nn,
+		func() *batchv1.Job { return &batchv1.Job{} },
+		func() *batchv1.Job { return upgradeplan.ConstructDrainJob(up, nodeName, jobName, hookType) },
+		up,
+	)
+	return err
 }
 
 func (r *SecretReconciler) annotateSecret(

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -63,9 +64,9 @@ func (p *ISODownloadPhase) getOrCreateVirtualMachineImageForRepo(
 ) (*harvesterv1beta1.VirtualMachineImage, error) {
 	nn := types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, imageComponent),
+		Name:      name.SafeConcatName(up.Name, imageComponent),
 	}
-	return getOrCreate(
+	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *harvesterv1beta1.VirtualMachineImage { return &harvesterv1beta1.VirtualMachineImage{} },
 		func() *harvesterv1beta1.VirtualMachineImage { return constructVirtualMachineImage(up) },
@@ -74,7 +75,7 @@ func (p *ISODownloadPhase) getOrCreateVirtualMachineImageForRepo(
 }
 
 func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *harvesterv1beta1.VirtualMachineImage {
-	imageName := fmt.Sprintf("%s-%s", upgradePlan.Name, imageComponent)
+	imageName := name.SafeConcatName(upgradePlan.Name, imageComponent)
 	vmImage := &harvesterv1beta1.VirtualMachineImage{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{

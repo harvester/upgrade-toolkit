@@ -2,9 +2,9 @@ package upgradeplan
 
 import (
 	"context"
-	"fmt"
 
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,9 +58,9 @@ func (p *ImagePreloadPhase) getOrCreatePlanForImagePreload(
 ) (*upgradev1.Plan, error) {
 	nn := types.NamespacedName{
 		Namespace: cattleSystemNamespace,
-		Name:      fmt.Sprintf("%s-%s", up.Name, PrepareComponent),
+		Name:      name.SafeConcatName(up.Name, PrepareComponent),
 	}
-	return getOrCreate(
+	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *upgradev1.Plan { return &upgradev1.Plan{} },
 		func() *upgradev1.Plan { return constructPlanForImagePreload(up) },

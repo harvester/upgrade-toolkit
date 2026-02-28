@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/rancher/wrangler/v3/pkg/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -26,7 +27,7 @@ func TestConstructDeployment(t *testing.T) {
 
 	deploy := constructDeployment(up, replicas)
 
-	assert.Equal(t, fmt.Sprintf("%s-%s", testUpgradePlanName, repoComponent), deploy.Name)
+	assert.Equal(t, name.SafeConcatName(testUpgradePlanName, repoComponent), deploy.Name)
 	assert.Equal(t, harvesterSystemNamespace, deploy.Namespace)
 	assert.Equal(t, int32(2), *deploy.Spec.Replicas)
 
@@ -74,7 +75,7 @@ func TestConstructDeployment(t *testing.T) {
 	require.Len(t, deploy.Spec.Template.Spec.Volumes, 1)
 	vol := deploy.Spec.Template.Spec.Volumes[0]
 	assert.Equal(t, "iso", vol.Name)
-	assert.Equal(t, testUpgradePlanName+"-"+imageComponent, vol.PersistentVolumeClaim.ClaimName)
+	assert.Equal(t, name.SafeConcatName(testUpgradePlanName, imageComponent), vol.PersistentVolumeClaim.ClaimName)
 }
 
 func TestConstructDeployment_SingleReplica(t *testing.T) {
@@ -102,7 +103,7 @@ func TestConstructService(t *testing.T) {
 
 	svc := constructService(up)
 
-	assert.Equal(t, fmt.Sprintf("%s-%s", testUpgradePlanName, repoComponent), svc.Name)
+	assert.Equal(t, name.SafeConcatName(testUpgradePlanName, repoComponent), svc.Name)
 	assert.Equal(t, harvesterSystemNamespace, svc.Namespace)
 	assert.Equal(t, testUpgradePlanName, svc.Labels[HarvesterUpgradePlanLabel])
 	assert.Equal(t, repoComponent, svc.Labels[HarvesterUpgradeComponentLabel])
