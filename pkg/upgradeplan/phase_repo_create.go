@@ -17,7 +17,7 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
-var (
+const (
 	repoScript = `
 #!/usr/bin/env sh
 set -e

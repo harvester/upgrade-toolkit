@@ -43,9 +43,9 @@ cat <<EOF | kubectl apply -f -
 apiVersion: management.harvesterhci.io/v1beta1
 kind: Version
 metadata:
-  name: v1.6.1
+  name: v1.7.1
 spec:
-  isoURL: https://releases.rancher.com/harvester/v1.6.1/harvester-v1.6.1-amd64.iso
+  isoURL: https://releases.rancher.com/harvester/v1.7.1/harvester-v1.7.1-amd64.iso
 EOF
 ```
 
@@ -58,7 +58,7 @@ kind: UpgradePlan
 metadata:
   generateName: hvst-upgrade-
 spec:
-  version: v1.6.1
+  version: v1.7.1
   upgrade: dev
 EOF
 ```
@@ -69,88 +69,86 @@ A successfully executed UpgradePlan looks like the following:
 apiVersion: management.harvesterhci.io/v1beta1
 kind: UpgradePlan
 metadata:
-  creationTimestamp: "2025-11-03T15:59:51Z"
+  creationTimestamp: "2026-02-27T17:27:06Z"
   generateName: hvst-upgrade-
   generation: 1
-  name: hvst-upgrade-5qx48
-  resourceVersion: "201154"
-  uid: 45e83fc9-1f58-4bb9-b63d-a122101bf80e
+  name: hvst-upgrade-b5m8g
+  resourceVersion: "967007"
+  uid: 8125388a-77c4-4e5f-8c21-1d342e700b81
 spec:
+  mode: automatic
   upgrade: dev
-  version: v1.6.1
+  version: v1.7.1
 status:
   conditions:
-  - lastTransitionTime: "2025-11-03T16:41:12Z"
+  - lastTransitionTime: "2026-02-28T05:15:20Z"
     message: UpgradePlan has completed
     observedGeneration: 1
     reason: Succeeded
     status: "False"
     type: Progressing
-  - lastTransitionTime: "2025-11-03T16:41:12Z"
+  - lastTransitionTime: "2026-02-28T05:15:20Z"
     message: ""
     observedGeneration: 1
     reason: ReconcileSuccess
     status: "False"
     type: Degraded
-  - lastTransitionTime: "2025-11-03T16:41:12Z"
+  - lastTransitionTime: "2026-02-28T05:15:20Z"
     message: Entered one of the terminal phases
     observedGeneration: 1
     reason: Executed
     status: "False"
     type: Available
-  isoImageID: harvester-system/hvst-upgrade-5qx48-iso
+  currentPhase: Succeeded
+  isoImageID: harvester-system/hvst-upgrade-b5m8g-iso
   nodeUpgradeStatuses:
     charlie-1-tink-system:
-      state: KubernetesUpgraded
+      state: PostDrained
     charlie-2-tink-system:
-      state: KubernetesUpgraded
+      state: PostDrained
     charlie-3-tink-system:
-      state: KubernetesUpgraded
-  phase: Succeeded
+      state: PostDrained
   phaseTransitionTimestamps:
   - phase: Initializing
-    phaseTransitionTimestamp: "2025-11-03T15:59:51Z"
+    phaseTransitionTimestamp: "2026-02-27T17:27:06Z"
   - phase: Initialized
-    phaseTransitionTimestamp: "2025-11-03T15:59:52Z"
+    phaseTransitionTimestamp: "2026-02-27T17:27:07Z"
   - phase: ISODownloading
-    phaseTransitionTimestamp: "2025-11-03T15:59:54Z"
+    phaseTransitionTimestamp: "2026-02-27T17:27:08Z"
   - phase: ISODownloaded
-    phaseTransitionTimestamp: "2025-11-03T16:01:03Z"
+    phaseTransitionTimestamp: "2026-02-27T17:31:11Z"
   - phase: RepoCreating
-    phaseTransitionTimestamp: "2025-11-03T16:01:04Z"
+    phaseTransitionTimestamp: "2026-02-27T17:31:12Z"
   - phase: RepoCreated
-    phaseTransitionTimestamp: "2025-11-03T16:10:51Z"
+    phaseTransitionTimestamp: "2026-02-27T17:31:36Z"
   - phase: MetadataPopulating
-    phaseTransitionTimestamp: "2025-11-03T16:10:52Z"
+    phaseTransitionTimestamp: "2026-02-27T17:31:36Z"
   - phase: MetadataPopulated
-    phaseTransitionTimestamp: "2025-11-03T16:10:53Z"
+    phaseTransitionTimestamp: "2026-02-27T17:32:08Z"
   - phase: ImagePreloading
-    phaseTransitionTimestamp: "2025-11-03T16:10:54Z"
+    phaseTransitionTimestamp: "2026-02-27T17:32:08Z"
   - phase: ImagePreloaded
-    phaseTransitionTimestamp: "2025-11-03T16:15:26Z"
+    phaseTransitionTimestamp: "2026-02-27T17:33:37Z"
   - phase: ClusterUpgrading
-    phaseTransitionTimestamp: "2025-11-03T16:15:26Z"
+    phaseTransitionTimestamp: "2026-02-27T17:33:37Z"
   - phase: ClusterUpgraded
-    phaseTransitionTimestamp: "2025-11-03T16:24:45Z"
+    phaseTransitionTimestamp: "2026-02-27T17:35:16Z"
   - phase: NodeUpgrading
-    phaseTransitionTimestamp: "2025-11-03T16:24:46Z"
+    phaseTransitionTimestamp: "2026-02-27T17:35:16Z"
   - phase: NodeUpgraded
-    phaseTransitionTimestamp: "2025-11-03T16:41:09Z"
-  - phase: CleaningUp
-    phaseTransitionTimestamp: "2025-11-03T16:41:09Z"
-  - phase: CleanedUp
-    phaseTransitionTimestamp: "2025-11-03T16:41:12Z"
+    phaseTransitionTimestamp: "2026-02-28T05:15:18Z"
   - phase: Succeeded
-    phaseTransitionTimestamp: "2025-11-03T16:41:12Z"
-  previousVersion: v1.6.0
+    phaseTransitionTimestamp: "2026-02-28T05:15:20Z"
+  previousVersion: v1.7.1
+  provisionGeneration: 1
   releaseMetadata:
-    harvester: v1.6.1
-    harvesterChart: 1.6.1
-    kubernetes: v1.33.5+rke2r1
-    minUpgradableVersion: v1.5.0
-    monitoringChart: 105.1.2+up61.3.2
-    os: Harvester v1.6.1
-    rancher: v2.12.2
+    harvester: v1.7.1
+    harvesterChart: 1.7.1
+    kubernetes: v1.34.3+rke2r3
+    minUpgradableVersion: v1.6.0
+    monitoringChart: 107.1.0+up69.8.2-rancher.15
+    os: Harvester v1.7.1
+    rancher: v2.13.1
   version:
-    isoURL: http://10.115.49.5/iso/harvester/v1.6.1/harvester-v1.6.1-amd64.iso
+    isoURL: https://releases.rancher.com/harvester/v1.7.1/harvester-v1.7.1-amd64.iso
 ```
