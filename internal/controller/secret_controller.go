@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/rancher/wrangler/v3/pkg/name"
@@ -30,7 +31,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -144,8 +150,83 @@ func (r *SecretReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Secret{}).
 		Owns(&batchv1.Job{}).
+		Watches(
+			&managementv1beta1.UpgradePlan{},
+			handler.EnqueueRequestsFromMapFunc(r.mapUpgradePlanToSecrets),
+			builder.WithPredicates(upgradePlanNodeStatusChangedPredicate{}),
+		).
 		Named("secret").
 		Complete(r)
+}
+
+// mapUpgradePlanToSecrets returns reconcile requests for all machine-plan
+// Secrets in fleet-local when an UpgradePlan in NodeUpgrading phase changes.
+func (r *SecretReconciler) mapUpgradePlanToSecrets(ctx context.Context, obj client.Object) []reconcile.Request {
+	up, ok := obj.(*managementv1beta1.UpgradePlan)
+	if !ok {
+		return nil
+	}
+
+	if up.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+		return nil
+	}
+
+	var secretList corev1.SecretList
+	if err := r.List(ctx, &secretList, client.InNamespace(upgradeplan.FleetLocalNamespace)); err != nil {
+		r.Log.Error(err, "failed to list secrets for UpgradePlan watch")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for i := range secretList.Items {
+		if secretList.Items[i].Type != corev1.SecretType(upgradeplan.MachinePlanSecretType) {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: secretList.Items[i].Namespace,
+				Name:      secretList.Items[i].Name,
+			},
+		})
+	}
+
+	return requests
+}
+
+// upgradePlanNodeStatusChangedPredicate filters UpgradePlan events to only
+// those where NodeUpgradeStatuses changed while in NodeUpgrading phase.
+type upgradePlanNodeStatusChangedPredicate struct {
+	predicate.Funcs
+}
+
+func (upgradePlanNodeStatusChangedPredicate) Create(_ event.CreateEvent) bool {
+	return false
+}
+
+func (upgradePlanNodeStatusChangedPredicate) Update(e event.UpdateEvent) bool {
+	newUP, ok := e.ObjectNew.(*managementv1beta1.UpgradePlan)
+	if !ok {
+		return false
+	}
+
+	if newUP.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+		return false
+	}
+
+	oldUP, ok := e.ObjectOld.(*managementv1beta1.UpgradePlan)
+	if !ok {
+		return false
+	}
+
+	return !reflect.DeepEqual(oldUP.Status.NodeUpgradeStatuses, newUP.Status.NodeUpgradeStatuses)
+}
+
+func (upgradePlanNodeStatusChangedPredicate) Delete(_ event.DeleteEvent) bool {
+	return false
+}
+
+func (upgradePlanNodeStatusChangedPredicate) Generic(_ event.GenericEvent) bool {
+	return false
 }
 
 func (r *SecretReconciler) findActiveUpgradePlan(ctx context.Context) (*managementv1beta1.UpgradePlan, error) {

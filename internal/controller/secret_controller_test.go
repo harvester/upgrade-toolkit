@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -452,6 +453,133 @@ var _ = Describe("Secret Controller", func() {
 					upgradeplan.HarvesterDrainHookTypeLabel: upgradeplan.DrainHookTypePreDrain,
 				})).To(Succeed())
 			Expect(jobList.Items).To(HaveLen(1))
+		})
+	})
+
+	Context("mapUpgradePlanToSecrets", func() {
+		It("should enqueue machine-plan Secrets when UpgradePlan is in NodeUpgrading phase", func() {
+			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
+			createMachinePlanSecret(nil)
+
+			// Also create a non-machine-plan Secret that should be excluded
+			nonMachinePlanSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "not-machine-plan",
+					Namespace: fleetLocalNamespace,
+				},
+				Type: corev1.SecretTypeOpaque,
+			}
+			Expect(k8sClient.Create(ctx, nonMachinePlanSecret)).To(Succeed())
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+
+			requests := reconciler.mapUpgradePlanToSecrets(ctx, up)
+			Expect(requests).To(HaveLen(1))
+			Expect(requests[0].NamespacedName).To(Equal(types.NamespacedName{
+				Namespace: fleetLocalNamespace,
+				Name:      testSecretName,
+			}))
+		})
+
+		It("should return nil when UpgradePlan is not in NodeUpgrading phase", func() {
+			up := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: upgradePlanName},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseImagePreloading,
+				},
+			}
+
+			requests := reconciler.mapUpgradePlanToSecrets(ctx, up)
+			Expect(requests).To(BeNil())
+		})
+	})
+
+	Context("upgradePlanNodeStatusChangedPredicate", func() {
+		var pred upgradePlanNodeStatusChangedPredicate
+
+		BeforeEach(func() {
+			pred = upgradePlanNodeStatusChangedPredicate{}
+		})
+
+		It("should reject Create events", func() {
+			Expect(pred.Create(event.CreateEvent{
+				Object: &managementv1beta1.UpgradePlan{},
+			})).To(BeFalse())
+		})
+
+		It("should reject Delete events", func() {
+			Expect(pred.Delete(event.DeleteEvent{
+				Object: &managementv1beta1.UpgradePlan{},
+			})).To(BeFalse())
+		})
+
+		It("should reject Generic events", func() {
+			Expect(pred.Generic(event.GenericEvent{
+				Object: &managementv1beta1.UpgradePlan{},
+			})).To(BeFalse())
+		})
+
+		It("should accept Update when NodeUpgradeStatuses changed in NodeUpgrading phase", func() {
+			oldUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+					NodeUpgradeStatuses: map[string]managementv1beta1.NodeUpgradeStatus{
+						testNodeName: {State: managementv1beta1.NodeStateImagePreloaded},
+					},
+				},
+			}
+			newUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+					NodeUpgradeStatuses: map[string]managementv1beta1.NodeUpgradeStatus{
+						testNodeName: {State: managementv1beta1.NodeStatePreDrained},
+					},
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldUP,
+				ObjectNew: newUP,
+			})).To(BeTrue())
+		})
+
+		It("should reject Update when not in NodeUpgrading phase", func() {
+			oldUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseImagePreloading,
+				},
+			}
+			newUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseImagePreloading,
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldUP,
+				ObjectNew: newUP,
+			})).To(BeFalse())
+		})
+
+		It("should reject Update when NodeUpgradeStatuses unchanged", func() {
+			statuses := map[string]managementv1beta1.NodeUpgradeStatus{
+				testNodeName: {State: managementv1beta1.NodeStatePreDrained},
+			}
+			oldUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase:        managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+					NodeUpgradeStatuses: statuses,
+				},
+			}
+			newUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase:        managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+					NodeUpgradeStatuses: statuses,
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldUP,
+				ObjectNew: newUP,
+			})).To(BeFalse())
 		})
 	})
 })
