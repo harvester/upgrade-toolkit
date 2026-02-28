@@ -110,8 +110,8 @@ EOF
 source /etc/bash.bashrc.local
 pod_id=$(crictl pods --name $HARVESTER_UPGRADE_POD_NAME --namespace cattle-system -o json | jq -er '.items[0].id')
 
-# get `post-drain` container ID
-container_id=$(crictl ps --pod $pod_id --name post-drain -o json -a | jq -er '.containers[0].id')
+# get `upgrade` container ID
+container_id=$(crictl ps --pod $pod_id --name apply -o json -a | jq -er '.containers[0].id')
 container_state=$(crictl inspect $container_id | jq -er '.status.state')
 
 if [ "$container_state" = "CONTAINER_EXITED" ]; then
@@ -596,11 +596,11 @@ generate_hostname_persistance() {
   # NetworkManager is new in Harvester v1.7.0
   # nodes installed via v1.5.x or lower which may have used fqdn hostnames
   # only render short hostname in the k8s node name however the
-  # harvester.config and /oem/90_custom.yaml set hostname to fqdn 
+  # harvester.config and /oem/90_custom.yaml set hostname to fqdn
   # the /oem/90_custom.yaml sets hostname to fqdn as part which was ignored
   # we need to ensure the hostname does not change after bump to NetworkManager
-  # as this will cause the node to be re-registered with apiserver using 
-  # the fqdn hostname which will cause upgrade to break as the node never 
+  # as this will cause the node to be re-registered with apiserver using
+  # the fqdn hostname which will cause upgrade to break as the node never
   # completes the upgrade
   if [[ ! "$UPGRADEPLAN_PREVIOUS_VERSION" =~ ^v1\.6\.[0-9]$ ]]; then
     echo "version: $UPGRADEPLAN_PREVIOUS_VERSION does not require generating Hostname override"

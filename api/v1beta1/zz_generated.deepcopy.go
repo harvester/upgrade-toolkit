@@ -209,6 +209,11 @@ func (in *UpgradePlanStatus) DeepCopyInto(out *UpgradePlanStatus) {
 		*out = new(int)
 		**out = **in
 	}
+	if in.SingleNode != nil {
+		in, out := &in.SingleNode, &out.SingleNode
+		*out = new(string)
+		**out = **in
+	}
 	if in.Version != nil {
 		in, out := &in.Version, &out.Version
 		*out = new(VersionSpec)

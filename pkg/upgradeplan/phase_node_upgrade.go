@@ -6,6 +6,8 @@ import (
 
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
+	"github.com/rancher/wrangler/v3/pkg/name"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -61,6 +63,18 @@ func (p *NodeUpgradePhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	if upgradePlan.Status.SingleNode != nil {
+		return p.runSingleNode(ctx, upgradePlan)
+	}
+	return p.runMultiNode(ctx, upgradePlan)
+}
+
+// runMultiNode handles the multi-node upgrade path via Rancher V2 Provisioning
+// with pre/post-drain hooks.
+func (p *NodeUpgradePhase) runMultiNode(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) (ctrl.Result, error) {
 	p.Log.V(1).Info("handle node upgrade via Rancher V2 Provisioning")
 
 	if err := p.ensureClusterPatched(ctx, upgradePlan); err != nil {
@@ -68,7 +82,30 @@ func (p *NodeUpgradePhase) Run(
 		return ctrl.Result{}, err
 	}
 
-	// Check per-node statuses
+	return p.checkNodeStatuses(upgradePlan)
+}
+
+// runSingleNode handles the single-node upgrade path by creating a single Job
+// that runs upgrade_node.sh with the single-node-upgrade argument.
+func (p *NodeUpgradePhase) runSingleNode(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) (ctrl.Result, error) {
+	nodeName := *upgradePlan.Status.SingleNode
+	p.Log.V(1).Info("handle single-node upgrade", "node", nodeName)
+
+	if err := p.ensureSingleNodeUpgradeJob(ctx, upgradePlan, nodeName); err != nil {
+		p.Log.Error(err, "unable to ensure single-node upgrade job")
+		return ctrl.Result{}, err
+	}
+
+	return p.checkNodeStatuses(upgradePlan)
+}
+
+// checkNodeStatuses checks per-node statuses and transitions the phase accordingly.
+func (p *NodeUpgradePhase) checkNodeStatuses(
+	upgradePlan *managementv1beta1.UpgradePlan,
+) (ctrl.Result, error) {
 	for nodeName, status := range upgradePlan.Status.NodeUpgradeStatuses {
 		if IsNodeUpgradeFailure(status) {
 			updateProgressingPhase(
@@ -87,6 +124,27 @@ func (p *NodeUpgradePhase) Run(
 
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgraded, "")
 	return ctrl.Result{}, nil
+}
+
+// ensureSingleNodeUpgradeJob creates the single-node-upgrade Job if it doesn't already exist.
+func (p *NodeUpgradePhase) ensureSingleNodeUpgradeJob(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+	nodeName string,
+) error {
+	jobName := name.SafeConcatName(upgradePlan.Name, NodeComponent, JobTypeSingleNodeUpgrade, nodeName)
+	nn := types.NamespacedName{
+		Namespace: HarvesterSystemNamespace,
+		Name:      jobName,
+	}
+
+	_, err := GetOrCreate(
+		ctx, p.Client, p.Scheme, nn,
+		func() *batchv1.Job { return &batchv1.Job{} },
+		func() *batchv1.Job { return ConstructNodeJob(upgradePlan, nodeName, jobName, JobTypeSingleNodeUpgrade) },
+		upgradePlan,
+	)
+	return err
 }
 
 // ensureClusterPatched patches the provisioning.cattle.io/v1 Cluster resource

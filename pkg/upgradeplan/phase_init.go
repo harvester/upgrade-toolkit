@@ -4,10 +4,13 @@ import (
 	"context"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -41,6 +44,10 @@ func (p *InitPhase) Run(
 			return ctrl.Result{}, err
 		}
 
+		if err := p.detectSingleNode(ctx, upgradePlan); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseInitialized, "")
 		return ctrl.Result{}, nil
 	}
@@ -69,6 +76,26 @@ func (p *InitPhase) loadVersion(
 		return err
 	}
 	upgradePlan.Status.Version = &version.Spec
+	return nil
+}
+
+func (p *InitPhase) detectSingleNode(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	var nodeList corev1.NodeList
+	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			harvesterManagedLabel: "true",
+		}),
+	}); err != nil {
+		return err
+	}
+
+	if len(nodeList.Items) == 1 {
+		upgradePlan.Status.SingleNode = ptr.To(nodeList.Items[0].Name)
+	}
+
 	return nil
 }
 

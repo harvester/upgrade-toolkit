@@ -198,10 +198,12 @@ func defaultStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloading
-	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypePreDrain:
 		return managementv1beta1.NodeStatePreDraining
-	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypePostDrain:
 		return managementv1beta1.NodeStatePostDraining
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypeSingleNodeUpgrade:
+		return managementv1beta1.NodeStateSingleNodeUpgrading
 	default:
 		return ""
 	}
@@ -211,9 +213,11 @@ func successStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloaded
-	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypePreDrain:
 		return managementv1beta1.NodeStatePreDrained
-	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypePostDrain:
+		return managementv1beta1.NodeStateWaitingReboot
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypeSingleNodeUpgrade:
 		return managementv1beta1.NodeStateWaitingReboot
 	default:
 		return ""
@@ -224,17 +228,19 @@ func failureStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 	switch {
 	case component == upgradeplan.PrepareComponent:
 		return managementv1beta1.NodeStateImagePreloadFailed
-	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePreDrain:
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypePreDrain:
 		return managementv1beta1.NodeStatePreDrainFailed
-	case component == upgradeplan.NodeComponent && hookType == upgradeplan.DrainHookTypePostDrain:
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypePostDrain:
 		return managementv1beta1.NodeStatePostDrainFailed
+	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypeSingleNodeUpgrade:
+		return managementv1beta1.NodeStateSingleNodeUpgradeFailed
 	default:
 		return ""
 	}
 }
 
 func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managementv1beta1.NodeUpgradeStatus {
-	hookType := job.Labels[upgradeplan.HarvesterDrainHookTypeLabel]
+	hookType := job.Labels[upgradeplan.HarvesterJobTypeLabel]
 
 	for _, condition := range job.Status.Conditions {
 		if condition.Status != corev1.ConditionTrue {

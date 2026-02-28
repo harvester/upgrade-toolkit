@@ -144,24 +144,24 @@ func TestPreRun_DeletesDrainHookJobs(t *testing.T) {
 
 	preDrainJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s-%s-node1", testUpgradePlanName, NodeComponent, DrainHookTypePreDrain),
+			Name:      fmt.Sprintf("%s-%s-%s-node1", testUpgradePlanName, NodeComponent, JobTypePreDrain),
 			Namespace: harvesterSystemNamespace,
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      testUpgradePlanName,
 				HarvesterUpgradeComponentLabel: NodeComponent,
-				HarvesterDrainHookTypeLabel:    DrainHookTypePreDrain,
+				HarvesterJobTypeLabel:          JobTypePreDrain,
 				HarvesterUpgradeNodeLabel:      "node1",
 			},
 		},
 	}
 	postDrainJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s-%s-node1", testUpgradePlanName, NodeComponent, DrainHookTypePostDrain),
+			Name:      fmt.Sprintf("%s-%s-%s-node1", testUpgradePlanName, NodeComponent, JobTypePostDrain),
 			Namespace: harvesterSystemNamespace,
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      testUpgradePlanName,
 				HarvesterUpgradeComponentLabel: NodeComponent,
-				HarvesterDrainHookTypeLabel:    DrainHookTypePostDrain,
+				HarvesterJobTypeLabel:          JobTypePostDrain,
 				HarvesterUpgradeNodeLabel:      "node1",
 			},
 		},
@@ -174,7 +174,7 @@ func TestPreRun_DeletesDrainHookJobs(t *testing.T) {
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      "other-upgradeplan",
 				HarvesterUpgradeComponentLabel: NodeComponent,
-				HarvesterDrainHookTypeLabel:    DrainHookTypePreDrain,
+				HarvesterJobTypeLabel:          JobTypePreDrain,
 				HarvesterUpgradeNodeLabel:      "node1",
 			},
 		},

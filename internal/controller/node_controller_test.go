@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -217,6 +218,48 @@ var _ = Describe("Node Controller", func() {
 			up := &managementv1beta1.UpgradePlan{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
 			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStatePostDraining))
+		})
+	})
+
+	Context("When the UpgradePlan is for a single-node cluster and OS matches", func() {
+		It("should transition node to SingleNodeUpgraded instead of PostDrained", func() {
+			up := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: upgradePlanName,
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: testVersion,
+				},
+			}
+			Expect(k8sClient.Create(ctx, up)).To(Succeed())
+
+			up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseNodeUpgrading
+			up.Status.SingleNode = ptr.To(testNodeName)
+			up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+				testNodeName: {State: managementv1beta1.NodeStateWaitingReboot},
+			}
+			up.Status.ReleaseMetadata = &managementv1beta1.ReleaseMetadata{
+				OS: testOSVersion,
+			}
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createNode(testOSVersion, map[string]string{
+				upgradeplan.PendingOSImageAnnotation: testOSVersion,
+			})
+
+			result, err := reconcileNode()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// UpgradePlan node state should be SingleNodeUpgraded
+			fresh := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, fresh)).To(Succeed())
+			Expect(fresh.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateSingleNodeUpgraded))
+
+			// PendingOSImage annotation should be removed
+			node := &corev1.Node{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: testNodeName}, node)).To(Succeed())
+			Expect(node.Annotations).NotTo(HaveKey(upgradeplan.PendingOSImageAnnotation))
 		})
 	})
 

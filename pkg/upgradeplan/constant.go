@@ -35,11 +35,12 @@ const (
 	// Annotation on Node objects to track expected OS version during reboot
 	PendingOSImageAnnotation = AnnotationPrefix + "/" + "pendingOSImage"
 
-	// Labels for drain-hook Jobs
-	HarvesterUpgradeNodeLabel   = LabelPrefix + "/" + "node"
-	HarvesterDrainHookTypeLabel = LabelPrefix + "/" + "drain-hook-type"
-	DrainHookTypePreDrain       = "pre-drain"
-	DrainHookTypePostDrain      = "post-drain"
+	// Labels for node-upgrade Jobs
+	HarvesterUpgradeNodeLabel = LabelPrefix + "/" + "node"
+	HarvesterJobTypeLabel     = LabelPrefix + "/" + "job-type"
+	JobTypePreDrain           = "pre-drain"
+	JobTypePostDrain          = "post-drain"
+	JobTypeSingleNodeUpgrade  = "single-node-upgrade"
 
 	// Machine-plan Secret
 	MachinePlanSecretType   = "rke.cattle.io/machine-plan"

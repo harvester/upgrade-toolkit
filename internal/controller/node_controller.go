@@ -82,10 +82,14 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, nil
 	}
 
-	// Transition to PostDrained
+	// Transition to the appropriate terminal state
+	terminalState := managementv1beta1.NodeStatePostDrained
+	if up.Status.SingleNode != nil {
+		terminalState = managementv1beta1.NodeStateSingleNodeUpgraded
+	}
 	upCopy := up.DeepCopy()
 	upCopy.Status.NodeUpgradeStatuses[node.Name] = managementv1beta1.NodeUpgradeStatus{
-		State: managementv1beta1.NodeStatePostDrained,
+		State: terminalState,
 	}
 
 	if !reflect.DeepEqual(up.Status, upCopy.Status) {
@@ -104,7 +108,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	log.Info("node reboot verified, transitioned to PostDrained", "node", node.Name, "osImage", expectedOS)
+	log.Info("node reboot verified, transitioned to terminal state", "node", node.Name, "state", terminalState, "osImage", expectedOS)
 
 	return ctrl.Result{}, nil
 }

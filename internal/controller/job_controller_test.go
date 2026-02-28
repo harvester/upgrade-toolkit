@@ -130,7 +130,7 @@ var _ = Describe("Job Controller", func() {
 		if hookType == "" {
 			labels[upgradeplan.SUCNodeLabel] = testNodeName
 		} else {
-			labels[upgradeplan.HarvesterDrainHookTypeLabel] = hookType
+			labels[upgradeplan.HarvesterJobTypeLabel] = hookType
 			labels[upgradeplan.HarvesterUpgradeNodeLabel] = testNodeName
 		}
 
@@ -204,7 +204,7 @@ var _ = Describe("Job Controller", func() {
 		It("should set node state to WaitingReboot and annotate the Node", func() {
 			createUpgradePlan()
 			createNode(testOldOSVersion) // OS does not match yet
-			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain)
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypePostDrain)
 			markJobComplete(job)
 
 			result, err := reconcileJob(job)
@@ -226,7 +226,7 @@ var _ = Describe("Job Controller", func() {
 	Context("When a pre-drain job completes successfully", func() {
 		It("should set node state to PreDrained", func() {
 			createUpgradePlan()
-			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain)
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain)
 			markJobComplete(job)
 
 			result, err := reconcileJob(job)
@@ -258,7 +258,7 @@ var _ = Describe("Job Controller", func() {
 	Context("When a post-drain job fails", func() {
 		It("should set node state to PostDrainFailed", func() {
 			createUpgradePlan()
-			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain)
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypePostDrain)
 			markJobFailed(job)
 
 			result, err := reconcileJob(job)
@@ -281,7 +281,7 @@ var _ = Describe("Job Controller", func() {
 			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
 
 			// The stale pre-drain job that already completed
-			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain)
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain)
 			markJobComplete(job)
 
 			result, err := reconcileJob(job)
@@ -303,7 +303,7 @@ var _ = Describe("Job Controller", func() {
 			}
 			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
 
-			job := createJob(upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain)
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain)
 			markJobComplete(job)
 
 			result, err := reconcileJob(job)
@@ -313,6 +313,45 @@ var _ = Describe("Job Controller", func() {
 			fresh := &managementv1beta1.UpgradePlan{}
 			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, fresh)).To(Succeed())
 			Expect(fresh.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateWaitingReboot))
+		})
+	})
+
+	Context("When a single-node-upgrade job completes successfully", func() {
+		It("should set node state to WaitingReboot and annotate the Node", func() {
+			createUpgradePlan()
+			createNode(testOldOSVersion)
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypeSingleNodeUpgrade)
+			markJobComplete(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Verify node state is WaitingReboot
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateWaitingReboot))
+
+			// Verify PendingOSImageAnnotation is set on the Node
+			node := &corev1.Node{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: testNodeName}, node)).To(Succeed())
+			Expect(node.Annotations).To(HaveKeyWithValue(upgradeplan.PendingOSImageAnnotation, testOSVersion))
+		})
+	})
+
+	Context("When a single-node-upgrade job fails", func() {
+		It("should set node state to SingleNodeUpgradeFailed", func() {
+			createUpgradePlan()
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypeSingleNodeUpgrade)
+			markJobFailed(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateSingleNodeUpgradeFailed))
 		})
 	})
 

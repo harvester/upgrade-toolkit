@@ -49,6 +49,11 @@ const (
 	NodeStateWaitingReboot   NodeUpgradeState = "WaitingReboot"
 	NodeStatePostDrained     NodeUpgradeState = "PostDrained"
 	NodeStatePostDrainFailed NodeUpgradeState = "PostDrainFailed"
+
+	// Single-node upgrade lifecycle states
+	NodeStateSingleNodeUpgrading     NodeUpgradeState = "SingleNodeUpgrading"
+	NodeStateSingleNodeUpgradeFailed NodeUpgradeState = "SingleNodeUpgradeFailed"
+	NodeStateSingleNodeUpgraded      NodeUpgradeState = "SingleNodeUpgraded"
 )
 
 // nodeUpgradeStateGroups defines the forward-progress ordering of node upgrade states.
@@ -56,11 +61,11 @@ const (
 var nodeUpgradeStateGroups = [][]NodeUpgradeState{
 	{NodeStateImagePreloading},                             // 0
 	{NodeStateImagePreloaded, NodeStateImagePreloadFailed}, // 1
-	{NodeStatePreDraining},                                 // 2
+	{NodeStatePreDraining, NodeStateSingleNodeUpgrading},   // 2
 	{NodeStatePreDrained, NodeStatePreDrainFailed},         // 3
 	{NodeStatePostDraining},                                // 4
 	{NodeStateWaitingReboot},                               // 5
-	{NodeStatePostDrained, NodeStatePostDrainFailed},       // 6
+	{NodeStatePostDrained, NodeStatePostDrainFailed, NodeStateSingleNodeUpgraded, NodeStateSingleNodeUpgradeFailed}, // 6
 }
 
 var nodeUpgradeStateIndex map[NodeUpgradeState]int
@@ -210,6 +215,11 @@ type UpgradePlanStatus struct {
 	// guard so the Cluster is patched exactly once per upgrade.
 	// +optional
 	ProvisionGeneration *int `json:"provisionGeneration,omitempty"`
+
+	// singleNode records the name of the single node in a single-node cluster.
+	// Empty for multi-node clusters. Set during the Initialize phase.
+	// +optional
+	SingleNode *string `json:"singleNode,omitempty"`
 
 	// version is the snapshot of the associated Version resource.
 	// +optional

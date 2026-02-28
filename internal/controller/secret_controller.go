@@ -121,6 +121,11 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
+	// Single-node clusters don't use the drain hook mechanism
+	if up.Status.SingleNode != nil {
+		return ctrl.Result{}, nil
+	}
+
 	// Resolve node name from machine-plan Secret
 	nodeName, err := r.NodeNameResolver.ResolveNodeName(ctx, r.Client, &secret)
 	if err != nil {
@@ -269,8 +274,8 @@ func (r *SecretReconciler) handlePreDrain(
 	}
 
 	// Create or retrieve the pre-drain Job
-	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, nodeName)
-	return r.ensureDrainJob(ctx, up, nodeName, jobName, upgradeplan.DrainHookTypePreDrain)
+	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain, nodeName)
+	return r.ensureNodeJob(ctx, up, nodeName, jobName, upgradeplan.JobTypePreDrain)
 }
 
 func (r *SecretReconciler) handlePostDrain(
@@ -300,14 +305,14 @@ func (r *SecretReconciler) handlePostDrain(
 	}
 
 	// Create or retrieve the post-drain Job
-	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, nodeName)
-	return r.ensureDrainJob(ctx, up, nodeName, jobName, upgradeplan.DrainHookTypePostDrain)
+	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.JobTypePostDrain, nodeName)
+	return r.ensureNodeJob(ctx, up, nodeName, jobName, upgradeplan.JobTypePostDrain)
 }
 
-func (r *SecretReconciler) ensureDrainJob(
+func (r *SecretReconciler) ensureNodeJob(
 	ctx context.Context,
 	up *managementv1beta1.UpgradePlan,
-	nodeName, jobName, hookType string,
+	nodeName, jobName, jobType string,
 ) error {
 	nn := types.NamespacedName{
 		Namespace: upgradeplan.HarvesterSystemNamespace,
@@ -316,7 +321,7 @@ func (r *SecretReconciler) ensureDrainJob(
 	_, err := upgradeplan.GetOrCreate(
 		ctx, r.Client, r.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
-		func() *batchv1.Job { return upgradeplan.ConstructDrainJob(up, nodeName, jobName, hookType) },
+		func() *batchv1.Job { return upgradeplan.ConstructNodeJob(up, nodeName, jobName, jobType) },
 		up,
 	)
 	return err

@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -183,6 +184,34 @@ var _ = Describe("Secret Controller", func() {
 		})
 	})
 
+	Context("When the UpgradePlan is for a single-node cluster", func() {
+		It("should skip without creating any Jobs", func() {
+			up := createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
+
+			// Set SingleNode on the UpgradePlan
+			up.Status.SingleNode = ptr.To(testNodeName)
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createMachinePlanSecret(map[string]string{
+				upgradeplan.RKE2PreDrainAnnotation: "drain-1",
+			})
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: fleetLocalNamespace,
+					Name:      testSecretName,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Verify no Jobs were created
+			jobList := &batchv1.JobList{}
+			Expect(k8sClient.List(ctx, jobList, client.InNamespace("harvester-system"))).To(Succeed())
+			Expect(jobList.Items).To(BeEmpty())
+		})
+	})
+
 	Context("When pre-drain annotation is set by Rancher", func() {
 		It("should create a pre-drain Job for the node", func() {
 			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
@@ -201,7 +230,7 @@ var _ = Describe("Secret Controller", func() {
 
 			// Verify a pre-drain Job was created
 			expectedJobName := name.SafeConcatName(
-				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, testNodeName)
+				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain, testNodeName)
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: "harvester-system",
@@ -210,7 +239,7 @@ var _ = Describe("Secret Controller", func() {
 
 			Expect(job.Labels[upgradeplan.HarvesterUpgradePlanLabel]).To(Equal(upgradePlanName))
 			Expect(job.Labels[upgradeplan.HarvesterUpgradeComponentLabel]).To(Equal(upgradeplan.NodeComponent))
-			Expect(job.Labels[upgradeplan.HarvesterDrainHookTypeLabel]).To(Equal(upgradeplan.DrainHookTypePreDrain))
+			Expect(job.Labels[upgradeplan.HarvesterJobTypeLabel]).To(Equal(upgradeplan.JobTypePreDrain))
 		})
 	})
 
@@ -223,7 +252,7 @@ var _ = Describe("Secret Controller", func() {
 
 			// Create a completed pre-drain Job
 			jobName := name.SafeConcatName(
-				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePreDrain, testNodeName)
+				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain, testNodeName)
 			job := &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      jobName,
@@ -231,7 +260,7 @@ var _ = Describe("Secret Controller", func() {
 					Labels: map[string]string{
 						upgradeplan.HarvesterUpgradePlanLabel:      upgradePlanName,
 						upgradeplan.HarvesterUpgradeComponentLabel: upgradeplan.NodeComponent,
-						upgradeplan.HarvesterDrainHookTypeLabel:    upgradeplan.DrainHookTypePreDrain,
+						upgradeplan.HarvesterJobTypeLabel:          upgradeplan.JobTypePreDrain,
 						upgradeplan.HarvesterUpgradeNodeLabel:      testNodeName,
 					},
 				},
@@ -321,14 +350,14 @@ var _ = Describe("Secret Controller", func() {
 
 			// Verify a post-drain Job was created
 			expectedJobName := name.SafeConcatName(
-				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, testNodeName)
+				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.JobTypePostDrain, testNodeName)
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Namespace: "harvester-system",
 				Name:      expectedJobName,
 			}, job)).To(Succeed())
 
-			Expect(job.Labels[upgradeplan.HarvesterDrainHookTypeLabel]).To(Equal(upgradeplan.DrainHookTypePostDrain))
+			Expect(job.Labels[upgradeplan.HarvesterJobTypeLabel]).To(Equal(upgradeplan.JobTypePostDrain))
 		})
 	})
 
@@ -371,7 +400,7 @@ var _ = Describe("Secret Controller", func() {
 
 			// Verify a post-drain Job was created with a safe name
 			expectedJobName := name.SafeConcatName(
-				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.DrainHookTypePostDrain, longNodeName)
+				upgradePlanName, upgradeplan.NodeComponent, upgradeplan.JobTypePostDrain, longNodeName)
 			Expect(len(expectedJobName)).To(BeNumerically("<=", 63))
 
 			job := &batchv1.Job{}
@@ -380,7 +409,7 @@ var _ = Describe("Secret Controller", func() {
 				Name:      expectedJobName,
 			}, job)).To(Succeed())
 
-			Expect(job.Labels[upgradeplan.HarvesterDrainHookTypeLabel]).To(Equal(upgradeplan.DrainHookTypePostDrain))
+			Expect(job.Labels[upgradeplan.HarvesterJobTypeLabel]).To(Equal(upgradeplan.JobTypePostDrain))
 		})
 	})
 
@@ -450,7 +479,7 @@ var _ = Describe("Secret Controller", func() {
 			jobList := &batchv1.JobList{}
 			Expect(k8sClient.List(ctx, jobList, client.InNamespace("harvester-system"),
 				client.MatchingLabels{
-					upgradeplan.HarvesterDrainHookTypeLabel: upgradeplan.DrainHookTypePreDrain,
+					upgradeplan.HarvesterJobTypeLabel: upgradeplan.JobTypePreDrain,
 				})).To(Succeed())
 			Expect(jobList.Items).To(HaveLen(1))
 		})

@@ -250,30 +250,26 @@ func isAnyPlanJobFailed(plan *upgradev1.Plan) bool {
 }
 
 func isTerminalState(status managementv1beta1.NodeUpgradeStatus) bool {
-	return status.State == managementv1beta1.NodeStatePostDrained
+	return status.State == managementv1beta1.NodeStatePostDrained ||
+		status.State == managementv1beta1.NodeStateSingleNodeUpgraded
 }
 
 func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
 	switch status.State {
 	case managementv1beta1.NodeStatePreDrainFailed,
-		managementv1beta1.NodeStatePostDrainFailed:
+		managementv1beta1.NodeStatePostDrainFailed,
+		managementv1beta1.NodeStateSingleNodeUpgradeFailed:
 		return true
 	}
 	return false
 }
 
-// ConstructDrainJob builds a Job for pre-drain or post-drain hooks.
-func ConstructDrainJob(
+// ConstructNodeJob builds a Job for node-upgrade operations (pre-drain, post-drain,
+// or single-node-upgrade). It runs upgrade_node.sh with jobType as the argument.
+func ConstructNodeJob(
 	upgradePlan *managementv1beta1.UpgradePlan,
-	nodeName, jobName, hookType string,
+	nodeName, jobName, jobType string,
 ) *batchv1.Job {
-	args := "pre-drain"
-	containerName := "pre-drain"
-	if hookType == DrainHookTypePostDrain {
-		args = "post-drain"
-		containerName = "post-drain"
-	}
-
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "HARVESTER_UPGRADEPLAN_NAME",
@@ -285,15 +281,17 @@ func ConstructDrainJob(
 		},
 	}
 
-	if hookType == DrainHookTypePostDrain {
-		envVars = append(envVars, corev1.EnvVar{
-			Name: "HARVESTER_UPGRADE_POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
+	if jobType == JobTypePostDrain || jobType == JobTypeSingleNodeUpgrade {
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "HARVESTER_UPGRADE_POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
 				},
 			},
-		})
+		)
 	}
 
 	return &batchv1.Job{
@@ -303,7 +301,7 @@ func ConstructDrainJob(
 			Labels: map[string]string{
 				HarvesterUpgradePlanLabel:      upgradePlan.Name,
 				HarvesterUpgradeComponentLabel: NodeComponent,
-				HarvesterDrainHookTypeLabel:    hookType,
+				HarvesterJobTypeLabel:          jobType,
 				HarvesterUpgradeNodeLabel:      nodeName,
 			},
 		},
@@ -314,7 +312,7 @@ func ConstructDrainJob(
 					Labels: map[string]string{
 						HarvesterUpgradePlanLabel:      upgradePlan.Name,
 						HarvesterUpgradeComponentLabel: NodeComponent,
-						HarvesterDrainHookTypeLabel:    hookType,
+						HarvesterJobTypeLabel:          jobType,
 						HarvesterUpgradeNodeLabel:      nodeName,
 					},
 				},
@@ -326,10 +324,10 @@ func ConstructDrainJob(
 					Tolerations:        getDefaultTolerations(),
 					Containers: []corev1.Container{
 						{
-							Name:    containerName,
+							Name:    "apply",
 							Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
 							Command: []string{"upgrade_node.sh"},
-							Args:    []string{args},
+							Args:    []string{jobType},
 							Env:     envVars,
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: ptr.To(true),

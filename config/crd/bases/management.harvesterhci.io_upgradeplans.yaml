@@ -227,6 +227,11 @@ spec:
                   rancher:
                     type: string
                 type: object
+              singleNode:
+                description: |-
+                  singleNode records the name of the single node in a single-node cluster.
+                  Empty for multi-node clusters. Set during the Initialize phase.
+                type: string
               version:
                 description: version is the snapshot of the associated Version resource.
                 properties:

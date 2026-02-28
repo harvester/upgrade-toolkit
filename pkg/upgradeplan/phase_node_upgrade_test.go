@@ -9,10 +9,13 @@ import (
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -171,4 +174,146 @@ func TestEnsureClusterPatched_SameVersionUpgrade(t *testing.T) {
 	// Verify status field was set
 	require.NotNil(t, up.Status.ProvisionGeneration)
 	assert.Equal(t, 6, *up.Status.ProvisionGeneration)
+}
+
+func newNodeUpgradePhaseWithBatch(objs ...runtime.Object) *NodeUpgradePhase {
+	scheme := runtime.NewScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	_ = provisioningv1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(objs...).
+		Build()
+
+	return NewNodeUpgradePhase(&PhaseDeps{
+		Client: fakeClient,
+		Scheme: scheme,
+		Log:    logr.Discard(),
+	})
+}
+
+func TestRunSingleNode_CreatesJob(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.SingleNode = ptr.To("single-node-1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"single-node-1": {State: managementv1beta1.NodeStateImagePreloaded},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	result, err := phase.Run(context.Background(), up)
+	require.NoError(t, err)
+	assert.False(t, result.Requeue)
+
+	// Verify the single-node-upgrade Job was created
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	require.Len(t, jobList.Items, 1)
+
+	job := jobList.Items[0]
+	assert.Equal(t, up.Name, job.Labels[HarvesterUpgradePlanLabel])
+	assert.Equal(t, NodeComponent, job.Labels[HarvesterUpgradeComponentLabel])
+	assert.Equal(t, JobTypeSingleNodeUpgrade, job.Labels[HarvesterJobTypeLabel])
+	assert.Equal(t, "single-node-1", job.Labels[HarvesterUpgradeNodeLabel])
+	assert.Equal(t, []string{"single-node-upgrade"}, job.Spec.Template.Spec.Containers[0].Args)
+
+	// Phase should still be NodeUpgrading (node not yet terminal)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
+}
+
+func TestRunSingleNode_IdempotentJobCreation(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.SingleNode = ptr.To("single-node-1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"single-node-1": {State: managementv1beta1.NodeStateImagePreloaded},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	// First call
+	_, err := phase.Run(context.Background(), up)
+	require.NoError(t, err)
+
+	// Second call
+	_, err = phase.Run(context.Background(), up)
+	require.NoError(t, err)
+
+	// Verify only one Job exists
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	assert.Len(t, jobList.Items, 1)
+}
+
+func TestRunSingleNode_FailedNode(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.SingleNode = ptr.To("single-node-1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"single-node-1": {
+			State:   managementv1beta1.NodeStateSingleNodeUpgradeFailed,
+			Message: "job failed",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	result, err := phase.Run(context.Background(), up)
+	require.NoError(t, err)
+	assert.False(t, result.Requeue)
+
+	// Phase should transition to Failed
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseFailed, up.Status.CurrentPhase)
+}
+
+func TestRunSingleNode_TerminalNode(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.SingleNode = ptr.To("single-node-1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"single-node-1": {State: managementv1beta1.NodeStateSingleNodeUpgraded},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	result, err := phase.Run(context.Background(), up)
+	require.NoError(t, err)
+	assert.False(t, result.Requeue)
+
+	// Phase should transition to NodeUpgraded
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
+}
+
+func TestCheckNodeStatuses_MultiNode_AllTerminal(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.32.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+		"node-2": {State: managementv1beta1.NodeStatePostDrained},
+		"node-3": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	result, err := phase.checkNodeStatuses(up)
+	require.NoError(t, err)
+	assert.False(t, result.Requeue)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
+}
+
+func TestCheckNodeStatuses_MultiNode_OneNotTerminal(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+		"node-2": {State: managementv1beta1.NodeStatePreDraining},
+		"node-3": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	result, err := phase.checkNodeStatuses(up)
+	require.NoError(t, err)
+	assert.False(t, result.Requeue)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 }
