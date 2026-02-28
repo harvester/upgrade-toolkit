@@ -6,7 +6,6 @@ import (
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
-	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -147,9 +146,8 @@ func (p *FinalizePhase) revertClusterUpgradeStrategy(
 		return nil
 	}
 
-	patch := client.MergeFrom(cluster.DeepCopy())
-	cluster.Spec.RKEConfig.UpgradeStrategy = rkev1.ClusterUpgradeStrategy{}
-	if err := p.Client.Patch(ctx, &cluster, patch); err != nil {
+	raw := []byte(`{"spec":{"rkeConfig":{"upgradeStrategy":null}}}`)
+	if err := p.Client.Patch(ctx, &cluster, client.RawPatch(types.MergePatchType, raw)); err != nil {
 		return fmt.Errorf("failed to revert Cluster upgradeStrategy: %w", err)
 	}
 

@@ -255,6 +255,8 @@ func TestPreRun_RevertsClusterUpgradeStrategy(t *testing.T) {
 	assert.Equal(t, 5, patched.Spec.RKEConfig.ProvisionGeneration)
 	require.NotNil(t, patched.Spec.RKEConfig.Registries)
 	assert.Contains(t, patched.Spec.RKEConfig.Registries.Mirrors, "docker.io")
+	assert.Equal(t, "v1.31.0-rke2r1", patched.Spec.KubernetesVersion,
+		"KubernetesVersion should be preserved")
 }
 
 func TestPreRun_SkipsClusterRevertWhenNoProvisionGeneration(t *testing.T) {
