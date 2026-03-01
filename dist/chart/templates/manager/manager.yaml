@@ -48,7 +48,8 @@ spec:
                     - {{ . }}
                     {{- end }}
                   command:
-                    - /manager
+                    - upgrade-toolkit
+                    - manager
                   image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
                   imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
                   livenessProbe:

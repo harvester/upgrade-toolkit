@@ -859,7 +859,8 @@ spec:
         - --leader-elect
         - --health-probe-bind-address=:8081
         command:
-        - /manager
+        - upgrade-toolkit
+        - manager
         image: controller:latest
         livenessProbe:
           httpGet:
@@ -890,7 +891,9 @@ spec:
           readOnlyRootFilesystem: true
         volumeMounts: []
       securityContext:
+        runAsGroup: 1000
         runAsNonRoot: true
+        runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: upgrade-toolkit-controller-manager

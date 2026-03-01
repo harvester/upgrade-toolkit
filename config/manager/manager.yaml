@@ -54,15 +54,18 @@ spec:
         # Projects are configured by default to adhere to the "restricted" Pod Security Standards.
         # This ensures that deployments meet the highest security requirements for Kubernetes.
         # For more details, see: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
+        runAsGroup: 1000
         runAsNonRoot: true
+        runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
       - command:
-        - /manager
+        - upgrade-toolkit
+        - manager
         args:
-          - --leader-elect
-          - --health-probe-bind-address=:8081
+        - --leader-elect
+        - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
         ports: []
