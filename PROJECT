@@ -6,6 +6,10 @@ cliVersion: 4.8.0
 domain: harvesterhci.io
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v2-alpha:
+    manifests: dist/install.yaml
+    output: dist
 projectName: upgrade-toolkit
 repo: github.com/harvester/upgrade-toolkit
 resources:
