@@ -22,6 +22,7 @@ rules:
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - patch
@@ -34,6 +35,7 @@ rules:
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - patch
@@ -45,6 +47,7 @@ rules:
   - jobs
   verbs:
   - create
+  - deletecollection
   - get
   - list
   - update
@@ -86,6 +89,7 @@ rules:
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - patch
@@ -136,6 +140,7 @@ rules:
   - plans
   verbs:
   - create
+  - deletecollection
   - get
   - list
   - update
