@@ -317,3 +317,66 @@ func TestCheckNodeStatuses_MultiNode_OneNotTerminal(t *testing.T) {
 	assert.False(t, result.Requeue)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 }
+
+func newMachinePlanSecret(name string, annotations map[string]string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   FleetLocalNamespace,
+			Annotations: annotations,
+		},
+		Type: corev1.SecretType(MachinePlanSecretType),
+	}
+}
+
+func TestPostRun_MultiNode_PostDrainAnnotationPresent(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	secret := newMachinePlanSecret("machine-plan-1", map[string]string{
+		RKE2PostDrainAnnotation: "drain-1",
+	})
+
+	phase := newNodeUpgradePhaseWithBatch(up, secret)
+
+	err := phase.PostRun(context.Background(), up)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "waiting for Rancher to complete node upgrades")
+}
+
+func TestPostRun_MultiNode_AllAnnotationsCleared(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+		"node-2": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	// Secrets with no rke2/post-drain annotation (Rancher has cleared them)
+	secret1 := newMachinePlanSecret("machine-plan-1", nil)
+	secret2 := newMachinePlanSecret("machine-plan-2", nil)
+
+	phase := newNodeUpgradePhaseWithBatch(up, secret1, secret2)
+
+	err := phase.PostRun(context.Background(), up)
+	assert.NoError(t, err)
+}
+
+func TestPostRun_SingleNode_Skipped(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.SingleNode = ptr.To("single-node-1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"single-node-1": {State: managementv1beta1.NodeStateSingleNodeUpgraded},
+	}
+
+	// Even with a secret that has rke2/post-drain, PostRun should skip for single-node
+	secret := newMachinePlanSecret("machine-plan-1", map[string]string{
+		RKE2PostDrainAnnotation: "drain-1",
+	})
+
+	phase := newNodeUpgradePhaseWithBatch(up, secret)
+
+	err := phase.PostRun(context.Background(), up)
+	assert.NoError(t, err)
+}

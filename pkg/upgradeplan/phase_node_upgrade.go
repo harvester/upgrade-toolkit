@@ -126,6 +126,41 @@ func (p *NodeUpgradePhase) checkNodeStatuses(
 	return ctrl.Result{}, nil
 }
 
+// PostRun guards the transition from NodeUpgraded to Finalize for multi-node
+// clusters. It verifies that all machine-plan secrets have had their
+// rke2/post-drain annotations cleared by Rancher, meaning every node's upgrade
+// has been fully acknowledged. If any rke2/post-drain annotation remains, it
+// returns an error to block the pipeline from entering the next phase.
+func (p *NodeUpgradePhase) PostRun(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	if upgradePlan.Status.SingleNode != nil {
+		return nil
+	}
+
+	var secretList corev1.SecretList
+	if err := p.Client.List(ctx, &secretList, client.InNamespace(FleetLocalNamespace)); err != nil {
+		return fmt.Errorf("failed to list secrets in %s: %w", FleetLocalNamespace, err)
+	}
+
+	for i := range secretList.Items {
+		secret := &secretList.Items[i]
+		if secret.Type != corev1.SecretType(MachinePlanSecretType) {
+			continue
+		}
+
+		if secret.Annotations[RKE2PostDrainAnnotation] != "" {
+			p.Log.V(1).Info("machine-plan secret still has post-drain annotation, waiting for Rancher to complete",
+				"secret", secret.Name)
+			return fmt.Errorf("waiting for Rancher to complete node upgrades: secret %s still has %s annotation",
+				secret.Name, RKE2PostDrainAnnotation)
+		}
+	}
+
+	return nil
+}
+
 // ensureSingleNodeUpgradeJob creates the single-node-upgrade Job if it doesn't already exist.
 func (p *NodeUpgradePhase) ensureSingleNodeUpgradeJob(
 	ctx context.Context,

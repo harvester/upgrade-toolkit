@@ -171,7 +171,8 @@ func (r *SecretReconciler) mapUpgradePlanToSecrets(ctx context.Context, obj clie
 		return nil
 	}
 
-	if up.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+	if up.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading &&
+		up.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgraded {
 		return nil
 	}
 
@@ -213,12 +214,20 @@ func (upgradePlanNodeStatusChangedPredicate) Update(e event.UpdateEvent) bool {
 		return false
 	}
 
-	if newUP.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+	oldUP, ok := e.ObjectOld.(*managementv1beta1.UpgradePlan)
+	if !ok {
 		return false
 	}
 
-	oldUP, ok := e.ObjectOld.(*managementv1beta1.UpgradePlan)
-	if !ok {
+	// Trigger when the phase transitions from NodeUpgrading to NodeUpgraded,
+	// so the secret controller can annotate any remaining machine-plan secrets.
+	if oldUP.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseNodeUpgrading &&
+		newUP.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseNodeUpgraded {
+		return true
+	}
+
+	// Trigger when NodeUpgradeStatuses change during NodeUpgrading phase.
+	if newUP.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading {
 		return false
 	}
 
@@ -240,7 +249,9 @@ func (r *SecretReconciler) findActiveUpgradePlan(ctx context.Context) (*manageme
 	}
 
 	for i := range upList.Items {
-		if upList.Items[i].Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+		phase := upList.Items[i].Status.CurrentPhase
+		if phase == managementv1beta1.UpgradePlanPhaseNodeUpgrading ||
+			phase == managementv1beta1.UpgradePlanPhaseNodeUpgraded {
 			return &upList.Items[i], nil
 		}
 	}

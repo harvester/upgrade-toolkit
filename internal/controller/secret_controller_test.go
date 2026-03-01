@@ -450,6 +450,42 @@ var _ = Describe("Secret Controller", func() {
 		})
 	})
 
+	Context("When UpgradePlan is in NodeUpgraded phase (race condition)", func() {
+		It("should still annotate the post-hook on the machine-plan secret", func() {
+			up := createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
+
+			// Set node to PostDrained and advance phase to NodeUpgraded
+			up.Status.NodeUpgradeStatuses[testNodeName] = managementv1beta1.NodeUpgradeStatus{
+				State: managementv1beta1.NodeStatePostDrained,
+			}
+			up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseNodeUpgraded
+			Expect(k8sClient.Status().Update(ctx, up)).To(Succeed())
+
+			createMachinePlanSecret(map[string]string{
+				upgradeplan.RKE2PreDrainAnnotation:  "drain-1",
+				upgradeplan.PreHookAnnotation:       "drain-1",
+				upgradeplan.RKE2PostDrainAnnotation: "drain-1",
+			})
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: fleetLocalNamespace,
+					Name:      testSecretName,
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			// Verify the post-hook annotation was set
+			secret := &corev1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Namespace: fleetLocalNamespace,
+				Name:      testSecretName,
+			}, secret)).To(Succeed())
+			Expect(secret.Annotations[upgradeplan.PostHookAnnotation]).To(Equal("drain-1"))
+		})
+	})
+
 	Context("When reconciling idempotently", func() {
 		It("should not create duplicate Jobs on repeated reconciles", func() {
 			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgrading)
@@ -511,7 +547,22 @@ var _ = Describe("Secret Controller", func() {
 			}))
 		})
 
-		It("should return nil when UpgradePlan is not in NodeUpgrading phase", func() {
+		It("should enqueue machine-plan Secrets when UpgradePlan is in NodeUpgraded phase", func() {
+			createUpgradePlan(managementv1beta1.UpgradePlanPhaseNodeUpgraded)
+			createMachinePlanSecret(nil)
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+
+			requests := reconciler.mapUpgradePlanToSecrets(ctx, up)
+			Expect(requests).To(HaveLen(1))
+			Expect(requests[0].NamespacedName).To(Equal(types.NamespacedName{
+				Namespace: fleetLocalNamespace,
+				Name:      testSecretName,
+			}))
+		})
+
+		It("should return nil when UpgradePlan is not in NodeUpgrading or NodeUpgraded phase", func() {
 			up := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: upgradePlanName},
 				Status: managementv1beta1.UpgradePlanStatus{
@@ -587,6 +638,29 @@ var _ = Describe("Secret Controller", func() {
 				ObjectOld: oldUP,
 				ObjectNew: newUP,
 			})).To(BeFalse())
+		})
+
+		It("should accept Update when phase transitions from NodeUpgrading to NodeUpgraded", func() {
+			oldUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+					NodeUpgradeStatuses: map[string]managementv1beta1.NodeUpgradeStatus{
+						testNodeName: {State: managementv1beta1.NodeStatePostDrained},
+					},
+				},
+			}
+			newUP := &managementv1beta1.UpgradePlan{
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgraded,
+					NodeUpgradeStatuses: map[string]managementv1beta1.NodeUpgradeStatus{
+						testNodeName: {State: managementv1beta1.NodeStatePostDrained},
+					},
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldUP,
+				ObjectNew: newUP,
+			})).To(BeTrue())
 		})
 
 		It("should reject Update when NodeUpgradeStatuses unchanged", func() {
