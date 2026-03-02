@@ -39,80 +39,80 @@ A successfully executed UpgradePlan looks like the following:
 apiVersion: management.harvesterhci.io/v1beta1
 kind: UpgradePlan
 metadata:
-  creationTimestamp: "2026-03-02T03:41:38Z"
+  creationTimestamp: "2026-03-02T08:01:18Z"
   generateName: hvst-upgrade-
   generation: 1
-  name: hvst-upgrade-hvl6l
-  resourceVersion: "287673"
-  uid: b7ac7ea5-c9e2-469f-9482-25ba976b570e
+  name: hvst-upgrade-gj8rf
+  resourceVersion: "130247"
+  uid: 59d59440-9bf9-4064-a664-4630a2940529
 spec:
   mode: automatic
   upgrade: dev
   version: master-head
 status:
   conditions:
-  - lastTransitionTime: "2026-03-02T06:12:37Z"
+  - lastTransitionTime: "2026-03-02T09:31:16Z"
     message: UpgradePlan has completed
     observedGeneration: 1
     reason: Succeeded
     status: "False"
     type: Progressing
-  - lastTransitionTime: "2026-03-02T06:12:37Z"
+  - lastTransitionTime: "2026-03-02T09:31:16Z"
     message: ""
     observedGeneration: 1
     reason: ReconcileSuccess
     status: "False"
     type: Degraded
-  - lastTransitionTime: "2026-03-02T06:12:37Z"
+  - lastTransitionTime: "2026-03-02T09:31:16Z"
     message: Entered one of the terminal phases
     observedGeneration: 1
     reason: Executed
     status: "False"
     type: Available
   currentPhase: Succeeded
-  isoImageID: harvester-system/hvst-upgrade-hvl6l-iso
+  isoImageID: harvester-system/hvst-upgrade-gj8rf-iso
   nodeUpgradeStatuses:
     charlie-1-tink-system:
-      state: PostDrained
+      state: ImageCleaned
     charlie-2-tink-system:
-      state: PostDrained
+      state: ImageCleaned
     charlie-3-tink-system:
-      state: PostDrained
+      state: ImageCleaned
   phaseTransitionTimestamps:
   - phase: Initializing
-    phaseTransitionTimestamp: "2026-03-02T03:41:44Z"
+    phaseTransitionTimestamp: "2026-03-02T08:01:18Z"
   - phase: Initialized
-    phaseTransitionTimestamp: "2026-03-02T03:41:44Z"
+    phaseTransitionTimestamp: "2026-03-02T08:01:18Z"
   - phase: ISODownloading
-    phaseTransitionTimestamp: "2026-03-02T03:41:44Z"
+    phaseTransitionTimestamp: "2026-03-02T08:01:18Z"
   - phase: ISODownloaded
-    phaseTransitionTimestamp: "2026-03-02T03:46:24Z"
+    phaseTransitionTimestamp: "2026-03-02T08:05:37Z"
   - phase: RepoCreating
-    phaseTransitionTimestamp: "2026-03-02T03:46:24Z"
+    phaseTransitionTimestamp: "2026-03-02T08:05:37Z"
   - phase: RepoCreated
-    phaseTransitionTimestamp: "2026-03-02T03:46:40Z"
+    phaseTransitionTimestamp: "2026-03-02T08:05:54Z"
   - phase: MetadataPopulating
-    phaseTransitionTimestamp: "2026-03-02T03:46:40Z"
+    phaseTransitionTimestamp: "2026-03-02T08:05:54Z"
   - phase: MetadataPopulated
-    phaseTransitionTimestamp: "2026-03-02T03:46:50Z"
+    phaseTransitionTimestamp: "2026-03-02T08:06:04Z"
   - phase: ImagePreloading
-    phaseTransitionTimestamp: "2026-03-02T03:46:50Z"
+    phaseTransitionTimestamp: "2026-03-02T08:06:04Z"
   - phase: ImagePreloaded
-    phaseTransitionTimestamp: "2026-03-02T04:14:19Z"
+    phaseTransitionTimestamp: "2026-03-02T08:32:20Z"
   - phase: ClusterUpgrading
-    phaseTransitionTimestamp: "2026-03-02T04:14:19Z"
+    phaseTransitionTimestamp: "2026-03-02T08:32:20Z"
   - phase: ClusterUpgraded
-    phaseTransitionTimestamp: "2026-03-02T04:28:46Z"
+    phaseTransitionTimestamp: "2026-03-02T08:46:14Z"
   - phase: NodeUpgrading
-    phaseTransitionTimestamp: "2026-03-02T04:28:46Z"
+    phaseTransitionTimestamp: "2026-03-02T08:46:14Z"
   - phase: NodeUpgraded
-    phaseTransitionTimestamp: "2026-03-02T05:12:18Z"
+    phaseTransitionTimestamp: "2026-03-02T09:29:34Z"
   - phase: CleaningUp
-    phaseTransitionTimestamp: "2026-03-02T05:12:18Z"
+    phaseTransitionTimestamp: "2026-03-02T09:29:35Z"
   - phase: CleanedUp
-    phaseTransitionTimestamp: "2026-03-02T06:12:36Z"
+    phaseTransitionTimestamp: "2026-03-02T09:31:16Z"
   - phase: Succeeded
-    phaseTransitionTimestamp: "2026-03-02T06:12:37Z"
+    phaseTransitionTimestamp: "2026-03-02T09:31:16Z"
   previousVersion: v1.7.1
   provisionGeneration: 1
   releaseMetadata:
