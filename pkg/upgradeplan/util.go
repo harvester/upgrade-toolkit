@@ -143,23 +143,6 @@ func isTerminalPhase(phase managementv1beta1.UpgradePlanPhase) bool {
 		phase == managementv1beta1.UpgradePlanPhaseFailed
 }
 
-func markUpgradePlanComplete(upgradePlan *managementv1beta1.UpgradePlan) {
-	if isTerminalPhase(upgradePlan.Status.CurrentPhase) {
-		upgradePlan.SetCondition(
-			managementv1beta1.UpgradePlanAvailable,
-			metav1.ConditionFalse,
-			"Executed",
-			"Entered one of the terminal phases",
-		)
-		upgradePlan.SetCondition(
-			managementv1beta1.UpgradePlanProgressing,
-			metav1.ConditionFalse,
-			string(upgradePlan.Status.CurrentPhase),
-			"UpgradePlan has completed",
-		)
-	}
-}
-
 // Resource readiness checks
 
 func isVirtualMachineImageImported(vmImage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {

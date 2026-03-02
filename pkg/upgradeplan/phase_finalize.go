@@ -94,11 +94,41 @@ func (p *FinalizePhase) Run(
 ) (ctrl.Result, error) {
 	p.Log.V(1).Info("handle finalize")
 
+	// Determine terminal phase
 	if upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseFailed {
 		upgradePlan.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseSucceeded
 	}
 
-	markUpgradePlanComplete(upgradePlan)
+	phase := upgradePlan.Status.CurrentPhase
+
+	// Available is always false once finalized
+	upgradePlan.SetCondition(
+		managementv1beta1.UpgradePlanAvailable,
+		metav1.ConditionFalse,
+		"Executed",
+		"Entered one of the terminal phases",
+	)
+
+	// Preserve failure message if failed
+	if phase == managementv1beta1.UpgradePlanPhaseFailed {
+		cond := upgradePlan.LookupCondition(managementv1beta1.UpgradePlanProgressing)
+		upgradePlan.SetCondition(
+			managementv1beta1.UpgradePlanProgressing,
+			metav1.ConditionFalse,
+			string(phase),
+			cond.Message,
+		)
+		return ctrl.Result{}, nil
+	}
+
+	// Succeeded case
+	upgradePlan.SetCondition(
+		managementv1beta1.UpgradePlanProgressing,
+		metav1.ConditionFalse,
+		string(phase),
+		"UpgradePlan has completed",
+	)
+
 	return ctrl.Result{}, nil
 }
 
