@@ -259,10 +259,15 @@ func (c *ManagerCommand) Run() error {
 
 	ctx := ctrl.SetupSignalHandler()
 
+	jobServiceAccount := getEnvOrDefault("UPGRADE_JOB_SERVICE_ACCOUNT", "harvester")
+	planServiceAccount := getEnvOrDefault("UPGRADE_PLAN_SERVICE_ACCOUNT", "system-upgrade-controller")
+
 	if err := (&controller.UpgradePlanReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Log:    logf.FromContext(ctx).WithName("upgrade-plan-controller"),
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Log:                logf.FromContext(ctx).WithName("upgrade-plan-controller"),
+		JobServiceAccount:  jobServiceAccount,
+		PlanServiceAccount: planServiceAccount,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "UpgradePlan")
 		return err
@@ -284,10 +289,11 @@ func (c *ManagerCommand) Run() error {
 		return err
 	}
 	if err := (&controller.SecretReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		Log:              logf.FromContext(ctx).WithName("secret-controller"),
-		NodeNameResolver: &controller.MachineNodeNameResolver{},
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Log:               logf.FromContext(ctx).WithName("secret-controller"),
+		NodeNameResolver:  &controller.MachineNodeNameResolver{},
+		JobServiceAccount: jobServiceAccount,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Secret")
 		return err
@@ -317,4 +323,11 @@ func (c *ManagerCommand) Run() error {
 	}
 
 	return nil
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultValue
 }

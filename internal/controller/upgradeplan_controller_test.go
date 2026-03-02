@@ -71,15 +71,19 @@ var _ = Describe("UpgradePlan Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			deps := &upgradeplanpkg.PhaseDeps{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-				Log:    logr.Discard(),
+				Client:             k8sClient,
+				Scheme:             k8sClient.Scheme(),
+				Log:                logr.Discard(),
+				JobServiceAccount:  "harvester",
+				PlanServiceAccount: "system-upgrade-controller",
 			}
 			controllerReconciler := &UpgradePlanReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Log:      logr.Discard(),
-				pipeline: upgradeplanpkg.NewPipeline(deps),
+				Client:             k8sClient,
+				Scheme:             k8sClient.Scheme(),
+				Log:                logr.Discard(),
+				JobServiceAccount:  "harvester",
+				PlanServiceAccount: "system-upgrade-controller",
+				pipeline:           upgradeplanpkg.NewPipeline(deps),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

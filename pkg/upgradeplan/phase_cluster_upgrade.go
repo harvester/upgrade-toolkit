@@ -67,12 +67,12 @@ func (p *ClusterUpgradePhase) getOrCreateJobForClusterUpgrade(
 	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
-		func() *batchv1.Job { return constructJobForClusterUpgrade(up) },
+		func() *batchv1.Job { return constructJobForClusterUpgrade(up, p.JobServiceAccount) },
 		up,
 	)
 }
 
-func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan) *batchv1.Job {
+func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan, serviceAccountName string) *batchv1.Job {
 	jobName := name.SafeConcatName(upgradePlan.Name, ClusterComponent)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -109,7 +109,7 @@ func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan) *
 							},
 						},
 					},
-					ServiceAccountName: harvesterServiceAccountName,
+					ServiceAccountName: serviceAccountName,
 					Tolerations:        getDefaultTolerations(),
 				},
 			},

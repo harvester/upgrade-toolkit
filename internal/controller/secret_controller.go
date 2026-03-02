@@ -81,9 +81,10 @@ func (r *MachineNodeNameResolver) ResolveNodeName(ctx context.Context, c client.
 // pre-drain and post-drain Jobs during node upgrades.
 type SecretReconciler struct {
 	client.Client
-	Scheme           *runtime.Scheme
-	Log              logr.Logger
-	NodeNameResolver NodeNameResolver
+	Scheme            *runtime.Scheme
+	Log               logr.Logger
+	NodeNameResolver  NodeNameResolver
+	JobServiceAccount string
 }
 
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;update;patch
@@ -332,7 +333,9 @@ func (r *SecretReconciler) ensureNodeJob(
 	_, err := upgradeplan.GetOrCreate(
 		ctx, r.Client, r.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
-		func() *batchv1.Job { return upgradeplan.ConstructNodeJob(up, nodeName, jobName, jobType) },
+		func() *batchv1.Job {
+			return upgradeplan.ConstructNodeJob(up, nodeName, jobName, jobType, r.JobServiceAccount)
+		},
 		up,
 	)
 	return err

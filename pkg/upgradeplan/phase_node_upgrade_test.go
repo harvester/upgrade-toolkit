@@ -66,9 +66,11 @@ func newNodeUpgradePhase(objs ...runtime.Object) *NodeUpgradePhase {
 		Build()
 
 	return NewNodeUpgradePhase(&PhaseDeps{
-		Client: fakeClient,
-		Scheme: scheme,
-		Log:    logr.Discard(),
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Log:                logr.Discard(),
+		JobServiceAccount:  "harvester",
+		PlanServiceAccount: "system-upgrade-controller",
 	})
 }
 
@@ -189,9 +191,11 @@ func newNodeUpgradePhaseWithBatch(objs ...runtime.Object) *NodeUpgradePhase {
 		Build()
 
 	return NewNodeUpgradePhase(&PhaseDeps{
-		Client: fakeClient,
-		Scheme: scheme,
-		Log:    logr.Discard(),
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Log:                logr.Discard(),
+		JobServiceAccount:  "harvester",
+		PlanServiceAccount: "system-upgrade-controller",
 	})
 }
 

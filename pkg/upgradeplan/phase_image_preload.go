@@ -63,12 +63,14 @@ func (p *ImagePreloadPhase) getOrCreatePlanForImagePreload(
 	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *upgradev1.Plan { return &upgradev1.Plan{} },
-		func() *upgradev1.Plan { return constructPlanForImagePreload(up) },
+		func() *upgradev1.Plan { return constructPlanForImagePreload(up, p.PlanServiceAccount) },
 		up,
 	)
 }
 
-func constructPlanForImagePreload(upgradePlan *managementv1beta1.UpgradePlan) *upgradev1.Plan {
+func constructPlanForImagePreload(
+	upgradePlan *managementv1beta1.UpgradePlan, serviceAccountName string,
+) *upgradev1.Plan {
 	selector := &metav1.LabelSelector{
 		MatchLabels: map[string]string{
 			harvesterManagedLabel: "true",
@@ -87,5 +89,8 @@ func constructPlanForImagePreload(upgradePlan *managementv1beta1.UpgradePlan) *u
 	}
 	version := getUpgradeVersion(upgradePlan)
 
-	return constructPlan(upgradePlan.Name, PrepareComponent, 1, selector, false, nil, container, version)
+	return constructPlan(
+		upgradePlan.Name, PrepareComponent, 1, selector,
+		false, nil, container, version, serviceAccountName,
+	)
 }

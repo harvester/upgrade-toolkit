@@ -41,9 +41,11 @@ func newFinalizePhase(objs ...client.Object) *FinalizePhase {
 		Build()
 
 	return NewFinalizePhase(&PhaseDeps{
-		Client: fakeClient,
-		Scheme: scheme,
-		Log:    logr.Discard(),
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Log:                logr.Discard(),
+		JobServiceAccount:  "harvester",
+		PlanServiceAccount: "system-upgrade-controller",
 	})
 }
 

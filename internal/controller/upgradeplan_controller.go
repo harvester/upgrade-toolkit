@@ -40,9 +40,11 @@ import (
 // UpgradePlanReconciler reconciles a UpgradePlan object
 type UpgradePlanReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Log      logr.Logger
-	pipeline *upgradeplan.Pipeline
+	Scheme             *runtime.Scheme
+	Log                logr.Logger
+	JobServiceAccount  string
+	PlanServiceAccount string
+	pipeline           *upgradeplan.Pipeline
 }
 
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradeplans,verbs=get;list;watch;create;update;patch;delete
@@ -110,9 +112,11 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // SetupWithManager sets up the controller with the Manager.
 func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	deps := &upgradeplan.PhaseDeps{
-		Client: r.Client,
-		Scheme: r.Scheme,
-		Log:    r.Log,
+		Client:             r.Client,
+		Scheme:             r.Scheme,
+		Log:                r.Log,
+		JobServiceAccount:  r.JobServiceAccount,
+		PlanServiceAccount: r.PlanServiceAccount,
 	}
 	r.pipeline = upgradeplan.NewPipeline(deps)
 	return ctrl.NewControllerManagedBy(mgr).

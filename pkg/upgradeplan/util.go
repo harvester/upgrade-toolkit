@@ -28,9 +28,7 @@ const (
 	harvesterSystemNamespace       = "harvester-system"
 	cattleSystemNamespace          = "cattle-system"
 	kubeSystemNamespace            = "kube-system"
-	harvesterServiceAccountName    = "harvester"
 	serverVersionSettingName       = "server-version"
-	sucName                        = "system-upgrade-controller"
 	longhornStaticStorageClassName = "longhorn-static"
 
 	harvesterManagedLabel = "harvesterhci.io/managed"
@@ -202,13 +200,11 @@ func isAnyEndpointReady(ctx context.Context, c client.Client, svc *corev1.Servic
 		return false
 	}
 
-	if len(epsList.Items) == 0 {
-		return false
-	}
-
-	for _, ep := range epsList.Items[0].Endpoints {
-		if ep.Conditions.Ready != nil && *ep.Conditions.Ready {
-			return true
+	for _, eps := range epsList.Items {
+		for _, ep := range eps.Endpoints {
+			if ep.Conditions.Ready != nil && *ep.Conditions.Ready {
+				return true
+			}
 		}
 	}
 
@@ -268,7 +264,7 @@ func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
 // or single-node-upgrade). It runs upgrade_node.sh with jobType as the argument.
 func ConstructNodeJob(
 	upgradePlan *managementv1beta1.UpgradePlan,
-	nodeName, jobName, jobType string,
+	nodeName, jobName, jobType, serviceAccountName string,
 ) *batchv1.Job {
 	envVars := []corev1.EnvVar{
 		{
@@ -319,7 +315,7 @@ func ConstructNodeJob(
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyNever,
 					NodeName:           nodeName,
-					ServiceAccountName: harvesterServiceAccountName,
+					ServiceAccountName: serviceAccountName,
 					HostPID:            true,
 					Tolerations:        getDefaultTolerations(),
 					Containers: []corev1.Container{
@@ -409,7 +405,7 @@ func constructPlan(
 	maintenance bool,
 	prepare *upgradev1.ContainerSpec,
 	container *upgradev1.ContainerSpec,
-	version string,
+	version, serviceAccountName string,
 ) *upgradev1.Plan {
 	planName := name.SafeConcatName(upgradePlanName, componentName)
 
@@ -426,7 +422,7 @@ func constructPlan(
 			Concurrency:           int64(concurrency),
 			JobActiveDeadlineSecs: ptr.To[int64](0),
 			NodeSelector:          nodeSelector,
-			ServiceAccountName:    sucName,
+			ServiceAccountName:    serviceAccountName,
 			Tolerations:           getDefaultTolerations(),
 			Prepare:               prepare,
 			Upgrade:               container,

@@ -23,7 +23,11 @@ manager:
 
   ## Environment variables
   ##
-  env: []
+  env:
+    - name: UPGRADE_JOB_SERVICE_ACCOUNT
+      value: "harvester"
+    - name: UPGRADE_PLAN_SERVICE_ACCOUNT
+      value: "system-upgrade-controller"
 
   ## Image pull secrets
   ##

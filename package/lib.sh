@@ -16,11 +16,13 @@ download_file()
   echo "Downloading the file from \"$url\" to \"$output\"..."
   local i=0
   while [[ "$i" -lt 100 ]]; do
-    curl -sSfL "$url" -o "$output" --create-dirs && break
+    curl -sSfL "$url" -o "$output" --create-dirs && return 0
     echo "Failed to download the requested file from \"$url\" to \"$output\" with error code: $?, retrying ($i)..."
     sleep 10
     i=$((i + 1))
   done
+
+  return 1
 }
 
 detect_repo()
@@ -765,7 +767,7 @@ EOF
   # wait for managedchart to be ready before updating the addon
   wait_managedchart_ready "kubeovn-operator-crd"
 
-  ## addon patch 
+  ## addon patch
   patch=$(cat /usr/local/share/addons/kubeovn-operator.yaml | yq '{"spec": .spec | pick(["version"])}')
   cat > addon-patch.yaml <<EOF
 $patch

@@ -230,7 +230,7 @@ func constructDeployment(
 									Exec: &corev1.ExecAction{
 										Command: []string{
 											"sh", "-c",
-											"cat /srv/www/htdocs/harvester-iso/harvester-release.yaml 2>&1 /dev/null",
+											"test -f /srv/www/htdocs/harvester-iso/harvester-release.yaml",
 										},
 									},
 								},

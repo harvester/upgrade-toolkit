@@ -176,7 +176,9 @@ func (p *NodeUpgradePhase) ensureSingleNodeUpgradeJob(
 	_, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
-		func() *batchv1.Job { return ConstructNodeJob(upgradePlan, nodeName, jobName, JobTypeSingleNodeUpgrade) },
+		func() *batchv1.Job {
+			return ConstructNodeJob(upgradePlan, nodeName, jobName, JobTypeSingleNodeUpgrade, p.JobServiceAccount)
+		},
 		upgradePlan,
 	)
 	return err

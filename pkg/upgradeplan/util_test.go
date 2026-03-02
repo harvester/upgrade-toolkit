@@ -230,7 +230,10 @@ func TestConstructNodeJob_SingleNodeUpgrade(t *testing.T) {
 		},
 	}
 
-	job := ConstructNodeJob(up, "node-1", "test-upgrade-node-upgrade-single-node-upgrade-node-1", JobTypeSingleNodeUpgrade)
+	job := ConstructNodeJob(
+		up, "node-1", "test-upgrade-node-upgrade-single-node-upgrade-node-1",
+		JobTypeSingleNodeUpgrade, "harvester",
+	)
 
 	// Verify labels
 	assert.Equal(t, "test-upgrade", job.Labels[HarvesterUpgradePlanLabel])
