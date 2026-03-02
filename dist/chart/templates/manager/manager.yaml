@@ -50,6 +50,12 @@ spec:
                   command:
                     - upgrade-toolkit
                     - manager
+                  env:
+                    {{- if .Values.manager.env }}
+                    {{- toYaml .Values.manager.env | nindent 20 }}
+                    {{- else }}
+                    []
+                    {{- end }}
                   image: "{{ .Values.manager.image.repository }}:{{ .Values.manager.image.tag }}"
                   imagePullPolicy: {{ .Values.manager.image.pullPolicy }}
                   livenessProbe:
@@ -72,10 +78,6 @@ spec:
                     {{- else }}
                     {}
                     {{- end }}
-                  {{- with .Values.manager.env }}
-                  env:
-                    {{- toYaml . | nindent 20 }}
-                  {{- end }}
                   securityContext:
                     {{- if .Values.manager.securityContext }}
                     {{- toYaml .Values.manager.securityContext | nindent 20 }}

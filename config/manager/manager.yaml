@@ -68,6 +68,11 @@ spec:
         - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
+        env:
+        - name: UPGRADE_JOB_SERVICE_ACCOUNT
+          value: "harvester"
+        - name: UPGRADE_PLAN_SERVICE_ACCOUNT
+          value: "system-upgrade-controller"
         ports: []
         securityContext:
           readOnlyRootFilesystem: true
