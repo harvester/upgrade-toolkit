@@ -112,6 +112,10 @@ func (p *Pipeline) Execute(
 			}
 		}
 
+		if isTerminalPhase(upgradePlan.Status.CurrentPhase) {
+			return ctrl.Result{}, nil
+		}
+
 		nextIdx := idx + 1
 		if nextIdx >= len(p.phases) {
 			// All core phases done, enter finalization
@@ -136,6 +140,10 @@ func (p *Pipeline) runInit(
 		if err := postRunnable.PostRun(ctx, upgradePlan); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	if isTerminalPhase(upgradePlan.Status.CurrentPhase) {
+		return ctrl.Result{}, nil
 	}
 
 	return p.enterPhase(ctx, upgradePlan, 0)
@@ -164,6 +172,10 @@ func (p *Pipeline) enterPhase(
 		if err := preRunnable.PreRun(ctx, upgradePlan); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	if isTerminalPhase(upgradePlan.Status.CurrentPhase) {
+		return ctrl.Result{}, nil
 	}
 
 	updateProgressingPhase(upgradePlan, entry.ActivePhase, "")
