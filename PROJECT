@@ -22,6 +22,10 @@ resources:
   kind: UpgradePlan
   path: github.com/harvester/upgrade-toolkit/api/v1beta1
   version: v1beta1
+  webhooks:
+    defaulting: true
+    validation: true
+    webhookVersion: v1
 - api:
     crdVersion: v1
     namespaced: true

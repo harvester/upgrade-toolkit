@@ -43,6 +43,7 @@ import (
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/internal/controller"
+	webhookv1beta1 "github.com/harvester/upgrade-toolkit/internal/webhook/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -304,6 +305,13 @@ func (c *ManagerCommand) Run() error {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Node")
 		return err
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookv1beta1.SetupUpgradePlanWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "UpgradePlan")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

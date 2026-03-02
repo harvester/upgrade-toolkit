@@ -831,6 +831,23 @@ spec:
     app.kubernetes.io/name: upgrade-toolkit
     control-plane: controller-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: upgrade-toolkit
+  name: upgrade-toolkit-webhook-service
+  namespace: upgrade-toolkit-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    app.kubernetes.io/name: upgrade-toolkit
+    control-plane: controller-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -859,6 +876,7 @@ spec:
         - --metrics-bind-address=:8443
         - --leader-elect
         - --health-probe-bind-address=:8081
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
         command:
         - upgrade-toolkit
         - manager
@@ -875,7 +893,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
-        ports: []
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -895,7 +916,10 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: true
-        volumeMounts: []
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: webhook-certs
+          readOnly: true
       securityContext:
         runAsGroup: 1000
         runAsNonRoot: true
@@ -904,4 +928,108 @@ spec:
           type: RuntimeDefault
       serviceAccountName: upgrade-toolkit-controller-manager
       terminationGracePeriodSeconds: 10
-      volumes: []
+      volumes:
+      - name: webhook-certs
+        secret:
+          secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: upgrade-toolkit
+  name: upgrade-toolkit-metrics-certs
+  namespace: upgrade-toolkit-system
+spec:
+  dnsNames:
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc
+  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: upgrade-toolkit-selfsigned-issuer
+  secretName: metrics-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: upgrade-toolkit
+  name: upgrade-toolkit-serving-cert
+  namespace: upgrade-toolkit-system
+spec:
+  dnsNames:
+  - upgrade-toolkit-webhook-service.upgrade-toolkit-system.svc
+  - upgrade-toolkit-webhook-service.upgrade-toolkit-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: upgrade-toolkit-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: upgrade-toolkit
+  name: upgrade-toolkit-selfsigned-issuer
+  namespace: upgrade-toolkit-system
+spec:
+  selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: upgrade-toolkit-system/upgrade-toolkit-serving-cert
+  name: upgrade-toolkit-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: upgrade-toolkit-webhook-service
+      namespace: upgrade-toolkit-system
+      path: /mutate-management-harvesterhci-io-v1beta1-upgradeplan
+  failurePolicy: Fail
+  name: mupgradeplan-v1beta1.kb.io
+  rules:
+  - apiGroups:
+    - management.harvesterhci.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - upgradeplans
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: upgrade-toolkit-system/upgrade-toolkit-serving-cert
+  name: upgrade-toolkit-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: upgrade-toolkit-webhook-service
+      namespace: upgrade-toolkit-system
+      path: /validate-management-harvesterhci-io-v1beta1-upgradeplan
+  failurePolicy: Fail
+  name: vupgradeplan-v1beta1.kb.io
+  rules:
+  - apiGroups:
+    - management.harvesterhci.io
+    apiVersions:
+    - v1beta1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - upgradeplans
+  sideEffects: None
