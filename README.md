@@ -236,3 +236,9 @@ make helm-deploy IMG=starbops/harvester-upgrade-toolkit:dev
 ```
 
 [Create the Version and UpgradePlan CRs](#customized-upgrades) to kickstart the upgrade process.
+
+## License
+
+Copyright 2025-2026 [SUSE, LLC.](https://www.suse.com/)
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details.
