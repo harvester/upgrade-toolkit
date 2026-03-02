@@ -16,7 +16,9 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
-const imageCleanupScript = `#!/usr/bin/env sh
+const (
+	currentVersion     = "current"
+	imageCleanupScript = `#!/usr/bin/env sh
 HOST_DIR="${HOST_DIR:-/host}"
 export CONTAINER_RUNTIME_ENDPOINT=unix:///$HOST_DIR/run/k3s/containerd/containerd.sock
 export CONTAINERD_ADDRESS=$HOST_DIR/run/k3s/containerd/containerd.sock
@@ -30,6 +32,7 @@ for img in $IMAGES; do
     "$CRICTL" rmi "$img" || echo "  Warning: failed to remove $img (non-fatal)"
 done
 `
+)
 
 // ImageCleanupPhase purges stale container images from all nodes via a
 // system-upgrade-controller Plan. It compares the image lists of the previous
@@ -128,7 +131,6 @@ func (p *ImageCleanupPhase) computeImageDiff(
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
 	previousVersion := *up.Status.PreviousVersion
-	currentVersion := getUpgradeVersion(up)
 
 	previousImages, err := fetchImageList(ctx, httpClient, baseURL, previousVersion)
 	if err != nil {
