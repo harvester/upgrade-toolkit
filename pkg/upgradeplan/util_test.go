@@ -112,6 +112,21 @@ func TestIsTerminalState(t *testing.T) {
 			state:    managementv1beta1.NodeStateSingleNodeUpgrading,
 			expected: false,
 		},
+		{
+			name:     "ImageCleaning is not terminal",
+			state:    managementv1beta1.NodeStateImageCleaning,
+			expected: false,
+		},
+		{
+			name:     "ImageCleaned is not terminal",
+			state:    managementv1beta1.NodeStateImageCleaned,
+			expected: false,
+		},
+		{
+			name:     "ImageCleanFailed is not terminal",
+			state:    managementv1beta1.NodeStateImageCleanFailed,
+			expected: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -156,6 +171,21 @@ func TestIsNodeUpgradeFailure(t *testing.T) {
 		{
 			name:     "ImagePreloaded is not failure",
 			state:    managementv1beta1.NodeStateImagePreloaded,
+			expected: false,
+		},
+		{
+			name:     "ImageCleaning is not failure",
+			state:    managementv1beta1.NodeStateImageCleaning,
+			expected: false,
+		},
+		{
+			name:     "ImageCleaned is not failure",
+			state:    managementv1beta1.NodeStateImageCleaned,
+			expected: false,
+		},
+		{
+			name:     "ImageCleanFailed is not failure",
+			state:    managementv1beta1.NodeStateImageCleanFailed,
 			expected: false,
 		},
 	}
@@ -209,6 +239,36 @@ func TestIsNodeUpgradeStateAhead_SingleNode(t *testing.T) {
 			name:     "SingleNodeUpgrading and PreDraining are at same ordinal",
 			current:  managementv1beta1.NodeStateSingleNodeUpgrading,
 			proposed: managementv1beta1.NodeStatePreDraining,
+			expected: false,
+		},
+		{
+			name:     "ImageCleaning is ahead of PostDrained",
+			current:  managementv1beta1.NodeStateImageCleaning,
+			proposed: managementv1beta1.NodeStatePostDrained,
+			expected: true,
+		},
+		{
+			name:     "ImageCleaned is ahead of ImageCleaning",
+			current:  managementv1beta1.NodeStateImageCleaned,
+			proposed: managementv1beta1.NodeStateImageCleaning,
+			expected: true,
+		},
+		{
+			name:     "ImageCleanFailed is ahead of ImageCleaning",
+			current:  managementv1beta1.NodeStateImageCleanFailed,
+			proposed: managementv1beta1.NodeStateImageCleaning,
+			expected: true,
+		},
+		{
+			name:     "ImageCleaned and ImageCleanFailed are at same ordinal",
+			current:  managementv1beta1.NodeStateImageCleaned,
+			proposed: managementv1beta1.NodeStateImageCleanFailed,
+			expected: false,
+		},
+		{
+			name:     "PostDrained is not ahead of ImageCleaning",
+			current:  managementv1beta1.NodeStatePostDrained,
+			proposed: managementv1beta1.NodeStateImageCleaning,
 			expected: false,
 		},
 	}

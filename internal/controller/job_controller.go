@@ -117,6 +117,14 @@ func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv
 		if !ok {
 			return fmt.Errorf("label %s not found", upgradeplan.HarvesterUpgradeNodeLabel)
 		}
+	case upgradeplan.ImageCleanupComponent:
+		nodeName, ok = job.Labels[upgradeplan.SUCNodeLabel]
+		if !ok {
+			return fmt.Errorf("label %s not found", upgradeplan.SUCNodeLabel)
+		}
+	default:
+		r.Log.V(0).Info("cannot identify upgrade component due to missing node label, skip it", "jobNamespace", job.Namespace, "jobName", job.Name)
+		return nil
 	}
 
 	var upgradePlan managementv1beta1.UpgradePlan
@@ -204,6 +212,8 @@ func defaultStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 		return managementv1beta1.NodeStatePostDraining
 	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypeSingleNodeUpgrade:
 		return managementv1beta1.NodeStateSingleNodeUpgrading
+	case component == upgradeplan.ImageCleanupComponent:
+		return managementv1beta1.NodeStateImageCleaning
 	default:
 		return ""
 	}
@@ -219,6 +229,8 @@ func successStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 		return managementv1beta1.NodeStateWaitingReboot
 	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypeSingleNodeUpgrade:
 		return managementv1beta1.NodeStateWaitingReboot
+	case component == upgradeplan.ImageCleanupComponent:
+		return managementv1beta1.NodeStateImageCleaned
 	default:
 		return ""
 	}
@@ -234,6 +246,8 @@ func failureStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 		return managementv1beta1.NodeStatePostDrainFailed
 	case component == upgradeplan.NodeComponent && hookType == upgradeplan.JobTypeSingleNodeUpgrade:
 		return managementv1beta1.NodeStateSingleNodeUpgradeFailed
+	case component == upgradeplan.ImageCleanupComponent:
+		return managementv1beta1.NodeStateImageCleanFailed
 	default:
 		return ""
 	}

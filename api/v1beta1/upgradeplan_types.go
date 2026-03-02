@@ -54,6 +54,11 @@ const (
 	NodeStateSingleNodeUpgrading     NodeUpgradeState = "SingleNodeUpgrading"
 	NodeStateSingleNodeUpgradeFailed NodeUpgradeState = "SingleNodeUpgradeFailed"
 	NodeStateSingleNodeUpgraded      NodeUpgradeState = "SingleNodeUpgraded"
+
+	// Image-cleanup lifecycle states (SUC)
+	NodeStateImageCleaning    NodeUpgradeState = "ImageCleaning"
+	NodeStateImageCleaned     NodeUpgradeState = "ImageCleaned"
+	NodeStateImageCleanFailed NodeUpgradeState = "ImageCleanFailed"
 )
 
 // nodeUpgradeStateGroups defines the forward-progress ordering of node upgrade states.
@@ -66,6 +71,8 @@ var nodeUpgradeStateGroups = [][]NodeUpgradeState{
 	{NodeStatePostDraining},                                // 4
 	{NodeStateWaitingReboot},                               // 5
 	{NodeStatePostDrained, NodeStatePostDrainFailed, NodeStateSingleNodeUpgraded, NodeStateSingleNodeUpgradeFailed}, // 6
+	{NodeStateImageCleaning},                           // 7
+	{NodeStateImageCleaned, NodeStateImageCleanFailed}, // 8
 }
 
 var nodeUpgradeStateIndex map[NodeUpgradeState]int

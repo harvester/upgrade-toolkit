@@ -355,6 +355,54 @@ var _ = Describe("Job Controller", func() {
 		})
 	})
 
+	Context("When an image-cleanup job completes successfully", func() {
+		It("should set node state to ImageCleaned", func() {
+			createUpgradePlan()
+			job := createJob(upgradeplan.ImageCleanupComponent, "")
+			markJobComplete(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateImageCleaned))
+		})
+	})
+
+	Context("When an image-cleanup job fails", func() {
+		It("should set node state to ImageCleanFailed", func() {
+			createUpgradePlan()
+			job := createJob(upgradeplan.ImageCleanupComponent, "")
+			markJobFailed(job)
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateImageCleanFailed))
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].Reason).To(Equal("BackoffLimitExceeded"))
+		})
+	})
+
+	Context("When an image-cleanup job is in progress", func() {
+		It("should set node state to ImageCleaning", func() {
+			createUpgradePlan()
+			job := createJob(upgradeplan.ImageCleanupComponent, "")
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateImageCleaning))
+		})
+	})
+
 	Context("When a completed image-preload job is reconciled after node has progressed to PreDrained", func() {
 		It("should not regress the node state", func() {
 			up := createUpgradePlan()
