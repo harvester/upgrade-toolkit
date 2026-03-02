@@ -2,11 +2,23 @@
 
 Upgrade Toolkit is the primary component of Harvester Upgrade V2.
 
-## Customized Upgrades
+## User Guide
 
-Upgrade Toolkit supports upgrading a Harvester cluster using other container images that are not packaged in the ISO image for Upgrade Repo and also node-specific upgrade jobs. To do so, please see below.
+### Installation
 
-Create a Version CR. This is almost the same as before.
+The official way to install Upgrade Toolkit is via Helm:
+
+```bash
+helm upgrade --install upgrade-toolkit upgrade-toolkit \
+    --repo=https://charts.harvesterhci.io \
+    --namespace=harvester-system \
+    --create-namespace \
+    --values=values.yaml
+```
+
+### Kickstart an upgrade
+
+Create a Version CR. This is almost the same as [before](https://docs.harvesterhci.io/v1.7/upgrade/index#customize-the-version).
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -18,6 +30,23 @@ spec:
   isoURL: https://releases.rancher.com/harvester/master/harvester-master-amd64.iso
 EOF
 ```
+
+Create an UpgradePlan CR with the desired version.
+
+```bash
+cat <<EOF | kubectl create -f -
+apiVersion: management.harvesterhci.io/v1beta1
+kind: UpgradePlan
+metadata:
+  generateName: hvst-upgrade-
+spec:
+  version: master-head
+EOF
+```
+
+### Customized upgrades
+
+Upgrade Toolkit supports upgrading a Harvester cluster using other container images that are not packaged in the ISO image for Upgrade Repo and also node-specific upgrade jobs. To do so, please see below.
 
 When creating the UpgradePlan CR, specifying a different container image tag:
 
@@ -126,9 +155,9 @@ status:
     isoURL: https://releases.rancher.com/harvester/master/harvester-master-amd64.iso
 ```
 
-## Development
+## Development Guide
 
-### General Flow
+After making changes, build and test the upgrade-toolkit binary and container image.
 
 ```bash
 # Lint the code
@@ -141,6 +170,13 @@ make test
 make build
 
 # Build the container image
+# Adapt the `IMG` value below to your own image name and tag
+make docker-build IMG=starbops/harvester-upgrade-toolkit:dev
+```
+
+To build and push the container image, run:
+
+```bash
 # Adapt the `IMG` value below to your own image name and tag
 make docker-buildx IMG=starbops/harvester-upgrade-toolkit:dev
 ```
