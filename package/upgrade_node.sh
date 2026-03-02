@@ -108,7 +108,7 @@ EOF
 
   cat >> $HOST_DIR/tmp/upgrade-reboot.sh << 'EOF'
 source /etc/bash.bashrc.local
-pod_id=$(crictl pods --name $HARVESTER_UPGRADE_POD_NAME --namespace cattle-system -o json | jq -er '.items[0].id')
+pod_id=$(crictl pods --name $HARVESTER_UPGRADE_POD_NAME --namespace harvester-system -o json | jq -er '.items[0].id')
 
 # get `upgrade` container ID
 container_id=$(crictl ps --pod $pod_id --name apply -o json -a | jq -er '.containers[0].id')
