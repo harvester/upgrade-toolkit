@@ -2,14 +2,11 @@ package upgradeplan
 
 import (
 	"context"
-	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
-
-const requeueInterval = 10 * time.Second
 
 // MetadataPopulatePhase fetches release metadata from the upgrade repo.
 type MetadataPopulatePhase struct {
@@ -31,7 +28,7 @@ func (p *MetadataPopulatePhase) Run(
 	harvesterRelease := newHarvesterRelease(upgradePlan)
 	if err := harvesterRelease.loadReleaseMetadata(); err != nil {
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulating, err.Error())
-		return ctrl.Result{RequeueAfter: requeueInterval}, nil
+		return ctrl.Result{RequeueAfter: HttpGetRetryInterval}, nil
 	}
 	upgradePlan.Status.ReleaseMetadata = harvesterRelease.ReleaseMetadata
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseMetadataPopulated, "")

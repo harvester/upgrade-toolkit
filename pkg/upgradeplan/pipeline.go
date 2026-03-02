@@ -167,5 +167,5 @@ func (p *Pipeline) enterPhase(
 	}
 
 	updateProgressingPhase(upgradePlan, entry.ActivePhase, "")
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{RequeueAfter: RequeueAfterDuration}, nil
 }

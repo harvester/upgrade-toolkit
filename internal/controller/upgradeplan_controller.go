@@ -100,7 +100,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !reflect.DeepEqual(upgradePlan.Status, upgradePlanCopy.Status) {
 		if statusUpdateErr := r.Status().Update(ctx, upgradePlanCopy); statusUpdateErr != nil {
 			if apierrors.IsConflict(statusUpdateErr) {
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{RequeueAfter: upgradeplan.RequeueAfterDuration}, nil
 			}
 			return ctrl.Result{}, statusUpdateErr
 		}

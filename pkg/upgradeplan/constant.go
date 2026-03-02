@@ -1,6 +1,11 @@
 package upgradeplan
 
+import "time"
+
 const (
+	RequeueAfterDuration = 1 * time.Second
+	HttpGetRetryInterval = 10 * time.Second
+
 	HarvesterSystemNamespace = harvesterSystemNamespace
 
 	AnnotationPrefix         = "management.harvesterhci.io"

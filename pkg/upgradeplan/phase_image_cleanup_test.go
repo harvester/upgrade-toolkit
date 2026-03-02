@@ -124,9 +124,8 @@ func TestImageCleanupPhase_PlanAlreadyCompleted(t *testing.T) {
 	}
 
 	phase := newImageCleanupPhase(completedPlan)
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseCleanedUp, up.Status.CurrentPhase)
 }
 
@@ -147,9 +146,8 @@ func TestImageCleanupPhase_PlanRunning(t *testing.T) {
 	}
 
 	phase := newImageCleanupPhase(runningPlan)
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseCleaningUp, up.Status.CurrentPhase)
 }
 
@@ -178,9 +176,8 @@ func TestImageCleanupPhase_PlanJobFailed(t *testing.T) {
 	}
 
 	phase := newImageCleanupPhase(failedPlan)
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseFailed, up.Status.CurrentPhase)
 }
 
@@ -198,9 +195,8 @@ func TestImageCleanupPhase_NoPreviousVersion(t *testing.T) {
 	}
 
 	phase := newImageCleanupPhase()
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseCleanedUp, up.Status.CurrentPhase)
 }
 

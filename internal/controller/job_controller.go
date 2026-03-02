@@ -74,7 +74,7 @@ func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	for _, reconciler := range reconcilers {
 		if err := reconciler(ctx, jobCopy); err != nil {
 			if apierrors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{RequeueAfter: upgradeplan.RequeueAfterDuration}, nil
 			}
 			return ctrl.Result{}, err
 		}

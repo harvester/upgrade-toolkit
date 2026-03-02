@@ -208,9 +208,8 @@ func TestRunSingleNode_CreatesJob(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 
 	// Verify the single-node-upgrade Job was created
 	var jobList batchv1.JobList
@@ -265,9 +264,8 @@ func TestRunSingleNode_FailedNode(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 
 	// Phase should transition to Failed
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseFailed, up.Status.CurrentPhase)
@@ -282,9 +280,8 @@ func TestRunSingleNode_TerminalNode(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	result, err := phase.Run(context.Background(), up)
+	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 
 	// Phase should transition to NodeUpgraded
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
@@ -316,9 +313,8 @@ func TestCheckNodeStatuses_MultiNode_OneNotTerminal(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	result, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 }
 

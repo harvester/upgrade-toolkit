@@ -95,7 +95,7 @@ func (r *NodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if !reflect.DeepEqual(up.Status, upCopy.Status) {
 		if err := r.Status().Update(ctx, upCopy); err != nil {
 			if apierrors.IsConflict(err) {
-				return ctrl.Result{Requeue: true}, nil
+				return ctrl.Result{RequeueAfter: upgradeplan.RequeueAfterDuration}, nil
 			}
 			return ctrl.Result{}, err
 		}
