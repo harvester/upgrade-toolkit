@@ -16,6 +16,7 @@ const (
 	PrepareComponent               = "image-preload"
 	ClusterComponent               = "cluster-upgrade"
 	NodeComponent                  = "node-upgrade"
+	ImageCleanupComponent          = "image-cleanup"
 
 	// Label on image-preload Jobs set by SUC
 	SUCNodeLabel = SUCLabelPrefix + "/" + "node"

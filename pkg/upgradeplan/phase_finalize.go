@@ -53,6 +53,7 @@ func (p *FinalizePhase) PreRun(
 		{&appsv1.Deployment{}, harvesterSystemNamespace, repoComponent},
 		{&corev1.Service{}, harvesterSystemNamespace, repoComponent},
 		{&upgradev1.Plan{}, cattleSystemNamespace, PrepareComponent},
+		{&upgradev1.Plan{}, cattleSystemNamespace, ImageCleanupComponent},
 		{&batchv1.Job{}, harvesterSystemNamespace, ClusterComponent},
 		{&batchv1.Job{}, harvesterSystemNamespace, NodeComponent},
 	}

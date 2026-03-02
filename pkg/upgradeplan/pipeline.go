@@ -60,6 +60,11 @@ func NewPipeline(deps *PhaseDeps) *Pipeline {
 				managementv1beta1.UpgradePlanPhaseNodeUpgrading,
 				managementv1beta1.UpgradePlanPhaseNodeUpgraded,
 			},
+			{
+				NewImageCleanupPhase(deps),
+				managementv1beta1.UpgradePlanPhaseCleaningUp,
+				managementv1beta1.UpgradePlanPhaseCleanedUp,
+			},
 		},
 	}
 	p.buildIndex()
