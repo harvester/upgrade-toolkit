@@ -10,9 +10,6 @@ import (
 )
 
 // Check validates that the upgrade described by the UpgradePlan is eligible.
-// It mirrors the upstream harvester/harvester/pkg/upgradehelper/versionguard.Check,
-// adapted to read version information from the UpgradePlan status directly instead
-// of parsing RepoInfo YAML.
 func Check(upgradePlan *managementv1beta1.UpgradePlan, strictMode bool, minUpgradableVersionStr string) error {
 	if upgradePlan.Status.ReleaseMetadata == nil {
 		return errors.New("release metadata is not available in UpgradePlan status")

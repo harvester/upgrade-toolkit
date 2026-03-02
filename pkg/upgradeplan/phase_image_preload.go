@@ -11,6 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradehelper/versionguard"
 )
 
 // ImagePreloadPhase preloads container images via system-upgrade-controller Plan.
@@ -23,6 +24,30 @@ func NewImagePreloadPhase(deps *PhaseDeps) *ImagePreloadPhase {
 }
 
 func (p *ImagePreloadPhase) Name() string { return "ImagePreload" }
+
+// PreRun performs the upgrade eligibility check before image preloading begins.
+// When the check fails the UpgradePlan is moved to the Failed phase. Returning
+// nil (instead of an error) lets the reconciler persist the Failed status rather
+// than retrying indefinitely.
+func (p *ImagePreloadPhase) PreRun(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	p.Log.V(1).Info("running upgrade eligibility check")
+
+	if upgradePlan.Spec.Force != nil && *upgradePlan.Spec.Force {
+		p.Log.V(0).Info("force mode enabled, skipping upgrade eligibility check")
+		return nil
+	}
+
+	if err := versionguard.Check(upgradePlan, true, ""); err != nil {
+		p.Log.Error(err, "upgrade eligibility check failed")
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, err.Error())
+		return nil
+	}
+
+	return nil
+}
 
 func (p *ImagePreloadPhase) Run(
 	ctx context.Context,
