@@ -131,7 +131,7 @@ func updateProgressingPhase(
 	upgradePlan.Status.CurrentPhase = phase
 
 	if !upgradePlan.ConditionExists(managementv1beta1.UpgradePlanProgressing) {
-		upgradePlan.SetCondition(managementv1beta1.UpgradePlanProgressing, metav1.ConditionTrue, string(phase), "")
+		upgradePlan.SetCondition(managementv1beta1.UpgradePlanProgressing, metav1.ConditionTrue, string(phase), message)
 	} else {
 		cond := upgradePlan.LookupCondition(managementv1beta1.UpgradePlanProgressing)
 		upgradePlan.SetCondition(managementv1beta1.UpgradePlanProgressing, cond.Status, string(phase), message)
@@ -278,6 +278,10 @@ func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
 		return true
 	}
 	return false
+}
+
+func IsNodeUpgradePaused(status managementv1beta1.NodeUpgradeStatus) bool {
+	return status.State == managementv1beta1.NodeStateUpgradePaused
 }
 
 // ConstructNodeJob builds a Job for node-upgrade operations (pre-drain, post-drain,

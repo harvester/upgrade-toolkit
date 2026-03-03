@@ -318,6 +318,99 @@ func TestCheckNodeStatuses_MultiNode_OneNotTerminal(t *testing.T) {
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 }
 
+func TestCheckNodeStatuses_MultiNode_PausedAndNonTerminal(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+		"node-2": {State: managementv1beta1.NodeStateImagePreloaded},
+		"node-3": {
+			State:   managementv1beta1.NodeStateUpgradePaused,
+			Reason:  "AdministrativelyPaused",
+			Message: "Node upgrade paused as requested by the user",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	_, err := phase.checkNodeStatuses(up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
+
+	cond := up.LookupCondition(managementv1beta1.UpgradePlanProgressing)
+	assert.Contains(t, cond.Message, "node-3")
+	assert.Contains(t, cond.Message, "node upgrade paused")
+}
+
+func TestCheckNodeStatuses_MultiNode_OnlyPaused(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+		"node-2": {
+			State:   managementv1beta1.NodeStateUpgradePaused,
+			Reason:  "AdministrativelyPaused",
+			Message: "Node upgrade paused as requested by the user",
+		},
+		"node-3": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	_, err := phase.checkNodeStatuses(up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
+
+	cond := up.LookupCondition(managementv1beta1.UpgradePlanProgressing)
+	assert.Contains(t, cond.Message, "node-2")
+	assert.Contains(t, cond.Message, "node upgrade paused")
+}
+
+func TestCheckNodeStatuses_MultiNode_MultiplePaused(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+		"node-2": {
+			State:   managementv1beta1.NodeStateUpgradePaused,
+			Reason:  "AdministrativelyPaused",
+			Message: "Node upgrade paused as requested by the user",
+		},
+		"node-3": {
+			State:   managementv1beta1.NodeStateUpgradePaused,
+			Reason:  "AdministrativelyPaused",
+			Message: "Node upgrade paused as requested by the user",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	_, err := phase.checkNodeStatuses(up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
+
+	cond := up.LookupCondition(managementv1beta1.UpgradePlanProgressing)
+	assert.Equal(t, "node upgrade paused: node-2, node-3", cond.Message)
+}
+
+func TestCheckNodeStatuses_MultiNode_FailedTakesPriority(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {
+			State:   managementv1beta1.NodeStatePreDrainFailed,
+			Message: "pre-drain hook failed",
+		},
+		"node-2": {
+			State:   managementv1beta1.NodeStateUpgradePaused,
+			Reason:  "AdministrativelyPaused",
+			Message: "Node upgrade paused as requested by the user",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	_, err := phase.checkNodeStatuses(up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseFailed, up.Status.CurrentPhase)
+}
+
 func newMachinePlanSecret(name string, annotations map[string]string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

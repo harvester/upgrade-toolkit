@@ -3,6 +3,8 @@ package upgradeplan
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
@@ -104,23 +106,59 @@ func (p *NodeUpgradePhase) runSingleNode(
 }
 
 // checkNodeStatuses checks per-node statuses and transitions the phase accordingly.
+// It scans all nodes before deciding what to report, using the following priority:
+// 1. Failed
+// 2. Paused
+// 3. Still-progressing
+// 4. All-terminal
 func (p *NodeUpgradePhase) checkNodeStatuses(
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	var failedNode string
+	var failedMsg string
+	var pausedNodes []string
+	allTerminal := true
+
 	for nodeName, status := range upgradePlan.Status.NodeUpgradeStatuses {
 		if IsNodeUpgradeFailure(status) {
-			updateProgressingPhase(
-				upgradePlan,
-				managementv1beta1.UpgradePlanPhaseFailed,
-				fmt.Sprintf("node %s upgrade failed: %s", nodeName, status.Message),
-			)
-			return ctrl.Result{}, nil
+			failedNode = nodeName
+			failedMsg = status.Message
+			break
+		}
+		if IsNodeUpgradePaused(status) {
+			pausedNodes = append(pausedNodes, nodeName)
+			continue
 		}
 		if !isTerminalState(status) {
-			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
-			return ctrl.Result{}, nil
+			allTerminal = false
+			continue
 		}
 		p.Log.V(1).Info("node has reached the desired node upgrade state", "nodeName", nodeName)
+	}
+
+	if failedNode != "" {
+		updateProgressingPhase(
+			upgradePlan,
+			managementv1beta1.UpgradePlanPhaseFailed,
+			fmt.Sprintf("node %s upgrade failed: %s", failedNode, failedMsg),
+		)
+		return ctrl.Result{}, nil
+	}
+
+	if len(pausedNodes) > 0 {
+		sort.Strings(pausedNodes)
+		msg := fmt.Sprintf("node upgrade paused: %s", strings.Join(pausedNodes, ", "))
+		updateProgressingPhase(
+			upgradePlan,
+			managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+			msg,
+		)
+		return ctrl.Result{}, nil
+	}
+
+	if !allTerminal {
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgrading, "")
+		return ctrl.Result{}, nil
 	}
 
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgraded, "")
