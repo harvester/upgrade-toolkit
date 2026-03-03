@@ -227,9 +227,14 @@ func (upgradePlanNodeStatusChangedPredicate) Update(e event.UpdateEvent) bool {
 		return true
 	}
 
-	// Trigger when NodeUpgradeStatuses change during NodeUpgrading phase.
+	// Filter out not of interest phases
 	if newUP.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseNodeUpgrading {
 		return false
+	}
+
+	// Trigger when spec.nodeUpgradeOption changes (user pauses/unpauses nodes)
+	if !reflect.DeepEqual(oldUP.Spec.NodeUpgradeOption, newUP.Spec.NodeUpgradeOption) {
+		return true
 	}
 
 	return !reflect.DeepEqual(oldUP.Status.NodeUpgradeStatuses, newUP.Status.NodeUpgradeStatuses)
@@ -280,14 +285,18 @@ func (r *SecretReconciler) handlePreDrain(
 		return r.annotateSecret(ctx, secret, upgradeplan.PreHookAnnotation, rke2Value)
 	}
 
-	// Guardrail: Do not create the pre-drain Job until image-preload has completed
-	if !exists || nodeStatus.State != managementv1beta1.NodeStateImagePreloaded {
+	// Guardrail: Do not create the pre-drain Job until image-preload has completed.
+	// Also accept UpgradePaused state since the Job may already exist (suspended).
+	if !exists || (nodeStatus.State != managementv1beta1.NodeStateImagePreloaded &&
+		nodeStatus.State != managementv1beta1.NodeStateUpgradePaused) {
 		return nil
 	}
 
-	// Create or retrieve the pre-drain Job
+	shouldPause := upgradeplan.ShouldPauseNode(up, nodeName)
 	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain, nodeName)
-	return r.ensureNodeJob(ctx, up, nodeName, jobName, upgradeplan.JobTypePreDrain)
+
+	// Create the pre-drain Job (or reconcile its suspend state if it already exists)
+	return r.ensureNodeJob(ctx, up, nodeName, jobName, upgradeplan.JobTypePreDrain, shouldPause)
 }
 
 func (r *SecretReconciler) handlePostDrain(
@@ -318,27 +327,31 @@ func (r *SecretReconciler) handlePostDrain(
 
 	// Create or retrieve the post-drain Job
 	jobName := name.SafeConcatName(up.Name, upgradeplan.NodeComponent, upgradeplan.JobTypePostDrain, nodeName)
-	return r.ensureNodeJob(ctx, up, nodeName, jobName, upgradeplan.JobTypePostDrain)
+	return r.ensureNodeJob(ctx, up, nodeName, jobName, upgradeplan.JobTypePostDrain, false)
 }
 
 func (r *SecretReconciler) ensureNodeJob(
 	ctx context.Context,
 	up *managementv1beta1.UpgradePlan,
 	nodeName, jobName, jobType string,
+	suspend bool,
 ) error {
 	nn := types.NamespacedName{
 		Namespace: upgradeplan.HarvesterSystemNamespace,
 		Name:      jobName,
 	}
-	_, err := upgradeplan.GetOrCreate(
+	existing, err := upgradeplan.GetOrCreate(
 		ctx, r.Client, r.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
 		func() *batchv1.Job {
-			return upgradeplan.ConstructNodeJob(up, nodeName, jobName, jobType, r.JobServiceAccount)
+			return upgradeplan.ConstructNodeJob(up, nodeName, jobName, jobType, r.JobServiceAccount, suspend)
 		},
 		up,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return upgradeplan.ReconcileJobSuspend(ctx, r.Client, existing, suspend)
 }
 
 func (r *SecretReconciler) annotateSecret(

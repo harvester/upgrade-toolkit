@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -400,6 +401,42 @@ var _ = Describe("Job Controller", func() {
 			up := &managementv1beta1.UpgradePlan{}
 			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
 			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateImageCleaning))
+		})
+	})
+
+	Context("When a pre-drain job is suspended", func() {
+		It("should set node state to UpgradePaused", func() {
+			createUpgradePlan()
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypePreDrain)
+			// Suspend the job
+			job.Spec.Suspend = ptr.To(true)
+			Expect(k8sClient.Update(ctx, job)).To(Succeed())
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateUpgradePaused))
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].Reason).To(Equal("AdministrativelyPaused"))
+		})
+	})
+
+	Context("When a single-node-upgrade job is suspended", func() {
+		It("should set node state to UpgradePaused", func() {
+			createUpgradePlan()
+			job := createJob(upgradeplan.NodeComponent, upgradeplan.JobTypeSingleNodeUpgrade)
+			job.Spec.Suspend = ptr.To(true)
+			Expect(k8sClient.Update(ctx, job)).To(Succeed())
+
+			result, err := reconcileJob(job)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
+
+			up := &managementv1beta1.UpgradePlan{}
+			Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: upgradePlanName}, up)).To(Succeed())
+			Expect(up.Status.NodeUpgradeStatuses[testNodeName].State).To(Equal(managementv1beta1.NodeStateUpgradePaused))
 		})
 	})
 

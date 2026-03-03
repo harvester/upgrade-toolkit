@@ -233,6 +233,43 @@ func isTerminalState(status managementv1beta1.NodeUpgradeStatus) bool {
 		status.State == managementv1beta1.NodeStateSingleNodeUpgraded
 }
 
+// ShouldPauseNode returns true if the given node should be paused based on
+// the UpgradePlan's NodeUpgradeOption strategy.
+func ShouldPauseNode(up *managementv1beta1.UpgradePlan, nodeName string) bool {
+	opt := up.Spec.NodeUpgradeOption
+	if opt == nil || opt.Strategy == nil {
+		return false
+	}
+	// mode must be "manual" for any pausing to take effect
+	if opt.Strategy.Mode == nil || *opt.Strategy.Mode != managementv1beta1.NodeUpgradeModeManual {
+		return false
+	}
+	// manual mode with empty pauseNodes
+	// -> pause ALL nodes
+	if len(opt.Strategy.PauseNodes) == 0 {
+		return true
+	}
+	// manual mode with pauseNodes
+	// -> only pause listed nodes
+	for _, n := range opt.Strategy.PauseNodes {
+		if n == nodeName {
+			return true
+		}
+	}
+	return false
+}
+
+// ReconcileJobSuspend patches the Job's spec.suspend field if it differs from the desired state.
+func ReconcileJobSuspend(ctx context.Context, c client.Client, job *batchv1.Job, suspend bool) error {
+	currentlySuspended := job.Spec.Suspend != nil && *job.Spec.Suspend
+	if currentlySuspended == suspend {
+		return nil
+	}
+	patch := client.MergeFrom(job.DeepCopy())
+	job.Spec.Suspend = ptr.To(suspend)
+	return c.Patch(ctx, job, patch)
+}
+
 func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
 	switch status.State {
 	case managementv1beta1.NodeStatePreDrainFailed,
@@ -248,6 +285,7 @@ func IsNodeUpgradeFailure(status managementv1beta1.NodeUpgradeStatus) bool {
 func ConstructNodeJob(
 	upgradePlan *managementv1beta1.UpgradePlan,
 	nodeName, jobName, jobType, serviceAccountName string,
+	suspend bool,
 ) *batchv1.Job {
 	envVars := []corev1.EnvVar{
 		{
@@ -273,6 +311,11 @@ func ConstructNodeJob(
 		)
 	}
 
+	var suspendPtr *bool
+	if suspend {
+		suspendPtr = ptr.To(true)
+	}
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -285,6 +328,7 @@ func ConstructNodeJob(
 			},
 		},
 		Spec: batchv1.JobSpec{
+			Suspend:                 suspendPtr,
 			TTLSecondsAfterFinished: ptr.To[int32](defaultTTLSecondsAfterFinished),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

@@ -256,6 +256,15 @@ func failureStateFor(component, hookType string) managementv1beta1.NodeUpgradeSt
 func buildNodeUpgradeStatus(job *batchv1.Job, upgradeComponent string) managementv1beta1.NodeUpgradeStatus {
 	hookType := job.Labels[upgradeplan.HarvesterJobTypeLabel]
 
+	// A suspended Job means the node is administratively paused
+	if job.Spec.Suspend != nil && *job.Spec.Suspend {
+		return managementv1beta1.NodeUpgradeStatus{
+			State:   managementv1beta1.NodeStateUpgradePaused,
+			Reason:  "AdministrativelyPaused",
+			Message: "Node upgrade paused as requested by the user",
+		}
+	}
+
 	for _, condition := range job.Status.Conditions {
 		if condition.Status != corev1.ConditionTrue {
 			continue

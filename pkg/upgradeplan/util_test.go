@@ -292,7 +292,7 @@ func TestConstructNodeJob_SingleNodeUpgrade(t *testing.T) {
 
 	job := ConstructNodeJob(
 		up, "node-1", "test-upgrade-node-upgrade-single-node-upgrade-node-1",
-		JobTypeSingleNodeUpgrade, "harvester",
+		JobTypeSingleNodeUpgrade, "harvester", false,
 	)
 
 	// Verify labels
@@ -349,4 +349,144 @@ func TestConstructNodeJob_SingleNodeUpgrade(t *testing.T) {
 	require.Len(t, container.VolumeMounts, 1)
 	assert.Equal(t, "host-root", container.VolumeMounts[0].Name)
 	assert.Equal(t, "/host", container.VolumeMounts[0].MountPath)
+}
+
+func TestConstructNodeJob_Suspend(t *testing.T) {
+	up := &managementv1beta1.UpgradePlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-upgrade"},
+		Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+	}
+
+	t.Run("suspend=true sets spec.suspend", func(t *testing.T) {
+		job := ConstructNodeJob(up, "node-1", "job-1", JobTypePreDrain, "sa", true)
+		require.NotNil(t, job.Spec.Suspend)
+		assert.True(t, *job.Spec.Suspend)
+	})
+
+	t.Run("suspend=false leaves spec.suspend nil", func(t *testing.T) {
+		job := ConstructNodeJob(up, "node-1", "job-1", JobTypePreDrain, "sa", false)
+		assert.Nil(t, job.Spec.Suspend)
+	})
+}
+
+func TestShouldPauseNode(t *testing.T) {
+	testCases := []struct {
+		name     string
+		option   *managementv1beta1.NodeUpgradeOption
+		nodeName string
+		expected bool
+	}{
+		{
+			name:     "nil option",
+			option:   nil,
+			nodeName: "node-1",
+			expected: false,
+		},
+		{
+			name: "nil strategy",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: nil,
+			},
+			nodeName: "node-1",
+			expected: false,
+		},
+		{
+			name: "mode auto, empty pauseNodes",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: &managementv1beta1.NodeUpgradeStrategy{
+					Mode: ptr.To(managementv1beta1.NodeUpgradeModeAuto),
+				},
+			},
+			nodeName: "node-1",
+			expected: false,
+		},
+		{
+			name: "mode nil, empty pauseNodes",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: &managementv1beta1.NodeUpgradeStrategy{},
+			},
+			nodeName: "node-1",
+			expected: false,
+		},
+		{
+			name: "mode manual, empty pauseNodes pauses all",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: &managementv1beta1.NodeUpgradeStrategy{
+					Mode: ptr.To(managementv1beta1.NodeUpgradeModeManual),
+				},
+			},
+			nodeName: "node-1",
+			expected: true,
+		},
+		{
+			name: "mode manual, node in pauseNodes",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: &managementv1beta1.NodeUpgradeStrategy{
+					Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
+					PauseNodes: []string{"node-1", "node-2"},
+				},
+			},
+			nodeName: "node-1",
+			expected: true,
+		},
+		{
+			name: "mode manual, node not in pauseNodes",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: &managementv1beta1.NodeUpgradeStrategy{
+					Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
+					PauseNodes: []string{"node-2", "node-3"},
+				},
+			},
+			nodeName: "node-1",
+			expected: false,
+		},
+		{
+			name: "mode auto with pauseNodes (invalid config) returns false",
+			option: &managementv1beta1.NodeUpgradeOption{
+				Strategy: &managementv1beta1.NodeUpgradeStrategy{
+					Mode:       ptr.To(managementv1beta1.NodeUpgradeModeAuto),
+					PauseNodes: []string{"node-1"},
+				},
+			},
+			nodeName: "node-1",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			up := &managementv1beta1.UpgradePlan{
+				Spec: managementv1beta1.UpgradePlanSpec{
+					NodeUpgradeOption: tc.option,
+				},
+			}
+			assert.Equal(t, tc.expected, ShouldPauseNode(up, tc.nodeName))
+		})
+	}
+}
+
+func TestIsNodeUpgradeStateAhead_UpgradePaused(t *testing.T) {
+	// UpgradePaused is ahead of ImagePreloaded
+	assert.True(t, managementv1beta1.IsNodeUpgradeStateAhead(
+		managementv1beta1.NodeStateUpgradePaused,
+		managementv1beta1.NodeStateImagePreloaded,
+	))
+
+	// ImagePreloaded is NOT ahead of UpgradePaused
+	assert.False(t, managementv1beta1.IsNodeUpgradeStateAhead(
+		managementv1beta1.NodeStateImagePreloaded,
+		managementv1beta1.NodeStateUpgradePaused,
+	))
+
+	// PreDraining is ahead of UpgradePaused
+	assert.True(t, managementv1beta1.IsNodeUpgradeStateAhead(
+		managementv1beta1.NodeStatePreDraining,
+		managementv1beta1.NodeStateUpgradePaused,
+	))
+
+	// UpgradePaused is NOT ahead of PreDraining
+	assert.False(t, managementv1beta1.IsNodeUpgradeStateAhead(
+		managementv1beta1.NodeStateUpgradePaused,
+		managementv1beta1.NodeStatePreDraining,
+	))
 }

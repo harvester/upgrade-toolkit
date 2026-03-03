@@ -19,6 +19,7 @@ package v1beta1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -35,6 +36,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
 		Expect(managementv1beta1.AddToScheme(scheme)).To(Succeed())
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	Context("ValidateCreate", func() {
@@ -226,7 +228,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("spec.upgrade"))
 		})
 
-		It("should allow when only spec.mode is changed", func() {
+		It("should allow when only spec.nodeUpgradeOption is changed", func() {
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
 			}
@@ -234,14 +236,17 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
-					Mode:    ptr.To("automatic"),
 				},
 			}
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
-					Mode:    ptr.To("interactive"),
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode: ptr.To(managementv1beta1.NodeUpgradeModeManual),
+						},
+					},
 				},
 			}
 
@@ -342,6 +347,165 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			_, err := validator.ValidateDelete(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Progressing"))
+		})
+	})
+
+	Context("validateNodeUpgradeOption", func() {
+		It("should reject mode auto with non-empty pauseNodes on create", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, node).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeAuto),
+							PauseNodes: []string{"node-1"},
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("pauseNodes"))
+		})
+
+		It("should reject pauseNodes with non-existent node names on create", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
+							PauseNodes: []string{"nonexistent-node"},
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("nonexistent-node"))
+		})
+
+		It("should reject duplicate pauseNodes on update", func() {
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(node1).Build(),
+			}
+			oldObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+			newObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
+							PauseNodes: []string{"node-1", "node-1"},
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Duplicate"))
+		})
+
+		It("should reject empty string in pauseNodes", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			oldObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+			newObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
+							PauseNodes: []string{""},
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("node name must not be empty"))
+		})
+
+		It("should accept mode manual with pauseNodes", func() {
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-2"}}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(node1, node2).Build(),
+			}
+			oldObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+			newObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
+							PauseNodes: []string{"node-1", "node-2"},
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should accept mode manual with empty pauseNodes (pause all)", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			oldObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+			newObj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
+						Strategy: &managementv1beta1.NodeUpgradeStrategy{
+							Mode: ptr.To(managementv1beta1.NodeUpgradeModeManual),
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

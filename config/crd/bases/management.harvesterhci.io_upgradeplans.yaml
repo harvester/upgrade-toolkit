@@ -62,14 +62,37 @@ spec:
                 description: force indicates the UpgradePlan will be forcibly applied,
                   ignoring any pre-upgrade check failures. Default to "false".
                 type: boolean
-              mode:
-                default: automatic
-                description: mode represents the manipulative style of the UpgradePlan.
-                  Can be either of "automatic" or "interactive". Default to "automatic".
-                enum:
-                - automatic
-                - interactive
-                type: string
+              nodeUpgradeOption:
+                description: nodeUpgradeOption configures node upgrade behavior including
+                  pause/unpause control.
+                properties:
+                  strategy:
+                    description: strategy controls pause/unpause behavior during the
+                      NodeUpgrading phase.
+                    properties:
+                      mode:
+                        default: auto
+                        description: |-
+                          mode controls whether nodes are upgraded automatically or require manual unpause.
+                          "auto" (default): all nodes proceed through PreDraining without pausing.
+                          "manual": nodes are paused before PreDraining. Which nodes are paused depends
+                          on pauseNodes: if empty, ALL nodes are paused; if non-empty, only listed nodes are paused.
+                        enum:
+                        - auto
+                        - manual
+                        type: string
+                      pauseNodes:
+                        description: |-
+                          pauseNodes lists specific node names to pause before PreDraining.
+                          Only effective when mode is "manual". If empty while mode is "manual", all nodes
+                          are paused. Removing a node from this list unpauses it.
+                          Must be empty when mode is "auto".
+                        items:
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                    type: object
+                type: object
               upgrade:
                 description: |-
                   upgrade can be specified to opt for any other specific upgrade image. If not provided, the version resource name is used.

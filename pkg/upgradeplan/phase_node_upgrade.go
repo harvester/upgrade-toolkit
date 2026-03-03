@@ -94,7 +94,8 @@ func (p *NodeUpgradePhase) runSingleNode(
 	nodeName := *upgradePlan.Status.SingleNode
 	p.Log.V(1).Info("handle single-node upgrade", "node", nodeName)
 
-	if err := p.ensureSingleNodeUpgradeJob(ctx, upgradePlan, nodeName); err != nil {
+	shouldPause := ShouldPauseNode(upgradePlan, nodeName)
+	if err := p.ensureSingleNodeUpgradeJob(ctx, upgradePlan, nodeName, shouldPause); err != nil {
 		p.Log.Error(err, "unable to ensure single-node upgrade job")
 		return ctrl.Result{}, err
 	}
@@ -162,10 +163,12 @@ func (p *NodeUpgradePhase) PostRun(
 }
 
 // ensureSingleNodeUpgradeJob creates the single-node-upgrade Job if it doesn't already exist.
+// If the Job already exists, it reconciles the suspend state.
 func (p *NodeUpgradePhase) ensureSingleNodeUpgradeJob(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 	nodeName string,
+	suspend bool,
 ) error {
 	jobName := name.SafeConcatName(upgradePlan.Name, NodeComponent, JobTypeSingleNodeUpgrade, nodeName)
 	nn := types.NamespacedName{
@@ -173,15 +176,18 @@ func (p *NodeUpgradePhase) ensureSingleNodeUpgradeJob(
 		Name:      jobName,
 	}
 
-	_, err := GetOrCreate(
+	existing, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
 		func() *batchv1.Job {
-			return ConstructNodeJob(upgradePlan, nodeName, jobName, JobTypeSingleNodeUpgrade, p.JobServiceAccount)
+			return ConstructNodeJob(upgradePlan, nodeName, jobName, JobTypeSingleNodeUpgrade, p.JobServiceAccount, suspend)
 		},
 		upgradePlan,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return ReconcileJobSuspend(ctx, p.Client, existing, suspend)
 }
 
 // ensureClusterPatched patches the provisioning.cattle.io/v1 Cluster resource

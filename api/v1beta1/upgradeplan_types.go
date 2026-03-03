@@ -50,6 +50,9 @@ const (
 	NodeStatePostDrained     NodeUpgradeState = "PostDrained"
 	NodeStatePostDrainFailed NodeUpgradeState = "PostDrainFailed"
 
+	// Pause state: node is administratively paused before pre-drain
+	NodeStateUpgradePaused NodeUpgradeState = "UpgradePaused"
+
 	// Single-node upgrade lifecycle states
 	NodeStateSingleNodeUpgrading     NodeUpgradeState = "SingleNodeUpgrading"
 	NodeStateSingleNodeUpgradeFailed NodeUpgradeState = "SingleNodeUpgradeFailed"
@@ -66,13 +69,14 @@ const (
 var nodeUpgradeStateGroups = [][]NodeUpgradeState{
 	{NodeStateImagePreloading},                             // 0
 	{NodeStateImagePreloaded, NodeStateImagePreloadFailed}, // 1
-	{NodeStatePreDraining, NodeStateSingleNodeUpgrading},   // 2
-	{NodeStatePreDrained, NodeStatePreDrainFailed},         // 3
-	{NodeStatePostDraining},                                // 4
-	{NodeStateWaitingReboot},                               // 5
-	{NodeStatePostDrained, NodeStatePostDrainFailed, NodeStateSingleNodeUpgraded, NodeStateSingleNodeUpgradeFailed}, // 6
-	{NodeStateImageCleaning},                           // 7
-	{NodeStateImageCleaned, NodeStateImageCleanFailed}, // 8
+	{NodeStateUpgradePaused},                               // 2
+	{NodeStatePreDraining, NodeStateSingleNodeUpgrading},   // 3
+	{NodeStatePreDrained, NodeStatePreDrainFailed},         // 4
+	{NodeStatePostDraining},                                // 5
+	{NodeStateWaitingReboot},                               // 6
+	{NodeStatePostDrained, NodeStatePostDrainFailed, NodeStateSingleNodeUpgraded, NodeStateSingleNodeUpgradeFailed}, // 7
+	{NodeStateImageCleaning},                           // 8
+	{NodeStateImageCleaned, NodeStateImageCleanFailed}, // 9
 }
 
 var nodeUpgradeStateIndex map[NodeUpgradeState]int
@@ -121,6 +125,41 @@ type NodeUpgradeStatus struct {
 	Message string           `json:"message,omitempty"`
 }
 
+// NodeUpgradeMode controls whether node upgrades proceed automatically or require manual intervention.
+// +kubebuilder:validation:Enum:=auto;manual
+type NodeUpgradeMode string
+
+const (
+	NodeUpgradeModeAuto   NodeUpgradeMode = "auto"
+	NodeUpgradeModeManual NodeUpgradeMode = "manual"
+)
+
+// NodeUpgradeStrategy specifies the mode and scope of pause behavior during node upgrades.
+type NodeUpgradeStrategy struct {
+	// mode controls whether nodes are upgraded automatically or require manual unpause.
+	// "auto" (default): all nodes proceed through PreDraining without pausing.
+	// "manual": nodes are paused before PreDraining. Which nodes are paused depends
+	// on pauseNodes: if empty, ALL nodes are paused; if non-empty, only listed nodes are paused.
+	// +optional
+	// +kubebuilder:default:=auto
+	Mode *NodeUpgradeMode `json:"mode,omitempty"`
+
+	// pauseNodes lists specific node names to pause before PreDraining.
+	// Only effective when mode is "manual". If empty while mode is "manual", all nodes
+	// are paused. Removing a node from this list unpauses it.
+	// Must be empty when mode is "auto".
+	// +listType=set
+	// +optional
+	PauseNodes []string `json:"pauseNodes,omitempty"`
+}
+
+// NodeUpgradeOption configures node upgrade behavior.
+type NodeUpgradeOption struct {
+	// strategy controls pause/unpause behavior during the NodeUpgrading phase.
+	// +optional
+	Strategy *NodeUpgradeStrategy `json:"strategy,omitempty"`
+}
+
 // UpgradePlanPhase defines what overall phase UpgradePlan is in
 type UpgradePlanPhase string
 
@@ -159,11 +198,9 @@ type UpgradePlanSpec struct {
 	// +optional
 	Force *bool `json:"force,omitempty"`
 
-	// mode represents the manipulative style of the UpgradePlan. Can be either of "automatic" or "interactive". Default to "automatic".
+	// nodeUpgradeOption configures node upgrade behavior including pause/unpause control.
 	// +optional
-	// +kubebuilder:default:=automatic
-	// +kubebuilder:validation:Enum:=automatic;interactive
-	Mode *string `json:"mode,omitempty"`
+	NodeUpgradeOption *NodeUpgradeOption `json:"nodeUpgradeOption,omitempty"`
 }
 
 // UpgradePlanStatus defines the observed state of UpgradePlan.

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -118,6 +119,8 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 		}
 	}
 
+	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
+
 	if len(allErrs) > 0 {
 		return nil, apierrors.NewInvalid(
 			managementv1beta1.GroupVersion.WithKind("UpgradePlan").GroupKind(),
@@ -127,7 +130,7 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type UpgradePlan.
-func (v *UpgradePlanCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	oldUpgradePlan, ok := oldObj.(*managementv1beta1.UpgradePlan)
 	if !ok {
 		return nil, fmt.Errorf("expected an UpgradePlan object but got %T", oldObj)
@@ -151,6 +154,8 @@ func (v *UpgradePlanCustomValidator) ValidateUpdate(_ context.Context, oldObj, n
 			field.NewPath("spec", "upgrade"),
 			"field is immutable after creation"))
 	}
+
+	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, newUpgradePlan)...)
 
 	if len(allErrs) > 0 {
 		return nil, apierrors.NewInvalid(
@@ -185,4 +190,65 @@ func (v *UpgradePlanCustomValidator) ValidateDelete(_ context.Context, obj runti
 func isProgressing(upgradePlan *managementv1beta1.UpgradePlan) bool {
 	cond := upgradePlan.LookupCondition(managementv1beta1.UpgradePlanProgressing)
 	return cond.Status == metav1.ConditionTrue
+}
+
+// validateNodeUpgradeOption validates the nodeUpgradeOption field.
+func validateNodeUpgradeOption(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
+	var allErrs field.ErrorList
+
+	opt := upgradePlan.Spec.NodeUpgradeOption
+	if opt == nil || opt.Strategy == nil {
+		return nil
+	}
+
+	strategyPath := field.NewPath("spec", "nodeUpgradeOption", "strategy")
+	pauseNodesPath := strategyPath.Child("pauseNodes")
+
+	// pauseNodes must be empty when mode is "auto" (or unset)
+	mode := managementv1beta1.NodeUpgradeModeAuto
+	if opt.Strategy.Mode != nil {
+		mode = *opt.Strategy.Mode
+	}
+	if mode == managementv1beta1.NodeUpgradeModeAuto && len(opt.Strategy.PauseNodes) > 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			pauseNodesPath,
+			"pauseNodes must be empty when mode is \"auto\""))
+	}
+
+	// Build a set of existing node names for membership checks
+	var nodeSet map[string]struct{}
+	if len(opt.Strategy.PauseNodes) > 0 {
+		var nodeList corev1.NodeList
+		if err := c.List(ctx, &nodeList); err != nil {
+			allErrs = append(allErrs, field.InternalError(
+				pauseNodesPath, fmt.Errorf("failed to list nodes: %w", err)))
+			return allErrs
+		}
+		nodeSet = make(map[string]struct{}, len(nodeList.Items))
+		for _, node := range nodeList.Items {
+			nodeSet[node.Name] = struct{}{}
+		}
+	}
+
+	// Validate individual pauseNodes entries
+	seen := make(map[string]bool, len(opt.Strategy.PauseNodes))
+	for i, n := range opt.Strategy.PauseNodes {
+		if n == "" {
+			allErrs = append(allErrs, field.Required(
+				pauseNodesPath.Index(i),
+				"node name must not be empty"))
+		} else if nodeSet != nil {
+			if _, exists := nodeSet[n]; !exists {
+				allErrs = append(allErrs, field.NotFound(
+					pauseNodesPath.Index(i), n))
+			}
+		}
+		if seen[n] {
+			allErrs = append(allErrs, field.Duplicate(
+				pauseNodesPath.Index(i), n))
+		}
+		seen[n] = true
+	}
+
+	return allErrs
 }
