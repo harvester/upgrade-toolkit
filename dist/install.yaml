@@ -70,14 +70,22 @@ spec:
                 description: force indicates the UpgradePlan will be forcibly applied,
                   ignoring any pre-upgrade check failures. Default to "false".
                 type: boolean
-              mode:
-                default: automatic
-                description: mode represents the manipulative style of the UpgradePlan.
-                  Can be either of "automatic" or "interactive". Default to "automatic".
-                enum:
-                - automatic
-                - interactive
-                type: string
+              nodeUpgradeOption:
+                description: nodeUpgradeOption configures node upgrade behavior including
+                  pause/unpause control.
+                properties:
+                  pauseNodes:
+                    description: |-
+                      pauseNodes lists specific node names to pause before PreDraining.
+                      When non-empty, only the listed nodes are paused; all other nodes proceed
+                      automatically. When empty (or when nodeUpgradeOption is nil), no nodes are
+                      paused. Removing a node from this list unpauses it. To pause all nodes,
+                      list every node name explicitly.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                type: object
               upgrade:
                 description: |-
                   upgrade can be specified to opt for any other specific upgrade image. If not provided, the version resource name is used.
