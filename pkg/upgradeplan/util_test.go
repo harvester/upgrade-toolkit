@@ -383,70 +383,23 @@ func TestShouldPauseNode(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "nil strategy",
-			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: nil,
-			},
+			name:     "empty pauseNodes",
+			option:   &managementv1beta1.NodeUpgradeOption{},
 			nodeName: "node-1",
 			expected: false,
 		},
 		{
-			name: "mode auto, empty pauseNodes",
+			name: "node in pauseNodes",
 			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: &managementv1beta1.NodeUpgradeStrategy{
-					Mode: ptr.To(managementv1beta1.NodeUpgradeModeAuto),
-				},
-			},
-			nodeName: "node-1",
-			expected: false,
-		},
-		{
-			name: "mode nil, empty pauseNodes",
-			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: &managementv1beta1.NodeUpgradeStrategy{},
-			},
-			nodeName: "node-1",
-			expected: false,
-		},
-		{
-			name: "mode manual, empty pauseNodes pauses all",
-			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: &managementv1beta1.NodeUpgradeStrategy{
-					Mode: ptr.To(managementv1beta1.NodeUpgradeModeManual),
-				},
+				PauseNodes: []string{"node-1", "node-2"},
 			},
 			nodeName: "node-1",
 			expected: true,
 		},
 		{
-			name: "mode manual, node in pauseNodes",
+			name: "node not in pauseNodes",
 			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: &managementv1beta1.NodeUpgradeStrategy{
-					Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
-					PauseNodes: []string{"node-1", "node-2"},
-				},
-			},
-			nodeName: "node-1",
-			expected: true,
-		},
-		{
-			name: "mode manual, node not in pauseNodes",
-			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: &managementv1beta1.NodeUpgradeStrategy{
-					Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
-					PauseNodes: []string{"node-2", "node-3"},
-				},
-			},
-			nodeName: "node-1",
-			expected: false,
-		},
-		{
-			name: "mode auto with pauseNodes (invalid config) returns false",
-			option: &managementv1beta1.NodeUpgradeOption{
-				Strategy: &managementv1beta1.NodeUpgradeStrategy{
-					Mode:       ptr.To(managementv1beta1.NodeUpgradeModeAuto),
-					PauseNodes: []string{"node-1"},
-				},
+				PauseNodes: []string{"node-2", "node-3"},
 			},
 			nodeName: "node-1",
 			expected: false,

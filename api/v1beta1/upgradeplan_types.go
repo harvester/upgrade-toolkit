@@ -125,39 +125,16 @@ type NodeUpgradeStatus struct {
 	Message string           `json:"message,omitempty"`
 }
 
-// NodeUpgradeMode controls whether node upgrades proceed automatically or require manual intervention.
-// +kubebuilder:validation:Enum:=auto;manual
-type NodeUpgradeMode string
-
-const (
-	NodeUpgradeModeAuto   NodeUpgradeMode = "auto"
-	NodeUpgradeModeManual NodeUpgradeMode = "manual"
-)
-
-// NodeUpgradeStrategy specifies the mode and scope of pause behavior during node upgrades.
-type NodeUpgradeStrategy struct {
-	// mode controls whether nodes are upgraded automatically or require manual unpause.
-	// "auto" (default): all nodes proceed through PreDraining without pausing.
-	// "manual": nodes are paused before PreDraining. Which nodes are paused depends
-	// on pauseNodes: if empty, ALL nodes are paused; if non-empty, only listed nodes are paused.
-	// +optional
-	// +kubebuilder:default:=auto
-	Mode *NodeUpgradeMode `json:"mode,omitempty"`
-
+// NodeUpgradeOption configures node upgrade behavior during the NodeUpgrading phase.
+type NodeUpgradeOption struct {
 	// pauseNodes lists specific node names to pause before PreDraining.
-	// Only effective when mode is "manual". If empty while mode is "manual", all nodes
-	// are paused. Removing a node from this list unpauses it.
-	// Must be empty when mode is "auto".
+	// When non-empty, only the listed nodes are paused; all other nodes proceed
+	// automatically. When empty (or when nodeUpgradeOption is nil), no nodes are
+	// paused. Removing a node from this list unpauses it. To pause all nodes,
+	// list every node name explicitly.
 	// +listType=set
 	// +optional
 	PauseNodes []string `json:"pauseNodes,omitempty"`
-}
-
-// NodeUpgradeOption configures node upgrade behavior.
-type NodeUpgradeOption struct {
-	// strategy controls pause/unpause behavior during the NodeUpgrading phase.
-	// +optional
-	Strategy *NodeUpgradeStrategy `json:"strategy,omitempty"`
 }
 
 // UpgradePlanPhase defines what overall phase UpgradePlan is in

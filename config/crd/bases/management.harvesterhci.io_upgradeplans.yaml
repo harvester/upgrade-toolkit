@@ -66,32 +66,17 @@ spec:
                 description: nodeUpgradeOption configures node upgrade behavior including
                   pause/unpause control.
                 properties:
-                  strategy:
-                    description: strategy controls pause/unpause behavior during the
-                      NodeUpgrading phase.
-                    properties:
-                      mode:
-                        default: auto
-                        description: |-
-                          mode controls whether nodes are upgraded automatically or require manual unpause.
-                          "auto" (default): all nodes proceed through PreDraining without pausing.
-                          "manual": nodes are paused before PreDraining. Which nodes are paused depends
-                          on pauseNodes: if empty, ALL nodes are paused; if non-empty, only listed nodes are paused.
-                        enum:
-                        - auto
-                        - manual
-                        type: string
-                      pauseNodes:
-                        description: |-
-                          pauseNodes lists specific node names to pause before PreDraining.
-                          Only effective when mode is "manual". If empty while mode is "manual", all nodes
-                          are paused. Removing a node from this list unpauses it.
-                          Must be empty when mode is "auto".
-                        items:
-                          type: string
-                        type: array
-                        x-kubernetes-list-type: set
-                    type: object
+                  pauseNodes:
+                    description: |-
+                      pauseNodes lists specific node names to pause before PreDraining.
+                      When non-empty, only the listed nodes are paused; all other nodes proceed
+                      automatically. When empty (or when nodeUpgradeOption is nil), no nodes are
+                      paused. Removing a node from this list unpauses it. To pause all nodes,
+                      list every node name explicitly.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
                 type: object
               upgrade:
                 description: |-

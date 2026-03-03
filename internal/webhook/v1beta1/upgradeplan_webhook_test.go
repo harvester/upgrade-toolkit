@@ -229,8 +229,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when only spec.nodeUpgradeOption is changed", func() {
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(node1).Build(),
 			}
 			oldObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
@@ -243,9 +244,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode: ptr.To(managementv1beta1.NodeUpgradeModeManual),
-						},
+						PauseNodes: []string{"node-1"},
 					},
 				},
 			}
@@ -351,34 +350,6 @@ var _ = Describe("UpgradePlan Webhook", func() {
 	})
 
 	Context("validateNodeUpgradeOption", func() {
-		It("should reject mode auto with non-empty pauseNodes on create", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-			}
-			node := &corev1.Node{
-				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
-			}
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, node).Build(),
-			}
-			obj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
-					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeAuto),
-							PauseNodes: []string{"node-1"},
-						},
-					},
-				},
-			}
-
-			_, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("pauseNodes"))
-		})
-
 		It("should reject pauseNodes with non-existent node names on create", func() {
 			version := &managementv1beta1.Version{
 				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
@@ -391,10 +362,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
-							PauseNodes: []string{"nonexistent-node"},
-						},
+						PauseNodes: []string{"nonexistent-node"},
 					},
 				},
 			}
@@ -418,10 +386,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
-							PauseNodes: []string{"node-1", "node-1"},
-						},
+						PauseNodes: []string{"node-1", "node-1"},
 					},
 				},
 			}
@@ -444,10 +409,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
-							PauseNodes: []string{""},
-						},
+						PauseNodes: []string{""},
 					},
 				},
 			}
@@ -457,7 +419,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("node name must not be empty"))
 		})
 
-		It("should accept mode manual with pauseNodes", func() {
+		It("should accept valid pauseNodes", func() {
 			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
 			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-2"}}
 			validator := UpgradePlanCustomValidator{
@@ -472,10 +434,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: "v1.4.0",
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode:       ptr.To(managementv1beta1.NodeUpgradeModeManual),
-							PauseNodes: []string{"node-1", "node-2"},
-						},
+						PauseNodes: []string{"node-1", "node-2"},
 					},
 				},
 			}
@@ -484,7 +443,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should accept mode manual with empty pauseNodes (pause all)", func() {
+		It("should accept empty pauseNodes (no nodes paused)", func() {
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
 			}
@@ -495,12 +454,8 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
-					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						Strategy: &managementv1beta1.NodeUpgradeStrategy{
-							Mode: ptr.To(managementv1beta1.NodeUpgradeModeManual),
-						},
-					},
+					Version:           "v1.4.0",
+					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{},
 				},
 			}
 

@@ -234,24 +234,13 @@ func isTerminalState(status managementv1beta1.NodeUpgradeStatus) bool {
 }
 
 // ShouldPauseNode returns true if the given node should be paused based on
-// the UpgradePlan's NodeUpgradeOption strategy.
+// the UpgradePlan's NodeUpgradeOption.PauseNodes list.
 func ShouldPauseNode(up *managementv1beta1.UpgradePlan, nodeName string) bool {
 	opt := up.Spec.NodeUpgradeOption
-	if opt == nil || opt.Strategy == nil {
+	if opt == nil {
 		return false
 	}
-	// mode must be "manual" for any pausing to take effect
-	if opt.Strategy.Mode == nil || *opt.Strategy.Mode != managementv1beta1.NodeUpgradeModeManual {
-		return false
-	}
-	// manual mode with empty pauseNodes
-	// -> pause ALL nodes
-	if len(opt.Strategy.PauseNodes) == 0 {
-		return true
-	}
-	// manual mode with pauseNodes
-	// -> only pause listed nodes
-	for _, n := range opt.Strategy.PauseNodes {
+	for _, n := range opt.PauseNodes {
 		if n == nodeName {
 			return true
 		}

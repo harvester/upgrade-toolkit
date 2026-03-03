@@ -197,47 +197,32 @@ func validateNodeUpgradeOption(ctx context.Context, c client.Reader, upgradePlan
 	var allErrs field.ErrorList
 
 	opt := upgradePlan.Spec.NodeUpgradeOption
-	if opt == nil || opt.Strategy == nil {
+	if opt == nil || len(opt.PauseNodes) == 0 {
 		return nil
 	}
 
-	strategyPath := field.NewPath("spec", "nodeUpgradeOption", "strategy")
-	pauseNodesPath := strategyPath.Child("pauseNodes")
-
-	// pauseNodes must be empty when mode is "auto" (or unset)
-	mode := managementv1beta1.NodeUpgradeModeAuto
-	if opt.Strategy.Mode != nil {
-		mode = *opt.Strategy.Mode
-	}
-	if mode == managementv1beta1.NodeUpgradeModeAuto && len(opt.Strategy.PauseNodes) > 0 {
-		allErrs = append(allErrs, field.Forbidden(
-			pauseNodesPath,
-			"pauseNodes must be empty when mode is \"auto\""))
-	}
+	pauseNodesPath := field.NewPath("spec", "nodeUpgradeOption", "pauseNodes")
 
 	// Build a set of existing node names for membership checks
-	var nodeSet map[string]struct{}
-	if len(opt.Strategy.PauseNodes) > 0 {
-		var nodeList corev1.NodeList
-		if err := c.List(ctx, &nodeList); err != nil {
-			allErrs = append(allErrs, field.InternalError(
-				pauseNodesPath, fmt.Errorf("failed to list nodes: %w", err)))
-			return allErrs
-		}
-		nodeSet = make(map[string]struct{}, len(nodeList.Items))
-		for _, node := range nodeList.Items {
-			nodeSet[node.Name] = struct{}{}
-		}
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			pauseNodesPath, fmt.Errorf("failed to list nodes: %w", err)))
+		return allErrs
+	}
+	nodeSet := make(map[string]struct{}, len(nodeList.Items))
+	for _, node := range nodeList.Items {
+		nodeSet[node.Name] = struct{}{}
 	}
 
 	// Validate individual pauseNodes entries
-	seen := make(map[string]bool, len(opt.Strategy.PauseNodes))
-	for i, n := range opt.Strategy.PauseNodes {
+	seen := make(map[string]bool, len(opt.PauseNodes))
+	for i, n := range opt.PauseNodes {
 		if n == "" {
 			allErrs = append(allErrs, field.Required(
 				pauseNodesPath.Index(i),
 				"node name must not be empty"))
-		} else if nodeSet != nil {
+		} else {
 			if _, exists := nodeSet[n]; !exists {
 				allErrs = append(allErrs, field.NotFound(
 					pauseNodesPath.Index(i), n))
