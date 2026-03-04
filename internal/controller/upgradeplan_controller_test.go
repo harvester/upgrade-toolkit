@@ -32,6 +32,48 @@ import (
 	upgradeplanpkg "github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
+func newReconciler() *UpgradePlanReconciler {
+	deps := &upgradeplanpkg.PhaseDeps{
+		Client:             k8sClient,
+		Scheme:             k8sClient.Scheme(),
+		Log:                logr.Discard(),
+		JobServiceAccount:  "harvester",
+		PlanServiceAccount: "system-upgrade-controller",
+	}
+	return &UpgradePlanReconciler{
+		Client:             k8sClient,
+		Scheme:             k8sClient.Scheme(),
+		Log:                logr.Discard(),
+		JobServiceAccount:  "harvester",
+		PlanServiceAccount: "system-upgrade-controller",
+		pipeline:           upgradeplanpkg.NewPipeline(deps),
+	}
+}
+
+func createUpgradePlan(ctx context.Context, name string) {
+	resource := &managementv1beta1.UpgradePlan{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+	Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+}
+
+func setProgressingCondition(ctx context.Context, name string, status metav1.ConditionStatus) {
+	var up managementv1beta1.UpgradePlan
+	Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name}, &up)).To(Succeed())
+	up.SetCondition(managementv1beta1.UpgradePlanProgressing, status, "test", "")
+	Expect(k8sClient.Status().Update(ctx, &up)).To(Succeed())
+}
+
+func deleteUpgradePlan(ctx context.Context, name string) {
+	resource := &managementv1beta1.UpgradePlan{}
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: name}, resource)
+	if err == nil {
+		Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+	}
+}
+
 var _ = Describe("UpgradePlan Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -70,21 +112,7 @@ var _ = Describe("UpgradePlan Controller", func() {
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			deps := &upgradeplanpkg.PhaseDeps{
-				Client:             k8sClient,
-				Scheme:             k8sClient.Scheme(),
-				Log:                logr.Discard(),
-				JobServiceAccount:  "harvester",
-				PlanServiceAccount: "system-upgrade-controller",
-			}
-			controllerReconciler := &UpgradePlanReconciler{
-				Client:             k8sClient,
-				Scheme:             k8sClient.Scheme(),
-				Log:                logr.Discard(),
-				JobServiceAccount:  "harvester",
-				PlanServiceAccount: "system-upgrade-controller",
-				pipeline:           upgradeplanpkg.NewPipeline(deps),
-			}
+			controllerReconciler := newReconciler()
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
@@ -92,6 +120,90 @@ var _ = Describe("UpgradePlan Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
 			// Example: If you expect a certain status condition after reconciliation, verify it here.
+		})
+	})
+
+	Context("concurrent upgrade prevention", func() {
+		ctx := context.Background()
+
+		AfterEach(func() {
+			deleteUpgradePlan(ctx, "upgrade-old")
+			deleteUpgradePlan(ctx, "upgrade-new")
+		})
+
+		It("should set Available=False when another UpgradePlan has Progressing=True", func() {
+			By("creating an existing UpgradePlan with Progressing=True")
+			createUpgradePlan(ctx, "upgrade-old")
+			setProgressingCondition(ctx, "upgrade-old", metav1.ConditionTrue)
+
+			By("creating the target UpgradePlan")
+			createUpgradePlan(ctx, "upgrade-new")
+
+			By("reconciling the target UpgradePlan")
+			controllerReconciler := newReconciler()
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "upgrade-new"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			By("verifying Available=False with correct reason")
+			var updated managementv1beta1.UpgradePlan
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "upgrade-new"}, &updated)).To(Succeed())
+			Expect(updated.ConditionFalse(managementv1beta1.UpgradePlanAvailable)).To(BeTrue())
+			cond := updated.LookupCondition(managementv1beta1.UpgradePlanAvailable)
+			Expect(cond.Reason).To(Equal("ConcurrentUpgradeBlocked"))
+			Expect(cond.Message).To(ContainSubstring("upgrade-old"))
+		})
+
+		It("should proceed normally when no other UpgradePlan has Progressing=True", func() {
+			By("creating an existing UpgradePlan with Progressing=False")
+			createUpgradePlan(ctx, "upgrade-old")
+			setProgressingCondition(ctx, "upgrade-old", metav1.ConditionFalse)
+
+			By("creating the target UpgradePlan")
+			createUpgradePlan(ctx, "upgrade-new")
+
+			By("reconciling the target UpgradePlan")
+			controllerReconciler := newReconciler()
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "upgrade-new"},
+			})
+			// The pipeline will run and may error (e.g., Version CR missing),
+			// but the key assertion is that Available was NOT set to False
+			// with ConcurrentUpgradeBlocked reason.
+			_ = err
+
+			By("verifying the UpgradePlan was not blocked")
+			var updated managementv1beta1.UpgradePlan
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "upgrade-new"}, &updated)).To(Succeed())
+			cond := updated.LookupCondition(managementv1beta1.UpgradePlanAvailable)
+			Expect(cond.Reason).NotTo(Equal("ConcurrentUpgradeBlocked"))
+		})
+
+		It("should block even if this UpgradePlan also has Progressing=True", func() {
+			By("creating UpgradePlan A with Progressing=True")
+			createUpgradePlan(ctx, "upgrade-old")
+			setProgressingCondition(ctx, "upgrade-old", metav1.ConditionTrue)
+
+			By("creating UpgradePlan B also with Progressing=True")
+			createUpgradePlan(ctx, "upgrade-new")
+			setProgressingCondition(ctx, "upgrade-new", metav1.ConditionTrue)
+
+			By("reconciling UpgradePlan B")
+			controllerReconciler := newReconciler()
+			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: "upgrade-new"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(reconcile.Result{}))
+
+			By("verifying B gets Available=False")
+			var updated managementv1beta1.UpgradePlan
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "upgrade-new"}, &updated)).To(Succeed())
+			Expect(updated.ConditionFalse(managementv1beta1.UpgradePlanAvailable)).To(BeTrue())
+			cond := updated.LookupCondition(managementv1beta1.UpgradePlanAvailable)
+			Expect(cond.Reason).To(Equal("ConcurrentUpgradeBlocked"))
 		})
 	})
 })

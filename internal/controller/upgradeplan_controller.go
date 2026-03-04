@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -85,6 +86,27 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Unavailable UpgradePlans are ignored
 	if upgradePlan.ConditionFalse(managementv1beta1.UpgradePlanAvailable) {
+		return ctrl.Result{}, nil
+	}
+
+	// Concurrent upgrade prevention
+	conflicting, err := upgradeplan.FindConflictingUpgrade(ctx, r.Client, upgradePlan.Name)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if conflicting != "" {
+		r.Log.Info("blocking concurrent upgrade",
+			"upgradePlan", upgradePlan.Name,
+			"conflicting", conflicting)
+		upgradePlanCopy.SetCondition(
+			managementv1beta1.UpgradePlanAvailable,
+			metav1.ConditionFalse,
+			"ConcurrentUpgradeBlocked",
+			fmt.Sprintf("another upgrade %q is in progress", conflicting),
+		)
+		if statusUpdateErr := r.Status().Update(ctx, upgradePlanCopy); statusUpdateErr != nil {
+			return ctrl.Result{}, statusUpdateErr
+		}
 		return ctrl.Result{}, nil
 	}
 

@@ -23,7 +23,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
 // nolint:unused
@@ -101,22 +101,13 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	}
 
 	// No concurrent upgrade: block if any other UpgradePlan has Progressing=True
-	var upgradePlanList managementv1beta1.UpgradePlanList
-	if err := v.Client.List(ctx, &upgradePlanList); err != nil {
-		allErrs = append(allErrs, field.InternalError(
-			field.NewPath(""), fmt.Errorf("failed to list UpgradePlans: %w", err)))
-	} else {
-		for _, existing := range upgradePlanList.Items {
-			if existing.Name == upgradePlan.Name {
-				continue
-			}
-			if isProgressing(&existing) {
-				allErrs = append(allErrs, field.Forbidden(
-					field.NewPath("spec"),
-					fmt.Sprintf("another upgrade %q is in progress", existing.Name)))
-				break
-			}
-		}
+	conflicting, err := upgradeplan.FindConflictingUpgrade(ctx, v.Client, upgradePlan.Name)
+	if err != nil {
+		allErrs = append(allErrs, field.InternalError(field.NewPath(""), err))
+	} else if conflicting != "" {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("another upgrade %q is in progress", conflicting)))
 	}
 
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
@@ -173,7 +164,7 @@ func (v *UpgradePlanCustomValidator) ValidateDelete(_ context.Context, obj runti
 	}
 	upgradeplanlog.Info("Validation for UpgradePlan upon deletion", "name", upgradePlan.GetName())
 
-	if isProgressing(upgradePlan) {
+	if upgradePlan.ConditionTrue(managementv1beta1.UpgradePlanProgressing) {
 		return nil, apierrors.NewInvalid(
 			managementv1beta1.GroupVersion.WithKind("UpgradePlan").GroupKind(),
 			upgradePlan.Name,
@@ -184,12 +175,6 @@ func (v *UpgradePlanCustomValidator) ValidateDelete(_ context.Context, obj runti
 			})
 	}
 	return nil, nil
-}
-
-// isProgressing returns true if the UpgradePlan's Progressing condition is True.
-func isProgressing(upgradePlan *managementv1beta1.UpgradePlan) bool {
-	cond := upgradePlan.LookupCondition(managementv1beta1.UpgradePlanProgressing)
-	return cond.Status == metav1.ConditionTrue
 }
 
 // validateNodeUpgradeOption validates the nodeUpgradeOption field.

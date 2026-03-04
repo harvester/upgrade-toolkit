@@ -1,6 +1,7 @@
 package upgradeplan
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,7 +9,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -442,4 +445,62 @@ func TestIsNodeUpgradeStateAhead_UpgradePaused(t *testing.T) {
 		managementv1beta1.NodeStateUpgradePaused,
 		managementv1beta1.NodeStatePreDraining,
 	))
+}
+
+func newFakeReader(objects ...managementv1beta1.UpgradePlan) *fake.ClientBuilder {
+	scheme := runtime.NewScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	builder := fake.NewClientBuilder().WithScheme(scheme)
+	for i := range objects {
+		builder = builder.WithStatusSubresource(&objects[i])
+		builder = builder.WithObjects(&objects[i])
+	}
+	return builder
+}
+
+func TestFindConflictingUpgrade(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("no conflict when list is empty", func(t *testing.T) {
+		c := newFakeReader().Build()
+		name, err := FindConflictingUpgrade(ctx, c, "my-upgrade")
+		require.NoError(t, err)
+		assert.Empty(t, name)
+	})
+
+	t.Run("no conflict when only self is present", func(t *testing.T) {
+		self := managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-upgrade"},
+		}
+		self.SetCondition(managementv1beta1.UpgradePlanProgressing, metav1.ConditionTrue, "test", "")
+		c := newFakeReader(self).Build()
+
+		name, err := FindConflictingUpgrade(ctx, c, "my-upgrade")
+		require.NoError(t, err)
+		assert.Empty(t, name)
+	})
+
+	t.Run("returns conflicting name when another has Progressing=True", func(t *testing.T) {
+		other := managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{Name: "other-upgrade"},
+		}
+		other.SetCondition(managementv1beta1.UpgradePlanProgressing, metav1.ConditionTrue, "test", "")
+		c := newFakeReader(other).Build()
+
+		name, err := FindConflictingUpgrade(ctx, c, "my-upgrade")
+		require.NoError(t, err)
+		assert.Equal(t, "other-upgrade", name)
+	})
+
+	t.Run("no conflict when other has Progressing=False", func(t *testing.T) {
+		other := managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{Name: "other-upgrade"},
+		}
+		other.SetCondition(managementv1beta1.UpgradePlanProgressing, metav1.ConditionFalse, "test", "")
+		c := newFakeReader(other).Build()
+
+		name, err := FindConflictingUpgrade(ctx, c, "my-upgrade")
+		require.NoError(t, err)
+		assert.Empty(t, name)
+	})
 }

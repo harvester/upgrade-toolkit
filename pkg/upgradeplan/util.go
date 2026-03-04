@@ -143,6 +143,24 @@ func isTerminalPhase(phase managementv1beta1.UpgradePlanPhase) bool {
 		phase == managementv1beta1.UpgradePlanPhaseFailed
 }
 
+// FindConflictingUpgrade returns the name of the first UpgradePlan (other than
+// currentName) that has Progressing=True, or "" if none is found.
+func FindConflictingUpgrade(ctx context.Context, c client.Reader, currentName string) (string, error) {
+	var upgradePlanList managementv1beta1.UpgradePlanList
+	if err := c.List(ctx, &upgradePlanList); err != nil {
+		return "", fmt.Errorf("failed to list UpgradePlans: %w", err)
+	}
+	for _, existing := range upgradePlanList.Items {
+		if existing.Name == currentName {
+			continue
+		}
+		if existing.ConditionTrue(managementv1beta1.UpgradePlanProgressing) {
+			return existing.Name, nil
+		}
+	}
+	return "", nil
+}
+
 // Resource readiness checks
 
 func isVirtualMachineImageImported(vmImage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {
