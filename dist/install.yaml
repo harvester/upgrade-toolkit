@@ -70,6 +70,18 @@ spec:
                 description: force indicates the UpgradePlan will be forcibly applied,
                   ignoring any pre-upgrade check failures. Default to "false".
                 type: boolean
+              imagePreloadOption:
+                description: imagePreloadOption configures image preload behavior
+                  including concurrency control.
+                properties:
+                  concurrency:
+                    description: |-
+                      concurrency controls how many nodes preload images simultaneously.
+                      When nil or zero, all Harvester-managed nodes preload concurrently.
+                      When positive, the value is used as the SUC plan concurrency (capped at node count).
+                      When negative, image preloading is skipped entirely.
+                    type: integer
+                type: object
               nodeUpgradeOption:
                 description: nodeUpgradeOption configures node upgrade behavior including
                   pause/unpause control.
