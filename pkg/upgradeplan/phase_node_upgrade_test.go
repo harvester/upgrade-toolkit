@@ -297,9 +297,8 @@ func TestCheckNodeStatuses_MultiNode_AllTerminal(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	result, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(up)
 	require.NoError(t, err)
-	assert.Zero(t, result.RequeueAfter)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
 }
 

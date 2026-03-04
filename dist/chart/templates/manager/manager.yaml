@@ -47,7 +47,7 @@ spec:
                     {{- range .Values.manager.args }}
                     - {{ . }}
                     {{- end }}
-                    {{- if .Values.certManager.enable }}
+                    {{- if .Values.webhook.enable }}
                     - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
                     {{- end }}
                   command:
@@ -91,7 +91,7 @@ spec:
                     {}
                     {{- end }}
                   volumeMounts:
-                    {{- if .Values.certManager.enable }}
+                    {{- if .Values.webhook.enable }}
                     - mountPath: /tmp/k8s-webhook-server/serving-certs
                       name: webhook-certs
                       readOnly: true
@@ -105,7 +105,7 @@ spec:
             serviceAccountName: {{ include "upgrade-toolkit.resourceName" (dict "suffix" "controller-manager" "context" $) }}
             terminationGracePeriodSeconds: 10
             volumes:
-                {{- if .Values.certManager.enable }}
+                {{- if .Values.webhook.enable }}
                 - name: webhook-certs
                   secret:
                     secretName: webhook-server-cert

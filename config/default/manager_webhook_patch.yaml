@@ -1,5 +1,7 @@
 # This patch ensures the webhook certificates are properly mounted in the manager container.
 # It configures the necessary arguments, volumes, volume mounts, and container ports.
+# The webhook-server-cert Secret is created by hack/generate-webhook-certs.sh (Kustomize path)
+# or by Helm's genCA()/genSignedCert() (Helm chart path).
 
 # Add the --webhook-cert-path argument for configuring the webhook certificate path
 - op: add

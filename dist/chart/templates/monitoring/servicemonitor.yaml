@@ -17,25 +17,7 @@ spec:
       scheme: https
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
-        {{- if .Values.certManager.enable }}
-        serverName: {{ include "upgrade-toolkit.resourceName" (dict "suffix" "controller-manager-metrics-service" "context" $) }}.{{ .Release.Namespace }}.svc
-        # Apply secure TLS configuration with cert-manager
-        insecureSkipVerify: false
-        ca:
-          secret:
-            name: metrics-server-cert
-            key: ca.crt
-        cert:
-          secret:
-            name: metrics-server-cert
-            key: tls.crt
-        keySecret:
-          name: metrics-server-cert
-          key: tls.key
-        {{- else }}
-        # Development/Test mode (insecure configuration)
         insecureSkipVerify: true
-        {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "upgrade-toolkit.name" . }}

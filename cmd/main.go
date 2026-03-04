@@ -213,10 +213,8 @@ func (c *ManagerCommand) Run() error {
 	// generate self-signed certificates for the metrics server. While convenient for development and testing,
 	// this setup is not recommended for production.
 	//
-	// TODO(user): If you enable certManager, uncomment the following lines:
-	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certificates
-	// managed by cert-manager for the metrics server.
-	// - [PROMETHEUS-WITH-CERTS] at config/prometheus/kustomization.yaml for TLS certification.
+	// Webhook TLS certificates are provisioned by Helm (genCA/genSignedCert) or
+	// hack/generate-webhook-certs.sh (Kustomize deploy path). cert-manager is not used.
 	if len(c.metricsCertPath) > 0 {
 		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
 			"metrics-cert-path", c.metricsCertPath, "metrics-cert-name", c.metricsCertName, "metrics-cert-key", c.metricsCertKey)

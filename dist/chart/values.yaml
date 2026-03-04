@@ -95,12 +95,6 @@ metrics:
   # Metrics server port
   port: 8443
 
-## Cert-manager integration for TLS certificates.
-## Required for webhook certificates and metrics endpoint certificates.
-##
-certManager:
-  enable: true
-
 ## Webhook server configuration
 ##
 webhook:

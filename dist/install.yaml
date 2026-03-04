@@ -942,56 +942,9 @@ spec:
         secret:
           secretName: webhook-server-cert
 ---
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: upgrade-toolkit
-  name: upgrade-toolkit-metrics-certs
-  namespace: upgrade-toolkit-system
-spec:
-  dnsNames:
-  - SERVICE_NAME.SERVICE_NAMESPACE.svc
-  - SERVICE_NAME.SERVICE_NAMESPACE.svc.cluster.local
-  issuerRef:
-    kind: Issuer
-    name: upgrade-toolkit-selfsigned-issuer
-  secretName: metrics-server-cert
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: upgrade-toolkit
-  name: upgrade-toolkit-serving-cert
-  namespace: upgrade-toolkit-system
-spec:
-  dnsNames:
-  - upgrade-toolkit-webhook-service.upgrade-toolkit-system.svc
-  - upgrade-toolkit-webhook-service.upgrade-toolkit-system.svc.cluster.local
-  issuerRef:
-    kind: Issuer
-    name: upgrade-toolkit-selfsigned-issuer
-  secretName: webhook-server-cert
----
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: upgrade-toolkit
-  name: upgrade-toolkit-selfsigned-issuer
-  namespace: upgrade-toolkit-system
-spec:
-  selfSigned: {}
----
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: upgrade-toolkit-system/upgrade-toolkit-serving-cert
   name: upgrade-toolkit-mutating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
@@ -1018,8 +971,6 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: upgrade-toolkit-system/upgrade-toolkit-serving-cert
   name: upgrade-toolkit-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
