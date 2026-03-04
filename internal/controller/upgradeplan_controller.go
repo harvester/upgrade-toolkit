@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -74,15 +75,30 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	upgradePlanCopy := upgradePlan.DeepCopy()
-
 	// Handle deletion
 	if !upgradePlan.DeletionTimestamp.IsZero() {
-		r.Log.V(1).Info("upgradeplan under deletion")
-
-		// TODO: Tear down all the stuff we've created that can't be handled by cascade deletion.
+		if controllerutil.ContainsFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer) {
+			r.Log.V(1).Info("upgradeplan under deletion, running cleanup")
+			if err := upgradeplan.CleanupUpgradeResources(ctx, r.Client, r.Log, &upgradePlan); err != nil {
+				return ctrl.Result{}, err
+			}
+			controllerutil.RemoveFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer)
+			if err := r.Update(ctx, &upgradePlan); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
 		return ctrl.Result{}, nil
 	}
+
+	// Ensure finalizer is present
+	if !controllerutil.ContainsFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer) {
+		controllerutil.AddFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer)
+		if err := r.Update(ctx, &upgradePlan); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	upgradePlanCopy := upgradePlan.DeepCopy()
 
 	// Unavailable UpgradePlans are ignored
 	if upgradePlan.ConditionFalse(managementv1beta1.UpgradePlanAvailable) {
