@@ -51,6 +51,9 @@ const (
 	// Finalizer for UpgradePlan cleanup on deletion
 	UpgradePlanFinalizer = AnnotationPrefix + "/" + "upgradeplan-cleanup"
 
+	// Annotation to skip webhook validation entirely
+	AnnotationSkipWebhook = UpstreamAnnotationPrefix + "/" + "skipWebhook"
+
 	// Machine-plan Secret
 	MachinePlanSecretType   = "rke.cattle.io/machine-plan"
 	MachinePlanMachineLabel = "rke.cattle.io/machine-name"

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
+	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,6 +87,11 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	}
 	upgradeplanlog.Info("Validation for UpgradePlan upon creation", "name", upgradePlan.GetName())
 
+	// Skip all validation if the skipWebhook annotation is set
+	if upgradePlan.Annotations[upgradeplan.AnnotationSkipWebhook] == "true" {
+		return nil, nil
+	}
+
 	var allErrs field.ErrorList
 
 	// Validate spec.version references an existing Version CR
@@ -110,6 +116,9 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 			fmt.Sprintf("another upgrade %q is in progress", conflicting)))
 	}
 
+	allErrs = append(allErrs, validateNodeReadiness(ctx, v.Client)...)
+	allErrs = append(allErrs, validateClusterReady(ctx, v.Client)...)
+	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
 
 	if len(allErrs) > 0 {
@@ -157,24 +166,142 @@ func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, oldObj,
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type UpgradePlan.
-func (v *UpgradePlanCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *UpgradePlanCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	upgradePlan, ok := obj.(*managementv1beta1.UpgradePlan)
 	if !ok {
 		return nil, fmt.Errorf("expected an UpgradePlan object but got %T", obj)
 	}
 	upgradeplanlog.Info("Validation for UpgradePlan upon deletion", "name", upgradePlan.GetName())
 
+	var allErrs field.ErrorList
+
 	if upgradePlan.ConditionTrue(managementv1beta1.UpgradePlanProgressing) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("metadata", "name"),
+			"cannot delete UpgradePlan while Progressing condition is True"))
+	}
+
+	// Block deletion while the cluster is being provisioned (not ready)
+	var cluster provisioningv1.Cluster
+	if err := v.Client.Get(ctx, client.ObjectKey{
+		Namespace: upgradeplan.FleetLocalNamespace,
+		Name:      upgradeplan.LocalClusterName,
+	}, &cluster); err != nil {
+		if !apierrors.IsNotFound(err) {
+			allErrs = append(allErrs, field.InternalError(
+				field.NewPath("metadata", "name"),
+				fmt.Errorf("failed to get cluster: %w", err)))
+		}
+	} else if !cluster.Status.Ready {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("metadata", "name"),
+			"cannot delete UpgradePlan while the cluster is being provisioned"))
+	}
+
+	// Block deletion while nodes are being upgraded
+	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("metadata", "name"),
+			"cannot delete UpgradePlan while nodes are being upgraded"))
+	}
+
+	if len(allErrs) > 0 {
 		return nil, apierrors.NewInvalid(
 			managementv1beta1.GroupVersion.WithKind("UpgradePlan").GroupKind(),
-			upgradePlan.Name,
-			field.ErrorList{
-				field.Forbidden(
-					field.NewPath("metadata", "name"),
-					"cannot delete UpgradePlan while Progressing condition is True"),
-			})
+			upgradePlan.Name, allErrs)
 	}
 	return nil, nil
+}
+
+// validateNodeReadiness checks that all nodes are Ready and schedulable.
+func validateNodeReadiness(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list nodes: %w", err)))
+		return allErrs
+	}
+
+	for _, node := range nodeList.Items {
+		// Check node Ready condition
+		ready := false
+		for _, cond := range node.Status.Conditions {
+			if cond.Type == corev1.NodeReady {
+				ready = cond.Status == corev1.ConditionTrue
+				break
+			}
+		}
+		if !ready {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("node %q is not Ready", node.Name)))
+		}
+
+		// Check node unschedulable
+		if node.Spec.Unschedulable {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("node %q is unschedulable", node.Name)))
+		}
+	}
+
+	return allErrs
+}
+
+// validateClusterReady checks that the provisioning cluster fleet-local/local is ready.
+func validateClusterReady(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var cluster provisioningv1.Cluster
+	if err := c.Get(ctx, client.ObjectKey{
+		Namespace: upgradeplan.FleetLocalNamespace,
+		Name:      upgradeplan.LocalClusterName,
+	}, &cluster); err != nil {
+		if apierrors.IsNotFound(err) {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				"cluster not found"))
+		} else {
+			allErrs = append(allErrs, field.InternalError(
+				field.NewPath("spec"), err))
+		}
+		return allErrs
+	}
+
+	if !cluster.Status.Ready {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			"cluster is not ready"))
+	}
+
+	return allErrs
+}
+
+// validateNoCleanupInProgress checks that no other UpgradePlan is in the CleaningUp phase.
+func validateNoCleanupInProgress(ctx context.Context, c client.Reader, currentName string) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var upgradePlanList managementv1beta1.UpgradePlanList
+	if err := c.List(ctx, &upgradePlanList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list upgrade plans: %w", err)))
+		return allErrs
+	}
+
+	for _, up := range upgradePlanList.Items {
+		if up.Name == currentName {
+			continue
+		}
+		if up.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseCleaningUp {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("upgrade %q is still cleaning up", up.Name)))
+		}
+	}
+
+	return allErrs
 }
 
 // validateNodeUpgradeOption validates the nodeUpgradeOption field.

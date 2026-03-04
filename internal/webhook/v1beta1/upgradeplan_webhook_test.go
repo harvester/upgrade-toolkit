@@ -19,6 +19,7 @@ package v1beta1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
 var _ = Describe("UpgradePlan Webhook", func() {
@@ -37,6 +39,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		scheme = runtime.NewScheme()
 		Expect(managementv1beta1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(provisioningv1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	Context("ValidateCreate", func() {
@@ -59,8 +62,12 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
 				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
 			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
@@ -151,8 +158,12 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
 				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
 			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing, version).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing, version, cluster).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
@@ -172,8 +183,255 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
 				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
 			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing, version).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing, version, cluster).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("skipWebhook annotation", func() {
+		It("should bypass all validation when skipWebhook annotation is set", func() {
+			// No Version CR, no cluster - would normally fail, but skipWebhook bypasses all checks
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "upgrade-1",
+					Annotations: map[string]string{
+						upgradeplan.AnnotationSkipWebhook: "true",
+					},
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("validateNodeReadiness", func() {
+		It("should reject when a node is not Ready", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
+					},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`node "node-1" is not Ready`))
+		})
+
+		It("should reject when a node is unschedulable", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+				Spec:       corev1.NodeSpec{Unschedulable: true},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`node "node-1" is unschedulable`))
+		})
+
+		It("should allow when all nodes are healthy", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node1 := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			node2 := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "node-2"},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("validateClusterReady", func() {
+		It("should reject when cluster is not found", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cluster not found"))
+		})
+
+		It("should reject when cluster is not ready", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: false},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cluster is not ready"))
+		})
+
+		It("should allow when cluster is ready", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("validateNoCleanupInProgress", func() {
+		It("should reject when another upgrade is cleaning up", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			cleaningUp := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseCleaningUp,
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, cleaningUp).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`upgrade "upgrade-old" is still cleaning up`))
+		})
+
+		It("should allow when no other upgrade is cleaning up", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			succeeded := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseSucceeded,
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, succeeded).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
@@ -346,6 +604,61 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			_, err := validator.ValidateDelete(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Progressing"))
+		})
+
+		It("should block deletion while cluster is being provisioned", func() {
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: false},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cluster is being provisioned"))
+		})
+
+		It("should block deletion while nodes are being upgraded", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+				},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("nodes are being upgraded"))
+		})
+
+		It("should allow deletion when cluster is ready and not node upgrading", func() {
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseSucceeded,
+				},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
