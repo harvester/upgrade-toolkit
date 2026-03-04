@@ -55,7 +55,22 @@ func (p *ImagePreloadPhase) Run(
 ) (ctrl.Result, error) {
 	p.Log.V(1).Info("handle image preload")
 
-	plan, err := p.getOrCreatePlanForImagePreload(ctx, upgradePlan)
+	nodeCount, err := countManagedNodes(ctx, p.Client)
+	if err != nil {
+		p.Log.Error(err, "unable to count managed nodes")
+		return ctrl.Result{}, err
+	}
+
+	concurrency, skip := resolveImagePreloadConcurrency(
+		upgradePlan.Spec.ImagePreloadOption, nodeCount,
+	)
+	if skip {
+		p.Log.V(0).Info("image preloading skipped (negative concurrency)")
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseImagePreloaded, "")
+		return ctrl.Result{}, nil
+	}
+
+	plan, err := p.getOrCreatePlanForImagePreload(ctx, upgradePlan, concurrency)
 	if err != nil {
 		p.Log.Error(err, "unable to retrieve image-preload plan from upgradeplan")
 		return ctrl.Result{}, err
@@ -80,6 +95,7 @@ func (p *ImagePreloadPhase) Run(
 func (p *ImagePreloadPhase) getOrCreatePlanForImagePreload(
 	ctx context.Context,
 	up *managementv1beta1.UpgradePlan,
+	concurrency int,
 ) (*upgradev1.Plan, error) {
 	nn := types.NamespacedName{
 		Namespace: cattleSystemNamespace,
@@ -88,13 +104,13 @@ func (p *ImagePreloadPhase) getOrCreatePlanForImagePreload(
 	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *upgradev1.Plan { return &upgradev1.Plan{} },
-		func() *upgradev1.Plan { return constructPlanForImagePreload(up, p.PlanServiceAccount) },
+		func() *upgradev1.Plan { return constructPlanForImagePreload(up, concurrency, p.PlanServiceAccount) },
 		up,
 	)
 }
 
 func constructPlanForImagePreload(
-	upgradePlan *managementv1beta1.UpgradePlan, serviceAccountName string,
+	upgradePlan *managementv1beta1.UpgradePlan, concurrency int, serviceAccountName string,
 ) *upgradev1.Plan {
 	selector := &metav1.LabelSelector{
 		MatchLabels: map[string]string{
@@ -115,7 +131,7 @@ func constructPlanForImagePreload(
 	version := getUpgradeVersion(upgradePlan)
 
 	return constructPlan(
-		upgradePlan.Name, PrepareComponent, 1, selector,
+		upgradePlan.Name, PrepareComponent, concurrency, selector,
 		false, nil, container, version, serviceAccountName,
 	)
 }

@@ -458,6 +458,74 @@ func newFakeReader(objects ...managementv1beta1.UpgradePlan) *fake.ClientBuilder
 	return builder
 }
 
+func TestResolveImagePreloadConcurrency(t *testing.T) {
+	testCases := []struct {
+		name                string
+		opt                 *managementv1beta1.ImagePreloadOption
+		nodeCount           int
+		expectedConcurrency int
+		expectedSkip        bool
+	}{
+		{
+			name:                "nil option defaults to all nodes",
+			opt:                 nil,
+			nodeCount:           3,
+			expectedConcurrency: 3,
+			expectedSkip:        false,
+		},
+		{
+			name:                "nil concurrency defaults to all nodes",
+			opt:                 &managementv1beta1.ImagePreloadOption{},
+			nodeCount:           3,
+			expectedConcurrency: 3,
+			expectedSkip:        false,
+		},
+		{
+			name:                "zero concurrency defaults to all nodes",
+			opt:                 &managementv1beta1.ImagePreloadOption{Concurrency: ptr.To(0)},
+			nodeCount:           3,
+			expectedConcurrency: 3,
+			expectedSkip:        false,
+		},
+		{
+			name:                "positive concurrency within node count",
+			opt:                 &managementv1beta1.ImagePreloadOption{Concurrency: ptr.To(2)},
+			nodeCount:           3,
+			expectedConcurrency: 2,
+			expectedSkip:        false,
+		},
+		{
+			name:                "positive concurrency exceeds node count",
+			opt:                 &managementv1beta1.ImagePreloadOption{Concurrency: ptr.To(5)},
+			nodeCount:           3,
+			expectedConcurrency: 3,
+			expectedSkip:        false,
+		},
+		{
+			name:                "positive concurrency equals node count",
+			opt:                 &managementv1beta1.ImagePreloadOption{Concurrency: ptr.To(3)},
+			nodeCount:           3,
+			expectedConcurrency: 3,
+			expectedSkip:        false,
+		},
+		{
+			name:                "negative concurrency skips preloading",
+			opt:                 &managementv1beta1.ImagePreloadOption{Concurrency: ptr.To(-1)},
+			nodeCount:           3,
+			expectedConcurrency: 0,
+			expectedSkip:        true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			concurrency, skip := resolveImagePreloadConcurrency(tc.opt, tc.nodeCount)
+			assert.Equal(t, tc.expectedConcurrency, concurrency)
+			assert.Equal(t, tc.expectedSkip, skip)
+		})
+	}
+}
+
 func TestFindConflictingUpgrade(t *testing.T) {
 	ctx := context.Background()
 

@@ -477,3 +477,34 @@ func constructPlan(
 
 	return plan
 }
+
+// countManagedNodes returns the number of nodes labeled with harvesterManagedLabel=true.
+func countManagedNodes(ctx context.Context, c client.Reader) (int, error) {
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			harvesterManagedLabel: "true",
+		}),
+	}); err != nil {
+		return 0, err
+	}
+	return len(nodeList.Items), nil
+}
+
+// resolveImagePreloadConcurrency computes the effective SUC plan concurrency.
+// It returns:
+// - (concurrency, false) for normal operation
+// - (0, true) when image preloading should be skipped entirely
+func resolveImagePreloadConcurrency(opt *managementv1beta1.ImagePreloadOption, nodeCount int) (int, bool) {
+	if opt == nil || opt.Concurrency == nil || *opt.Concurrency == 0 {
+		return nodeCount, false
+	}
+	c := *opt.Concurrency
+	if c < 0 {
+		return 0, true
+	}
+	if c > nodeCount {
+		return nodeCount, false
+	}
+	return c, false
+}

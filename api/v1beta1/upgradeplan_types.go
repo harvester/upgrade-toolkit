@@ -125,6 +125,16 @@ type NodeUpgradeStatus struct {
 	Message string           `json:"message,omitempty"`
 }
 
+// ImagePreloadOption configures image preload behavior during the ImagePreloading phase.
+type ImagePreloadOption struct {
+	// concurrency controls how many nodes preload images simultaneously.
+	// When nil or zero, all Harvester-managed nodes preload concurrently.
+	// When positive, the value is used as the SUC plan concurrency (capped at node count).
+	// When negative, image preloading is skipped entirely.
+	// +optional
+	Concurrency *int `json:"concurrency,omitempty"`
+}
+
 // NodeUpgradeOption configures node upgrade behavior during the NodeUpgrading phase.
 type NodeUpgradeOption struct {
 	// pauseNodes lists specific node names to pause before PreDraining.
@@ -174,6 +184,10 @@ type UpgradePlanSpec struct {
 	// force indicates the UpgradePlan will be forcibly applied, ignoring any pre-upgrade check failures. Default to "false".
 	// +optional
 	Force *bool `json:"force,omitempty"`
+
+	// imagePreloadOption configures image preload behavior including concurrency control.
+	// +optional
+	ImagePreloadOption *ImagePreloadOption `json:"imagePreloadOption,omitempty"`
 
 	// nodeUpgradeOption configures node upgrade behavior including pause/unpause control.
 	// +optional
