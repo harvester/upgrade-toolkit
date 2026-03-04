@@ -78,6 +78,7 @@ rules:
 - apiGroups:
   - harvesterhci.io
   resources:
+  - addons
   - schedulevmbackups
   - settings
   - virtualmachinebackups
@@ -110,6 +111,14 @@ rules:
   - longhorn.io
   resources:
   - volumes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - management.cattle.io
+  resources:
+  - managedcharts
   verbs:
   - get
   - list

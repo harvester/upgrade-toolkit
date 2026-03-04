@@ -243,6 +243,7 @@ func (c *ManagerCommand) Run() error {
 			ByObject: map[client.Object]cache.ByObject{
 				&harvesterv1beta1.VirtualMachineBackup{}: {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&harvesterv1beta1.ScheduleVMBackup{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
+				&harvesterv1beta1.Addon{}:                {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&kubevirtv1.VirtualMachineInstance{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 			},
 		},

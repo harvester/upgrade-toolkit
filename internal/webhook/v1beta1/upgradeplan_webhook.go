@@ -23,11 +23,14 @@ import (
 	"strings"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	addonutil "github.com/harvester/harvester/pkg/util/addon"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -132,6 +135,8 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	allErrs = append(allErrs, validateVMBackups(ctx, v.Client)...)
 	allErrs = append(allErrs, validateScheduleVMBackups(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNonLiveMigratableVMs(ctx, v.Client)...)
+	allErrs = append(allErrs, validateManagedCharts(ctx, v.Client)...)
+	allErrs = append(allErrs, validateAddons(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
 
@@ -486,6 +491,73 @@ func validateNoCleanupInProgress(ctx context.Context, c client.Reader, currentNa
 			allErrs = append(allErrs, field.Forbidden(
 				field.NewPath("spec"),
 				fmt.Sprintf("upgrade %q is still cleaning up", up.Name)))
+		}
+	}
+
+	return allErrs
+}
+
+// validateManagedCharts checks that all ManagedCharts in fleet-local are ready.
+// Uses unstructured listing to avoid pulling in the heavy management.cattle.io/v3 dependency.
+func validateManagedCharts(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var list unstructured.UnstructuredList
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "management.cattle.io",
+		Version: "v3",
+		Kind:    "ManagedChartList",
+	})
+	if err := c.List(ctx, &list, client.InNamespace(upgradeplan.FleetLocalNamespace)); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list managed charts: %w", err)))
+		return allErrs
+	}
+
+	for _, item := range list.Items {
+		conditions, found, err := unstructured.NestedSlice(item.Object, "status", "conditions")
+		if err != nil || !found {
+			continue
+		}
+		for _, c := range conditions {
+			cond, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			condType, _, _ := unstructured.NestedString(cond, "type")
+			if condType == "Ready" {
+				condStatus, _, _ := unstructured.NestedString(cond, "status")
+				if condStatus != string(corev1.ConditionTrue) {
+					allErrs = append(allErrs, field.Forbidden(
+						field.NewPath("spec"),
+						fmt.Sprintf("managed chart %s is not ready, please wait for it to be ready or fix it",
+							item.GetName())))
+				}
+				break
+			}
+		}
+	}
+
+	return allErrs
+}
+
+// validateAddons checks that no Harvester Addon is currently being enabled, disabled, or updated.
+func validateAddons(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var addonList harvesterv1beta1.AddonList
+	if err := c.List(ctx, &addonList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list addons: %w", err)))
+		return allErrs
+	}
+
+	for _, addon := range addonList.Items {
+		if msg, processing := addonutil.IsAddonOnProcessing(&addon); processing {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("%s, please wait for it to be ready or fix it", msg)))
+			break
 		}
 	}
 
