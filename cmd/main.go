@@ -33,9 +33,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -61,6 +63,7 @@ func init() {
 	utilruntime.Must(upgradev1.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
 	utilruntime.Must(lhv1beta2.AddToScheme(scheme))
+	utilruntime.Must(kubevirtv1.AddToScheme(scheme))
 
 	utilruntime.Must(managementv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -236,6 +239,11 @@ func (c *ManagerCommand) Run() error {
 				"kube-system":      {},
 				"fleet-local":      {},
 				"longhorn-system":  {},
+			},
+			ByObject: map[client.Object]cache.ByObject{
+				&harvesterv1beta1.VirtualMachineBackup{}: {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
+				&harvesterv1beta1.ScheduleVMBackup{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
+				&kubevirtv1.VirtualMachineInstance{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 			},
 		},
 		Scheme:                 scheme,

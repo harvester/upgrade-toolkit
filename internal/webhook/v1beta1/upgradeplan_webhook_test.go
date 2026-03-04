@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -44,6 +46,8 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		Expect(provisioningv1.AddToScheme(scheme)).To(Succeed())
 		Expect(clusterv1.AddToScheme(scheme)).To(Succeed())
 		Expect(lhv1beta2.AddToScheme(scheme)).To(Succeed())
+		Expect(harvesterv1beta1.AddToScheme(scheme)).To(Succeed())
+		Expect(kubevirtv1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	Context("ValidateCreate", func() {
@@ -1059,6 +1063,305 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, vol).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("validateVMBackups", func() {
+		It("should reject when a VM backup is in progress", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			backup := &harvesterv1beta1.VirtualMachineBackup{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "backup-1"},
+				Spec: harvesterv1beta1.VirtualMachineBackupSpec{
+					Source: corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("kubevirt.io"),
+						Kind:     "VirtualMachine",
+						Name:     "vm-1",
+					},
+				},
+				Status: harvesterv1beta1.VirtualMachineBackupStatus{
+					ReadyToUse: ptr.To(false),
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, backup).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("vmbackups are stopped"))
+			Expect(err.Error()).To(ContainSubstring("default/backup-1"))
+		})
+
+		It("should allow when VM backup has error even if not ready", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			errMsg := "backup failed"
+			backup := &harvesterv1beta1.VirtualMachineBackup{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "backup-1"},
+				Spec: harvesterv1beta1.VirtualMachineBackupSpec{
+					Source: corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("kubevirt.io"),
+						Kind:     "VirtualMachine",
+						Name:     "vm-1",
+					},
+				},
+				Status: harvesterv1beta1.VirtualMachineBackupStatus{
+					ReadyToUse: ptr.To(false),
+					Error: &harvesterv1beta1.Error{
+						Message: &errMsg,
+					},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, backup).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow when all VM backups are ready", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			backup := &harvesterv1beta1.VirtualMachineBackup{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "backup-1"},
+				Spec: harvesterv1beta1.VirtualMachineBackupSpec{
+					Source: corev1.TypedLocalObjectReference{
+						APIGroup: ptr.To("kubevirt.io"),
+						Kind:     "VirtualMachine",
+						Name:     "vm-1",
+					},
+				},
+				Status: harvesterv1beta1.VirtualMachineBackupStatus{
+					ReadyToUse: ptr.To(true),
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, backup).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("validateScheduleVMBackups", func() {
+		It("should reject when a schedule is not suspended", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			schedule := &harvesterv1beta1.ScheduleVMBackup{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "schedule-1"},
+				Spec: harvesterv1beta1.ScheduleVMBackupSpec{
+					Cron:       "0 * * * *",
+					Retain:     3,
+					MaxFailure: 1,
+					VMBackupSpec: harvesterv1beta1.VirtualMachineBackupSpec{
+						Source: corev1.TypedLocalObjectReference{
+							APIGroup: ptr.To("kubevirt.io"),
+							Kind:     "VirtualMachine",
+							Name:     "vm-1",
+						},
+					},
+				},
+				Status: harvesterv1beta1.ScheduleVMBackupStatus{
+					Suspended: false,
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, schedule).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("suspend all backup/snapshot schedule"))
+			Expect(err.Error()).To(ContainSubstring("default/schedule-1"))
+		})
+
+		It("should allow when all schedules are suspended", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			schedule := &harvesterv1beta1.ScheduleVMBackup{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "schedule-1"},
+				Spec: harvesterv1beta1.ScheduleVMBackupSpec{
+					Cron:       "0 * * * *",
+					Retain:     3,
+					MaxFailure: 1,
+					Suspend:    true,
+					VMBackupSpec: harvesterv1beta1.VirtualMachineBackupSpec{
+						Source: corev1.TypedLocalObjectReference{
+							APIGroup: ptr.To("kubevirt.io"),
+							Kind:     "VirtualMachine",
+							Name:     "vm-1",
+						},
+					},
+				},
+				Status: harvesterv1beta1.ScheduleVMBackupStatus{
+					Suspended: true,
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, schedule).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("validateNonLiveMigratableVMs", func() {
+		It("should reject when non-migratable VMI exists on multi-node cluster", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m2"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine1 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			machine2 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m2"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n2"}}}
+			// VMI with node selector is non-migratable
+			vmi := &kubevirtv1.VirtualMachineInstance{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "vm-1"},
+				Spec: kubevirtv1.VirtualMachineInstanceSpec{
+					NodeSelector: map[string]string{"kubernetes.io/hostname": "n1"},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2, machine1, machine2, vmi).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("non-live migratable VMs"))
+			Expect(err.Error()).To(ContainSubstring("default/vm-1"))
+		})
+
+		It("should skip check on single-node cluster", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			// Non-migratable VMI - but single node, so check is skipped
+			vmi := &kubevirtv1.VirtualMachineInstance{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "vm-1"},
+				Spec: kubevirtv1.VirtualMachineInstanceSpec{
+					NodeSelector: map[string]string{"kubernetes.io/hostname": "n1"},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, vmi).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow when all VMIs are migratable on multi-node cluster", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m2"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine1 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			machine2 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m2"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n2"}}}
+			// VMI with no node selector, no host devices, no strict affinity -> migratable
+			vmi := &kubevirtv1.VirtualMachineInstance{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "vm-1"},
+				Spec:       kubevirtv1.VirtualMachineInstanceSpec{},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2, machine1, machine2, vmi).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},

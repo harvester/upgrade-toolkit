@@ -22,12 +22,14 @@ import (
 	"reflect"
 	"strings"
 
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	vmihelper "github.com/harvester/upgrade-toolkit/pkg/upgradehelper/vmi"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
@@ -126,6 +129,9 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	allErrs = append(allErrs, validateMachinesRunning(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNodeMachineConsistency(ctx, v.Client)...)
 	allErrs = append(allErrs, validateLonghornVolumes(ctx, v.Client, upgradePlan)...)
+	allErrs = append(allErrs, validateVMBackups(ctx, v.Client)...)
+	allErrs = append(allErrs, validateScheduleVMBackups(ctx, v.Client)...)
+	allErrs = append(allErrs, validateNonLiveMigratableVMs(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
 
@@ -481,6 +487,114 @@ func validateNoCleanupInProgress(ctx context.Context, c client.Reader, currentNa
 				field.NewPath("spec"),
 				fmt.Sprintf("upgrade %q is still cleaning up", up.Name)))
 		}
+	}
+
+	return allErrs
+}
+
+// validateVMBackups checks that no VirtualMachineBackup is currently in progress.
+func validateVMBackups(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var backupList harvesterv1beta1.VirtualMachineBackupList
+	if err := c.List(ctx, &backupList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list VM backups: %w", err)))
+		return allErrs
+	}
+
+	for _, backup := range backupList.Items {
+		if backup.Status.ReadyToUse == nil || !*backup.Status.ReadyToUse {
+			if backup.Status.Error != nil {
+				continue
+			}
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("please wait until all vmbackups are stopped, for example %s/%s is under processing",
+					backup.Namespace, backup.Name)))
+			break
+		}
+	}
+
+	return allErrs
+}
+
+// validateScheduleVMBackups checks that all ScheduleVMBackup objects are suspended.
+func validateScheduleVMBackups(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var scheduleList harvesterv1beta1.ScheduleVMBackupList
+	if err := c.List(ctx, &scheduleList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list schedule VM backups: %w", err)))
+		return allErrs
+	}
+
+	for _, schedule := range scheduleList.Items {
+		if !schedule.Status.Suspended {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("please suspend all backup/snapshot schedule, for example %s/%s is running",
+					schedule.Namespace, schedule.Name)))
+			break
+		}
+	}
+
+	return allErrs
+}
+
+// validateNonLiveMigratableVMs checks that there are no non-live-migratable VMIs on multi-node clusters.
+func validateNonLiveMigratableVMs(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list nodes: %w", err)))
+		return allErrs
+	}
+
+	// Convert to pointer slice for the helper
+	nodes := make([]*corev1.Node, len(nodeList.Items))
+	for i := range nodeList.Items {
+		nodes[i] = &nodeList.Items[i]
+	}
+
+	// On single non-witness node clusters, VMs will be shut down during upgrade
+	nonWitnessCount := 0
+	for _, node := range nodes {
+		if _, isWitness := node.Labels["node-role.harvesterhci.io/witness"]; !isWitness {
+			nonWitnessCount++
+		}
+	}
+	if nonWitnessCount <= 1 {
+		return nil
+	}
+
+	var vmiList kubevirtv1.VirtualMachineInstanceList
+	if err := c.List(ctx, &vmiList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list VMIs: %w", err)))
+		return allErrs
+	}
+
+	vmis := make([]*kubevirtv1.VirtualMachineInstance, len(vmiList.Items))
+	for i := range vmiList.Items {
+		vmis[i] = &vmiList.Items[i]
+	}
+
+	nonMigratable, err := vmihelper.GetAllNonLiveMigratableVMINames(vmis, nodes)
+	if err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to check non-live migratable VMs: %w", err)))
+		return allErrs
+	}
+
+	if len(nonMigratable) > 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("there are non-live migratable VMs that need to be shut off before initiating the upgrade: %s",
+				strings.Join(nonMigratable, ", "))))
 	}
 
 	return allErrs

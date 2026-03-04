@@ -78,7 +78,9 @@ rules:
 - apiGroups:
   - harvesterhci.io
   resources:
+  - schedulevmbackups
   - settings
+  - virtualmachinebackups
   verbs:
   - get
   - list
@@ -95,6 +97,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachineinstances
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - longhorn.io
