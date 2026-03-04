@@ -97,6 +97,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - longhorn.io
+  resources:
+  - volumes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - management.harvesterhci.io
   resources:
   - upgradeplans

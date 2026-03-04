@@ -27,6 +27,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,6 +60,7 @@ func init() {
 	utilruntime.Must(provisioningv1.AddToScheme(scheme))
 	utilruntime.Must(upgradev1.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
+	utilruntime.Must(lhv1beta2.AddToScheme(scheme))
 
 	utilruntime.Must(managementv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
@@ -233,6 +235,7 @@ func (c *ManagerCommand) Run() error {
 				"cattle-system":    {},
 				"kube-system":      {},
 				"fleet-local":      {},
+				"longhorn-system":  {},
 			},
 		},
 		Scheme:                 scheme,

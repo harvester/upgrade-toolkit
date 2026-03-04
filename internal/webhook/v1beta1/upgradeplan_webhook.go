@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
+	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,6 +37,8 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
+
+const annotationValueTrue = "true"
 
 // nolint:unused
 // log is for logging in this package.
@@ -89,7 +93,7 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	upgradeplanlog.Info("Validation for UpgradePlan upon creation", "name", upgradePlan.GetName())
 
 	// Skip all validation if the skipWebhook annotation is set
-	if upgradePlan.Annotations[upgradeplan.AnnotationSkipWebhook] == "true" {
+	if upgradePlan.Annotations[upgradeplan.AnnotationSkipWebhook] == annotationValueTrue {
 		return nil, nil
 	}
 
@@ -121,6 +125,7 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	allErrs = append(allErrs, validateClusterReady(ctx, v.Client)...)
 	allErrs = append(allErrs, validateMachinesRunning(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNodeMachineConsistency(ctx, v.Client)...)
+	allErrs = append(allErrs, validateLonghornVolumes(ctx, v.Client, upgradePlan)...)
 	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
 
@@ -357,7 +362,7 @@ func validateNodeMachineConsistency(ctx context.Context, c client.Reader) field.
 		machineAnnotation = "cluster.x-k8s.io/machine"
 	)
 	for _, node := range nodeList.Items {
-		if node.Labels[managedLabel] != "true" {
+		if node.Labels[managedLabel] != annotationValueTrue {
 			allErrs = append(allErrs, field.Forbidden(
 				field.NewPath("spec"),
 				fmt.Sprintf("node %q is missing %s label", node.Name, managedLabel)))
@@ -386,6 +391,71 @@ func validateNodeMachineConsistency(ctx context.Context, c client.Reader) field.
 				fmt.Sprintf("machine %q NodeRef.Name %q does not match node %q",
 					machineName, machine.Status.NodeRef.Name, node.Name)))
 		}
+	}
+
+	return allErrs
+}
+
+// validateLonghornVolumes checks Longhorn volume health before allowing an upgrade.
+func validateLonghornVolumes(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var volumeList lhv1beta2.VolumeList
+	if err := c.List(ctx, &volumeList, client.InNamespace(upgradeplan.LonghornSystemNamespace)); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list Longhorn volumes: %w", err)))
+		return allErrs
+	}
+
+	// Count nodes for the degraded volume check (only enforce on 3+ node clusters)
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list nodes: %w", err)))
+		return allErrs
+	}
+
+	// Check for degraded volumes (only on 3+ node clusters)
+	if len(nodeList.Items) >= 3 {
+		for _, volume := range volumeList.Items {
+			if volume.Status.Robustness == lhv1beta2.VolumeRobustnessDegraded {
+				allErrs = append(allErrs, field.Forbidden(
+					field.NewPath("spec"),
+					"there are degraded volumes, please check all volumes are healthy"))
+				break
+			}
+		}
+	}
+
+	// Collect single-replica volumes
+	var activeSingleReplicaVols []string
+	var detachedSingleReplicaVols []string
+	for _, volume := range volumeList.Items {
+		if volume.Spec.NumberOfReplicas != 1 {
+			continue
+		}
+		pvcRef := volume.Status.KubernetesStatus.Namespace + "/" + volume.Status.KubernetesStatus.PVCName
+		switch volume.Status.State {
+		case lhv1beta2.VolumeStateCreating, lhv1beta2.VolumeStateAttached, lhv1beta2.VolumeStateAttaching:
+			activeSingleReplicaVols = append(activeSingleReplicaVols, pvcRef)
+		default:
+			detachedSingleReplicaVols = append(detachedSingleReplicaVols, pvcRef)
+		}
+	}
+
+	// Reject active single-replica volumes
+	if len(activeSingleReplicaVols) > 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("active single-replica volumes found: %s", strings.Join(activeSingleReplicaVols, ", "))))
+	}
+
+	// Reject detached single-replica volumes unless skip annotation is set
+	skipDetached := upgradePlan.Annotations[upgradeplan.AnnotationSkipSingleReplicaDetachedVol] == annotationValueTrue
+	if !skipDetached && len(detachedSingleReplicaVols) > 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("single-replica volumes found: %s", strings.Join(detachedSingleReplicaVols, ", "))))
 	}
 
 	return allErrs

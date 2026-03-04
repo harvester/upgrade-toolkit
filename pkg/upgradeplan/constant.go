@@ -7,6 +7,7 @@ const (
 	HttpGetRetryInterval = 10 * time.Second
 
 	HarvesterSystemNamespace = harvesterSystemNamespace
+	LonghornSystemNamespace  = "longhorn-system"
 
 	AnnotationPrefix         = "management.harvesterhci.io"
 	LabelPrefix              = AnnotationPrefix
@@ -53,6 +54,9 @@ const (
 
 	// Annotation to skip webhook validation entirely
 	AnnotationSkipWebhook = UpstreamAnnotationPrefix + "/" + "skipWebhook"
+
+	// Annotation to skip single-replica detached volume check
+	AnnotationSkipSingleReplicaDetachedVol = UpstreamAnnotationPrefix + "/" + "skipSingleReplicaDetachedVol"
 
 	// Machine-plan Secret
 	MachinePlanSecretType   = "rke.cattle.io/machine-plan"

@@ -22,6 +22,7 @@ require (
 	github.com/goccy/go-yaml v1.18.0
 	github.com/harvester/go-common v0.0.0-20260119194217-0f17176ce67e
 	github.com/harvester/harvester v1.8.0-dev-20260301.0.20260302074455-e892272f8ea2
+	github.com/longhorn/longhorn-manager v1.8.1
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
 	github.com/rancher/rancher/pkg/apis v0.0.0
