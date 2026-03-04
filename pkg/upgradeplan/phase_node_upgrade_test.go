@@ -299,7 +299,7 @@ func TestCheckNodeStatuses_MultiNode_AllTerminal(t *testing.T) {
 
 	result, err := phase.checkNodeStatuses(up)
 	require.NoError(t, err)
-	assert.False(t, result.Requeue)
+	assert.Zero(t, result.RequeueAfter)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
 }
 
