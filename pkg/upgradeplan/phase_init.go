@@ -4,13 +4,10 @@ import (
 	"context"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -83,17 +80,13 @@ func (p *InitPhase) detectSingleNode(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
-	var nodeList corev1.NodeList
-	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			harvesterManagedLabel: "true",
-		}),
-	}); err != nil {
+	nodes, err := listManagedNodes(ctx, p.Client)
+	if err != nil {
 		return err
 	}
 
-	if len(nodeList.Items) == 1 {
-		upgradePlan.Status.SingleNode = ptr.To(nodeList.Items[0].Name)
+	if len(nodes) == 1 {
+		upgradePlan.Status.SingleNode = ptr.To(nodes[0].Name)
 	}
 
 	return nil

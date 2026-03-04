@@ -8,12 +8,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -124,18 +122,14 @@ func (p *RepoCreatePhase) getOrCreateServiceForRepo(
 }
 
 func (p *RepoCreatePhase) getDeploymentReplicaCount(ctx context.Context) (*int32, error) {
-	var nodeList corev1.NodeList
-	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			harvesterManagedLabel: "true",
-		}),
-	}); err != nil {
+	nodes, err := listManagedNodes(ctx, p.Client)
+	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 
 	nonWitnessCount := 0
-	for i := range nodeList.Items {
-		if nodeList.Items[i].Labels[witnessNodeRoleLabel] != "true" {
+	for i := range nodes {
+		if nodes[i].Labels[witnessNodeRoleLabel] != "true" {
 			nonWitnessCount++
 		}
 	}

@@ -11,7 +11,6 @@ import (
 	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -41,16 +40,12 @@ func (p *NodeUpgradePhase) PreRun(
 		upgradePlan.Status.NodeUpgradeStatuses = make(map[string]managementv1beta1.NodeUpgradeStatus)
 	}
 
-	var nodeList corev1.NodeList
-	if err := p.Client.List(ctx, &nodeList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			harvesterManagedLabel: "true",
-		}),
-	}); err != nil {
+	nodes, err := listManagedNodes(ctx, p.Client)
+	if err != nil {
 		return err
 	}
 
-	for _, node := range nodeList.Items {
+	for _, node := range nodes {
 		if _, exists := upgradePlan.Status.NodeUpgradeStatuses[node.Name]; !exists {
 			upgradePlan.Status.NodeUpgradeStatuses[node.Name] = managementv1beta1.NodeUpgradeStatus{
 				State: managementv1beta1.NodeStateImagePreloaded,
