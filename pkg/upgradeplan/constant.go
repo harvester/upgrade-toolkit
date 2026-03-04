@@ -10,7 +10,7 @@ const (
 
 	AnnotationPrefix         = "management.harvesterhci.io"
 	LabelPrefix              = AnnotationPrefix
-	UpstreamAnnotationPrefix = "harvesterhci.io" // TODO: For backward compatibility. Should be removed eventually.
+	UpstreamAnnotationPrefix = "harvesterhci.io"
 	SUCLabelPrefix           = "upgrade.cattle.io"
 
 	HarvesterUpgradeImageAnnotation = UpstreamAnnotationPrefix + "/" + "os-upgrade-image"

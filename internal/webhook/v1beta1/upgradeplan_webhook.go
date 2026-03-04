@@ -26,6 +26,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -118,6 +119,8 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 
 	allErrs = append(allErrs, validateNodeReadiness(ctx, v.Client)...)
 	allErrs = append(allErrs, validateClusterReady(ctx, v.Client)...)
+	allErrs = append(allErrs, validateMachinesRunning(ctx, v.Client)...)
+	allErrs = append(allErrs, validateNodeMachineConsistency(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
 
@@ -274,6 +277,115 @@ func validateClusterReady(ctx context.Context, c client.Reader) field.ErrorList 
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("spec"),
 			"cluster is not ready"))
+	}
+
+	return allErrs
+}
+
+// validateMachinesRunning checks that all CAPI Machines in fleet-local are in Running phase.
+func validateMachinesRunning(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var machineList clusterv1.MachineList
+	if err := c.List(ctx, &machineList, client.InNamespace(upgradeplan.FleetLocalNamespace)); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list machines: %w", err)))
+		return allErrs
+	}
+
+	for _, machine := range machineList.Items {
+		if machine.Status.Phase != string(clusterv1.MachinePhaseRunning) {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("machine %s/%s is not running", machine.Namespace, machine.Name)))
+		}
+	}
+
+	return allErrs
+}
+
+// validateNodeMachineConsistency checks that nodes and CAPI Machines are correctly paired.
+func validateNodeMachineConsistency(ctx context.Context, c client.Reader) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list nodes: %w", err)))
+		return allErrs
+	}
+
+	var machineList clusterv1.MachineList
+	if err := c.List(ctx, &machineList, client.InNamespace(upgradeplan.FleetLocalNamespace)); err != nil {
+		allErrs = append(allErrs, field.InternalError(
+			field.NewPath(""), fmt.Errorf("failed to list machines: %w", err)))
+		return allErrs
+	}
+
+	if len(nodeList.Items) == 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			"no nodes found in the cluster"))
+		return allErrs
+	}
+
+	if len(nodeList.Items) != len(machineList.Items) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("node count (%d) does not match machine count (%d)",
+				len(nodeList.Items), len(machineList.Items))))
+	}
+
+	// Build machine lookup by name
+	machineByName := make(map[string]*clusterv1.Machine, len(machineList.Items))
+	for i := range machineList.Items {
+		machineByName[machineList.Items[i].Name] = &machineList.Items[i]
+	}
+
+	// Check each machine has a valid NodeRef
+	for _, machine := range machineList.Items {
+		if machine.Status.NodeRef == nil {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("machine %s/%s has no node reference", machine.Namespace, machine.Name)))
+		}
+	}
+
+	// Check each node's labels and annotations
+	const (
+		managedLabel      = "harvesterhci.io/managed"
+		machineAnnotation = "cluster.x-k8s.io/machine"
+	)
+	for _, node := range nodeList.Items {
+		if node.Labels[managedLabel] != "true" {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("node %q is missing %s label", node.Name, managedLabel)))
+			continue
+		}
+
+		machineName, ok := node.Annotations[machineAnnotation]
+		if !ok {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("node %q is missing %s annotation", node.Name, machineAnnotation)))
+			continue
+		}
+
+		machine, exists := machineByName[machineName]
+		if !exists {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("node %q references machine %q which does not exist", node.Name, machineName)))
+			continue
+		}
+
+		if machine.Status.NodeRef != nil && machine.Status.NodeRef.Name != node.Name {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec"),
+				fmt.Sprintf("machine %q NodeRef.Name %q does not match node %q",
+					machineName, machine.Status.NodeRef.Name, node.Name)))
+		}
 	}
 
 	return allErrs

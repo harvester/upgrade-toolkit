@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -57,6 +58,7 @@ func init() {
 	utilruntime.Must(harvesterv1beta1.AddToScheme(scheme))
 	utilruntime.Must(provisioningv1.AddToScheme(scheme))
 	utilruntime.Must(upgradev1.AddToScheme(scheme))
+	utilruntime.Must(clusterv1.AddToScheme(scheme))
 
 	utilruntime.Must(managementv1beta1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme

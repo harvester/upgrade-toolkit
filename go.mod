@@ -36,6 +36,7 @@ require (
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	kubevirt.io/api v1.7.1
 	kubevirt.io/client-go v1.7.1
+	sigs.k8s.io/cluster-api v1.9.5
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
@@ -140,7 +141,6 @@ require (
 	kubevirt.io/containerized-data-importer-api v1.64.0 // indirect
 	kubevirt.io/controller-lifecycle-operator-sdk/api v0.2.4 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.32.1 // indirect
-	sigs.k8s.io/cluster-api v1.9.5 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
