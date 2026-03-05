@@ -64,7 +64,7 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
 		By("installing external stub CRDs required by the controller")
-		cmd = exec.Command("kubectl", "apply", "-f", "test/e2e/external-crds.yaml")
+		cmd = exec.Command("kubectl", "apply", "-f", "hack/external-stub-crds.yaml")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install external stub CRDs")
 
@@ -95,7 +95,7 @@ var _ = Describe("Manager", Ordered, func() {
 		_, _ = utils.Run(cmd)
 
 		By("removing external stub CRDs")
-		cmd = exec.Command("kubectl", "delete", "-f", "test/e2e/external-crds.yaml")
+		cmd = exec.Command("kubectl", "delete", "-f", "hack/external-stub-crds.yaml")
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")

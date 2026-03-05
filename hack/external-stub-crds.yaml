@@ -1,11 +1,11 @@
-# Minimal stub CRDs for the Test Chart CI workflow.
+# Minimal stub CRDs for external types used by the upgrade-toolkit controller.
 #
 # The manager's cache.ByObject, controller Owns(), and webhook validators
 # reference external types whose CRDs are not shipped by this project.
-# In the real Harvester cluster these CRDs are provided by other components
-# (Harvester, Longhorn, KubeVirt, Rancher, Cluster API). For the kind-based
-# CI test we install lightweight stubs so the REST mapper can resolve them
-# and the manager can start successfully.
+# In a real Harvester cluster these CRDs are provided by other components
+# (Harvester, Longhorn, KubeVirt, Rancher, Cluster API). For Kind-based CI
+# tests (e2e and chart) we install lightweight stubs so the REST mapper can
+# resolve them and the manager can start successfully.
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition

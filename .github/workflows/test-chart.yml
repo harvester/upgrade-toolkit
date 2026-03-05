@@ -51,7 +51,7 @@ jobs:
 #          helm install prometheus-crds prometheus-community/prometheus-operator-crds
 
       - name: Install external CRDs
-        run: make install-test-chart-crds
+        run: make install-external-crds
 
       - name: Deploy manager via Helm
         run: |
