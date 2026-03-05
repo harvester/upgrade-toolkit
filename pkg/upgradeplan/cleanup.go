@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -73,6 +74,14 @@ func CleanupUpgradeResources(
 		return err
 	}
 
+	if err := restoreLonghornReplicaReplenishmentInterval(ctx, c, log, upgradePlan); err != nil {
+		return err
+	}
+
+	if err := reEnableDeschedulerAddon(ctx, c, log, upgradePlan); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -125,6 +134,78 @@ func revertClusterUpgradeStrategy(
 	raw := []byte(`{"spec":{"rkeConfig":{"upgradeStrategy":null}}}`)
 	if err := c.Patch(ctx, &cluster, client.RawPatch(types.MergePatchType, raw)); err != nil {
 		return fmt.Errorf("failed to revert Cluster upgradeStrategy: %w", err)
+	}
+
+	return nil
+}
+
+// restoreLonghornReplicaReplenishmentInterval restores the Longhorn
+// replica-replenishment-wait-interval setting to its pre-upgrade value.
+func restoreLonghornReplicaReplenishmentInterval(
+	ctx context.Context,
+	c client.Client,
+	log logr.Logger,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	originalValue, ok := upgradePlan.Annotations[AnnotationReplicaReplenishmentOriginal]
+	if !ok {
+		return nil
+	}
+
+	var setting lhv1beta2.Setting
+	if err := c.Get(ctx, types.NamespacedName{
+		Namespace: LonghornSystemNamespace,
+		Name:      LonghornSettingReplicaReplenishment,
+	}, &setting); err != nil {
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+			log.V(1).Info("Longhorn replica-replenishment-wait-interval setting not found during cleanup, skipping")
+			return nil
+		}
+		return fmt.Errorf("failed to get Longhorn setting %s during cleanup: %w", LonghornSettingReplicaReplenishment, err)
+	}
+
+	patch := client.MergeFrom(setting.DeepCopy())
+	setting.Value = originalValue
+	if err := c.Patch(ctx, &setting, patch); err != nil {
+		return fmt.Errorf("failed to restore Longhorn setting %s: %w", LonghornSettingReplicaReplenishment, err)
+	}
+
+	log.Info("restored Longhorn replica replenishment wait interval", "value", originalValue)
+	return nil
+}
+
+// reEnableDeschedulerAddon re-enables the descheduler addon if it was disabled
+// during upgrade.
+func reEnableDeschedulerAddon(
+	ctx context.Context,
+	c client.Client,
+	log logr.Logger,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	wasEnabled, ok := upgradePlan.Annotations[AnnotationDeschedulerWasEnabled]
+	if !ok || wasEnabled != "true" {
+		return nil
+	}
+
+	var addon harvesterv1beta1.Addon
+	if err := c.Get(ctx, types.NamespacedName{
+		Namespace: DeschedulerAddonNamespace,
+		Name:      DeschedulerAddonName,
+	}, &addon); err != nil {
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+			log.V(1).Info("descheduler addon not found during cleanup, skipping")
+			return nil
+		}
+		return fmt.Errorf("failed to get descheduler addon during cleanup: %w", err)
+	}
+
+	if !addon.Spec.Enabled {
+		patch := client.MergeFrom(addon.DeepCopy())
+		addon.Spec.Enabled = true
+		if err := c.Patch(ctx, &addon, patch); err != nil {
+			return fmt.Errorf("failed to re-enable descheduler addon: %w", err)
+		}
+		log.Info("re-enabled descheduler addon after upgrade")
 	}
 
 	return nil

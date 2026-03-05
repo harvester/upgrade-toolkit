@@ -14,6 +14,16 @@ const (
 	UpstreamAnnotationPrefix = "harvesterhci.io"
 	SUCLabelPrefix           = "upgrade.cattle.io"
 
+	// Longhorn replica replenishment wait interval management
+	LonghornSettingReplicaReplenishment          = "replica-replenishment-wait-interval"
+	AnnotationReplicaReplenishmentOriginal       = AnnotationPrefix + "/replica-replenishment-wait-interval"
+	ExtendedReplicaReplenishmentWaitInterval int = 1800
+
+	// Descheduler addon management during node upgrade
+	DeschedulerAddonName            = "descheduler"
+	DeschedulerAddonNamespace       = "kube-system"
+	AnnotationDeschedulerWasEnabled = AnnotationPrefix + "/descheduler-was-enabled"
+
 	HarvesterUpgradeImageAnnotation = UpstreamAnnotationPrefix + "/" + "os-upgrade-image"
 
 	HarvesterUpgradePlanLabel = LabelPrefix + "/" + "upgrade-plan"

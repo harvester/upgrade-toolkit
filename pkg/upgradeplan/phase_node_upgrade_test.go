@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +22,29 @@ import (
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
+
+func newNodeUpgradePhaseWithAll(objs ...runtime.Object) *NodeUpgradePhase {
+	scheme := runtime.NewScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	_ = provisioningv1.AddToScheme(scheme)
+	_ = batchv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = lhv1beta2.AddToScheme(scheme)
+	_ = harvesterv1beta1.AddToScheme(scheme)
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithRuntimeObjects(objs...).
+		Build()
+
+	return NewNodeUpgradePhase(&PhaseDeps{
+		Client:             fakeClient,
+		Scheme:             scheme,
+		Log:                logr.Discard(),
+		JobServiceAccount:  "harvester",
+		PlanServiceAccount: "system-upgrade-controller",
+	})
+}
 
 func newTestCluster(k8sVersion string, provisionGeneration int) *provisioningv1.Cluster {
 	return &provisioningv1.Cluster{
@@ -471,4 +496,187 @@ func TestPostRun_SingleNode_Skipped(t *testing.T) {
 
 	err := phase.PostRun(context.Background(), up)
 	assert.NoError(t, err)
+}
+
+// --- Longhorn Replica Replenishment Tests ---
+
+func newTestLonghornSetting(value string) *lhv1beta2.Setting {
+	return &lhv1beta2.Setting{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      LonghornSettingReplicaReplenishment,
+			Namespace: LonghornSystemNamespace,
+		},
+		Value: value,
+	}
+}
+
+func TestPreRun_ExtendsLonghornReplicaReplenishment(t *testing.T) {
+	setting := newTestLonghornSetting("300")
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+
+	phase := newNodeUpgradePhaseWithAll(setting, node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	// Verify annotation saved original value
+	assert.Equal(t, "300", up.Annotations[AnnotationReplicaReplenishmentOriginal])
+
+	// Verify setting was patched
+	var patched lhv1beta2.Setting
+	err = phase.Client.Get(context.Background(), types.NamespacedName{
+		Namespace: LonghornSystemNamespace,
+		Name:      LonghornSettingReplicaReplenishment,
+	}, &patched)
+	require.NoError(t, err)
+	assert.Equal(t, "1800", patched.Value)
+}
+
+func TestPreRun_LonghornReplenishment_Idempotent(t *testing.T) {
+	setting := newTestLonghornSetting("1800")
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{
+		AnnotationReplicaReplenishmentOriginal: "300",
+	}
+
+	phase := newNodeUpgradePhaseWithAll(setting, node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	// Annotation should still have original value, not "1800"
+	assert.Equal(t, "300", up.Annotations[AnnotationReplicaReplenishmentOriginal])
+}
+
+func TestPreRun_LonghornSettingNotFound_Skips(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+
+	phase := newNodeUpgradePhaseWithAll(node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	// No annotation should be set
+	_, ok := up.Annotations[AnnotationReplicaReplenishmentOriginal]
+	assert.False(t, ok)
+}
+
+// --- Descheduler Addon Tests ---
+
+func newTestDeschedulerAddon(enabled bool) *harvesterv1beta1.Addon {
+	return &harvesterv1beta1.Addon{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeschedulerAddonName,
+			Namespace: DeschedulerAddonNamespace,
+		},
+		Spec: harvesterv1beta1.AddonSpec{
+			Enabled: enabled,
+		},
+	}
+}
+
+func TestPreRun_DisablesDeschedulerAddon(t *testing.T) {
+	addon := newTestDeschedulerAddon(true)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+
+	phase := newNodeUpgradePhaseWithAll(addon, node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	// Verify annotation
+	assert.Equal(t, "true", up.Annotations[AnnotationDeschedulerWasEnabled])
+
+	// Verify addon was disabled
+	var patched harvesterv1beta1.Addon
+	err = phase.Client.Get(context.Background(), types.NamespacedName{
+		Namespace: DeschedulerAddonNamespace,
+		Name:      DeschedulerAddonName,
+	}, &patched)
+	require.NoError(t, err)
+	assert.False(t, patched.Spec.Enabled)
+}
+
+func TestPreRun_DeschedulerAddon_AlreadyDisabled(t *testing.T) {
+	addon := newTestDeschedulerAddon(false)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+
+	phase := newNodeUpgradePhaseWithAll(addon, node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	// No annotation should be set since addon was already disabled
+	_, ok := up.Annotations[AnnotationDeschedulerWasEnabled]
+	assert.False(t, ok)
+}
+
+func TestPreRun_DeschedulerAddon_NotFound(t *testing.T) {
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+
+	phase := newNodeUpgradePhaseWithAll(node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	_, ok := up.Annotations[AnnotationDeschedulerWasEnabled]
+	assert.False(t, ok)
+}
+
+func TestPreRun_DeschedulerAddon_Idempotent(t *testing.T) {
+	addon := newTestDeschedulerAddon(false) // already disabled by previous PreRun
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "node-1",
+			Labels: map[string]string{harvesterManagedLabel: "true"},
+		},
+	}
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{
+		AnnotationDeschedulerWasEnabled: "true",
+	}
+
+	phase := newNodeUpgradePhaseWithAll(addon, node, up)
+
+	err := phase.PreRun(context.Background(), up)
+	require.NoError(t, err)
+
+	// Annotation should remain
+	assert.Equal(t, "true", up.Annotations[AnnotationDeschedulerWasEnabled])
 }

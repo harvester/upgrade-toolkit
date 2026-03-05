@@ -477,6 +477,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - nodes
   - secrets
   verbs:
@@ -556,6 +563,15 @@ rules:
   - harvesterhci.io
   resources:
   - addons
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - harvesterhci.io
+  resources:
   - schedulevmbackups
   - settings
   - virtualmachinebackups
@@ -583,6 +599,16 @@ rules:
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - longhorn.io
+  resources:
+  - settings
+  verbs:
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - longhorn.io

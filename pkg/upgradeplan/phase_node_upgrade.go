@@ -4,13 +4,18 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
 	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,7 +36,9 @@ func NewNodeUpgradePhase(deps *PhaseDeps) *NodeUpgradePhase {
 
 func (p *NodeUpgradePhase) Name() string { return "NodeUpgrade" }
 
-// PreRun initializes NodeUpgradeStatuses for all Harvester-managed nodes.
+// PreRun initializes NodeUpgradeStatuses for all Harvester-managed nodes,
+// extends Longhorn's replica replenishment wait interval, and disables the
+// descheduler addon to prevent interference during node upgrades.
 func (p *NodeUpgradePhase) PreRun(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
@@ -53,6 +60,98 @@ func (p *NodeUpgradePhase) PreRun(
 		}
 	}
 
+	if err := p.extendLonghornReplicaReplenishmentInterval(ctx, upgradePlan); err != nil {
+		return err
+	}
+
+	if err := p.disableDeschedulerAddon(ctx, upgradePlan); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// extendLonghornReplicaReplenishmentInterval saves the current Longhorn
+// replica-replenishment-wait-interval and extends it to prevent unnecessary
+// replica rebuilding during node upgrades.
+func (p *NodeUpgradePhase) extendLonghornReplicaReplenishmentInterval(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	if _, ok := upgradePlan.Annotations[AnnotationReplicaReplenishmentOriginal]; ok {
+		return nil
+	}
+
+	var setting lhv1beta2.Setting
+	if err := p.Client.Get(ctx, types.NamespacedName{
+		Namespace: LonghornSystemNamespace,
+		Name:      LonghornSettingReplicaReplenishment,
+	}, &setting); err != nil {
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+			p.Log.V(1).Info("Longhorn replica-replenishment-wait-interval setting not found, skipping")
+			return nil
+		}
+		return fmt.Errorf("failed to get Longhorn setting %s: %w", LonghornSettingReplicaReplenishment, err)
+	}
+
+	// Save original value to annotation
+	if upgradePlan.Annotations == nil {
+		upgradePlan.Annotations = make(map[string]string)
+	}
+	upgradePlan.Annotations[AnnotationReplicaReplenishmentOriginal] = setting.Value
+
+	// Patch the setting to the extended value
+	patch := client.MergeFrom(setting.DeepCopy())
+	setting.Value = strconv.Itoa(ExtendedReplicaReplenishmentWaitInterval)
+	if err := p.Client.Patch(ctx, &setting, patch); err != nil {
+		return fmt.Errorf("failed to patch Longhorn setting %s: %w", LonghornSettingReplicaReplenishment, err)
+	}
+
+	p.Log.Info("extended Longhorn replica replenishment wait interval",
+		"original", upgradePlan.Annotations[AnnotationReplicaReplenishmentOriginal],
+		"new", ExtendedReplicaReplenishmentWaitInterval)
+	return nil
+}
+
+// disableDeschedulerAddon disables the descheduler addon to prevent it from
+// interfering with node drains during upgrade.
+func (p *NodeUpgradePhase) disableDeschedulerAddon(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	if _, ok := upgradePlan.Annotations[AnnotationDeschedulerWasEnabled]; ok {
+		return nil
+	}
+
+	var addon harvesterv1beta1.Addon
+	if err := p.Client.Get(ctx, types.NamespacedName{
+		Namespace: DeschedulerAddonNamespace,
+		Name:      DeschedulerAddonName,
+	}, &addon); err != nil {
+		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+			p.Log.V(1).Info("descheduler addon not found, skipping")
+			return nil
+		}
+		return fmt.Errorf("failed to get descheduler addon: %w", err)
+	}
+
+	if !addon.Spec.Enabled {
+		return nil
+	}
+
+	// Save state and disable
+	if upgradePlan.Annotations == nil {
+		upgradePlan.Annotations = make(map[string]string)
+	}
+	upgradePlan.Annotations[AnnotationDeschedulerWasEnabled] = "true"
+
+	patch := client.MergeFrom(addon.DeepCopy())
+	addon.Spec.Enabled = false
+	if err := p.Client.Patch(ctx, &addon, patch); err != nil {
+		return fmt.Errorf("failed to disable descheduler addon: %w", err)
+	}
+
+	p.Log.Info("disabled descheduler addon for node upgrade")
 	return nil
 }
 

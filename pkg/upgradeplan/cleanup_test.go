@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
@@ -34,6 +35,7 @@ func newFakeClient(objs ...client.Object) client.Client {
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
+	_ = lhv1beta2.AddToScheme(scheme)
 
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -321,4 +323,95 @@ func TestCleanupUpgradeResources_CleansUpNodeAnnotations(t *testing.T) {
 	var patchedNode2 corev1.Node
 	err = c.Get(ctx, types.NamespacedName{Name: "node2"}, &patchedNode2)
 	require.NoError(t, err)
+}
+
+func TestCleanupUpgradeResources_RestoresLonghornReplenishment(t *testing.T) {
+	up := newTestUpgradePlan()
+	up.Annotations = map[string]string{
+		AnnotationReplicaReplenishmentOriginal: "300",
+	}
+
+	setting := &lhv1beta2.Setting{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      LonghornSettingReplicaReplenishment,
+			Namespace: LonghornSystemNamespace,
+		},
+		Value: "1800",
+	}
+
+	c := newFakeClient(setting)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	var patched lhv1beta2.Setting
+	err = c.Get(context.Background(), types.NamespacedName{
+		Namespace: LonghornSystemNamespace,
+		Name:      LonghornSettingReplicaReplenishment,
+	}, &patched)
+	require.NoError(t, err)
+	assert.Equal(t, "300", patched.Value)
+}
+
+func TestCleanupUpgradeResources_SkipsLonghornRestoreWhenNoAnnotation(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	c := newFakeClient()
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+}
+
+func TestCleanupUpgradeResources_ReEnablesDeschedulerAddon(t *testing.T) {
+	up := newTestUpgradePlan()
+	up.Annotations = map[string]string{
+		AnnotationDeschedulerWasEnabled: "true",
+	}
+
+	addon := &harvesterv1beta1.Addon{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeschedulerAddonName,
+			Namespace: DeschedulerAddonNamespace,
+		},
+		Spec: harvesterv1beta1.AddonSpec{
+			Enabled: false,
+		},
+	}
+
+	c := newFakeClient(addon)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	var patched harvesterv1beta1.Addon
+	err = c.Get(context.Background(), types.NamespacedName{
+		Namespace: DeschedulerAddonNamespace,
+		Name:      DeschedulerAddonName,
+	}, &patched)
+	require.NoError(t, err)
+	assert.True(t, patched.Spec.Enabled)
+}
+
+func TestCleanupUpgradeResources_SkipsDeschedulerWhenNoAnnotation(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	addon := &harvesterv1beta1.Addon{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeschedulerAddonName,
+			Namespace: DeschedulerAddonNamespace,
+		},
+		Spec: harvesterv1beta1.AddonSpec{
+			Enabled: false,
+		},
+	}
+
+	c := newFakeClient(addon)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	// Should NOT be re-enabled since no annotation
+	var patched harvesterv1beta1.Addon
+	err = c.Get(context.Background(), types.NamespacedName{
+		Namespace: DeschedulerAddonNamespace,
+		Name:      DeschedulerAddonName,
+	}, &patched)
+	require.NoError(t, err)
+	assert.False(t, patched.Spec.Enabled)
 }

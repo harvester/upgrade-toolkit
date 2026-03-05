@@ -31,6 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -44,6 +45,7 @@ type UpgradePlanReconciler struct {
 	client.Client
 	Scheme             *runtime.Scheme
 	Log                logr.Logger
+	EventRecorder      record.EventRecorder
 	JobServiceAccount  string
 	PlanServiceAccount string
 	pipeline           *upgradeplan.Pipeline
@@ -62,12 +64,14 @@ type UpgradePlanReconciler struct {
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=virtualmachineimages,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups=upgrade.cattle.io,resources=plans,verbs=get;list;watch;create;update;deletecollection
 // +kubebuilder:rbac:groups=longhorn.io,resources=volumes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=longhorn.io,resources=settings,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=provisioning.cattle.io,resources=clusters,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=virtualmachinebackups,verbs=get;list;watch
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=schedulevmbackups,verbs=get;list;watch
-// +kubebuilder:rbac:groups=harvesterhci.io,resources=addons,verbs=get;list;watch
+// +kubebuilder:rbac:groups=harvesterhci.io,resources=addons,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=kubevirt.io,resources=virtualmachineinstances,verbs=get;list;watch
 // +kubebuilder:rbac:groups=management.cattle.io,resources=managedcharts,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -121,6 +125,8 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.Log.Info("blocking concurrent upgrade",
 			"upgradePlan", upgradePlan.Name,
 			"conflicting", conflicting)
+		r.EventRecorder.Eventf(&upgradePlan, corev1.EventTypeWarning, "ConcurrentUpgradeBlocked",
+			"Blocked by in-progress upgrade %q", conflicting)
 		upgradePlanCopy.SetCondition(
 			managementv1beta1.UpgradePlanAvailable,
 			metav1.ConditionFalse,
@@ -136,11 +142,25 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	result, err := r.pipeline.Execute(ctx, upgradePlanCopy)
 	if err != nil {
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionTrue, "ReconcileError", err.Error())
+		r.EventRecorder.Eventf(&upgradePlan, corev1.EventTypeWarning, "ReconcileError", "Pipeline error: %v", err)
 	} else {
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionFalse, "ReconcileSuccess", "")
 	}
 
 	setUpgradePlanPhaseTransitionTimestamp(&upgradePlan, upgradePlanCopy)
+
+	if upgradePlanCopy.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseSucceeded &&
+		upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseSucceeded {
+		r.EventRecorder.Event(&upgradePlan, corev1.EventTypeNormal, "UpgradeSucceeded", "Upgrade completed successfully")
+	} else if upgradePlanCopy.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseFailed &&
+		upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseFailed {
+		cond := upgradePlanCopy.LookupCondition(managementv1beta1.UpgradePlanProgressing)
+		msg := "Upgrade failed"
+		if cond.Message != "" {
+			msg = fmt.Sprintf("Upgrade failed: %s", cond.Message)
+		}
+		r.EventRecorder.Event(&upgradePlan, corev1.EventTypeWarning, "UpgradeFailed", msg)
+	}
 
 	if !reflect.DeepEqual(upgradePlan.Status, upgradePlanCopy.Status) {
 		if statusUpdateErr := r.Status().Update(ctx, upgradePlanCopy); statusUpdateErr != nil {
@@ -156,10 +176,15 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.EventRecorder == nil {
+		r.EventRecorder = mgr.GetEventRecorderFor("upgradeplan-controller")
+	}
+
 	deps := &upgradeplan.PhaseDeps{
 		Client:             r.Client,
 		Scheme:             r.Scheme,
 		Log:                r.Log,
+		EventRecorder:      r.EventRecorder,
 		JobServiceAccount:  r.JobServiceAccount,
 		PlanServiceAccount: r.PlanServiceAccount,
 	}

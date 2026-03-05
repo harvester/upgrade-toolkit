@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -18,6 +19,7 @@ type PhaseEntry struct {
 
 // Pipeline is an ordered sequence of phases that drives the upgrade lifecycle.
 type Pipeline struct {
+	deps     *PhaseDeps
 	init     Runnable
 	finalize Runnable
 	phases   []PhaseEntry
@@ -27,6 +29,7 @@ type Pipeline struct {
 // NewPipeline creates a new upgrade pipeline with all phases wired up.
 func NewPipeline(deps *PhaseDeps) *Pipeline {
 	p := &Pipeline{
+		deps:     deps,
 		init:     NewInitPhase(deps),
 		finalize: NewFinalizePhase(deps),
 		phases: []PhaseEntry{
@@ -106,6 +109,9 @@ func (p *Pipeline) Execute(
 
 	// Completed phase: run PostRun if implemented, then advance
 	if currentPhase == entry.CompletedPhase {
+		p.recordEvent(upgradePlan, corev1.EventTypeNormal, "PhaseCompleted",
+			fmt.Sprintf("Completed phase %s", entry.ActivePhase))
+
 		if postRunnable, ok := entry.Phase.(PostRunnable); ok {
 			if err := postRunnable.PostRun(ctx, upgradePlan); err != nil {
 				return ctrl.Result{}, err
@@ -179,5 +185,18 @@ func (p *Pipeline) enterPhase(
 	}
 
 	updateProgressingPhase(upgradePlan, entry.ActivePhase, "")
+	p.recordEvent(upgradePlan, corev1.EventTypeNormal, "PhaseTransition",
+		fmt.Sprintf("Entering phase %s", entry.ActivePhase))
 	return ctrl.Result{RequeueAfter: RequeueAfterDuration}, nil
+}
+
+// recordEvent emits a Kubernetes Event on the UpgradePlan if an EventRecorder
+// is configured.
+func (p *Pipeline) recordEvent(
+	upgradePlan *managementv1beta1.UpgradePlan,
+	eventType, reason, message string,
+) {
+	if p.deps != nil && p.deps.EventRecorder != nil {
+		p.deps.EventRecorder.Event(upgradePlan, eventType, reason, message)
+	}
 }
