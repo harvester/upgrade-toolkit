@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	upgradeplanpkg "github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -45,6 +46,7 @@ func newReconciler() *UpgradePlanReconciler {
 		Client:             k8sClient,
 		Scheme:             k8sClient.Scheme(),
 		Log:                logr.Discard(),
+		EventRecorder:      record.NewFakeRecorder(100),
 		JobServiceAccount:  "harvester",
 		PlanServiceAccount: "system-upgrade-controller",
 		pipeline:           upgradeplanpkg.NewPipeline(deps),
