@@ -43,7 +43,7 @@ ARG TARGETARCH
 
 RUN zypper rm -y container-suseconnect && \
     zypper --no-gpg-checks ref && \
-    zypper in -y curl e2fsprogs rsync awk zstd jq helm zip unzip nginx && zypper clean -a
+    zypper in -y curl e2fsprogs rsync awk zstd jq helm zip unzip nginx util-linux && zypper clean -a
 
 ENV KUBECTL_VERSION=v1.33.7
 ENV KUBEVIRT_VERSION=v1.7.1
