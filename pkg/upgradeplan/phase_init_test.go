@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -87,29 +88,32 @@ func newNodeWithKubeletURL(t *testing.T, serverURL string) *corev1.Node {
 	}
 }
 
-//nolint:staticcheck // upstream uses Endpoints; migrate to EndpointSlice later
-func newKubernetesEndpoints(ips ...string) *corev1.Endpoints {
-	addrs := make([]corev1.EndpointAddress, len(ips))
-	for i, ip := range ips {
-		addrs[i] = corev1.EndpointAddress{IP: ip}
-	}
-	ep := &corev1.Endpoints{
+func newKubernetesEndpointSlice(ips ...string) *discoveryv1.EndpointSlice {
+	eps := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kubernetes",
+			Name:      "kubernetes-abc12",
 			Namespace: metav1.NamespaceDefault,
+			Labels: map[string]string{
+				"kubernetes.io/service-name": "kubernetes",
+			},
 		},
+		AddressType: discoveryv1.AddressTypeIPv4,
 	}
-	if len(addrs) > 0 {
-		ep.Subsets = []corev1.EndpointSubset{
-			{Addresses: addrs},
+	if len(ips) > 0 {
+		for _, ip := range ips {
+			eps.Endpoints = append(eps.Endpoints, discoveryv1.Endpoint{
+				Addresses:  []string{ip},
+				Conditions: discoveryv1.EndpointConditions{Ready: ptr.To(true)},
+			})
 		}
 	}
-	return ep
+	return eps
 }
 
 func newTestScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	_ = corev1.AddToScheme(s)
+	_ = discoveryv1.AddToScheme(s)
 	return s
 }
 
@@ -276,7 +280,7 @@ func TestCheckDiskSpace_WithNodes(t *testing.T) {
 func TestCheckCerts_OK(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -292,7 +296,7 @@ func TestCheckCerts_OK(t *testing.T) {
 func TestCheckCerts_ExpiringTooSoon(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -309,7 +313,7 @@ func TestCheckCerts_ExpiringTooSoon(t *testing.T) {
 func TestCheckCerts_CustomThresholdPasses(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -333,7 +337,7 @@ func TestCheckCerts_CustomThresholdPasses(t *testing.T) {
 func TestCheckCerts_InvalidAnnotation(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -357,7 +361,7 @@ func TestCheckCerts_InvalidAnnotation(t *testing.T) {
 func TestCheckCerts_NegativeAnnotation(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -381,7 +385,7 @@ func TestCheckCerts_NegativeAnnotation(t *testing.T) {
 func TestCheckCerts_EmptyEndpoints(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints()). // no IPs
+		WithObjects(newKubernetesEndpointSlice()). // no IPs
 		Build()
 
 	phase := &InitPhase{
@@ -397,7 +401,7 @@ func TestCheckCerts_EmptyEndpoints(t *testing.T) {
 func TestCheckCerts_NoCertsReturned(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -422,7 +426,7 @@ func TestPostRun_AllChecksPass(t *testing.T) {
 	node := newNodeWithKubeletURL(t, server.URL)
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(node, newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(node, newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{
@@ -475,7 +479,7 @@ func TestPostRun_CertFailsTerminally(t *testing.T) {
 	node := newNodeWithKubeletURL(t, server.URL)
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(newTestScheme()).
-		WithObjects(node, newKubernetesEndpoints("10.0.0.1")).
+		WithObjects(node, newKubernetesEndpointSlice("10.0.0.1")).
 		Build()
 
 	phase := &InitPhase{

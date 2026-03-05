@@ -15,10 +15,13 @@ import (
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -281,22 +284,26 @@ func (p *InitPhase) checkCerts(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
-	var endpoints corev1.Endpoints //nolint:staticcheck // upstream uses Endpoints; migrate to EndpointSlice later
-	if err := p.Client.Get(ctx, types.NamespacedName{
+	var epsList discoveryv1.EndpointSliceList
+	if err := p.Client.List(ctx, &epsList, &client.ListOptions{
 		Namespace: metav1.NamespaceDefault,
-		Name:      "kubernetes",
-	}, &endpoints); err != nil {
-		return fmt.Errorf("can't get kubernetes endpoints: %w", err)
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			serviceNameLabel: "kubernetes",
+		}),
+	}); err != nil {
+		return fmt.Errorf("can't list kubernetes endpointslices: %w", err)
 	}
 
 	var kubernetesIPs []string
-	for _, subset := range endpoints.Subsets {
-		for _, address := range subset.Addresses {
-			kubernetesIPs = append(kubernetesIPs, address.IP+":"+kubernetesAPIPort)
+	for _, eps := range epsList.Items {
+		for _, ep := range eps.Endpoints {
+			for _, addr := range ep.Addresses {
+				kubernetesIPs = append(kubernetesIPs, addr+":"+kubernetesAPIPort)
+			}
 		}
 	}
 	if len(kubernetesIPs) == 0 {
-		return fmt.Errorf("cluster IP is empty in the default/kubernetes endpoints")
+		return fmt.Errorf("cluster IP is empty in the default/kubernetes endpointslices")
 	}
 
 	earliestExpiringCert := p.getAddrsEarliestExpiringCert(kubernetesIPs)
