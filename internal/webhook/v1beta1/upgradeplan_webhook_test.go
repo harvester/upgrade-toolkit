@@ -1785,70 +1785,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should block deletion when Progressing=True", func() {
+		It("should allow deletion when Succeeded", func() {
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			}
-			obj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
-				Status: managementv1beta1.UpgradePlanStatus{
-					Conditions: []metav1.Condition{
-						{
-							Type:   managementv1beta1.UpgradePlanProgressing,
-							Status: metav1.ConditionTrue,
-						},
-					},
-				},
-			}
-
-			_, err := validator.ValidateDelete(ctx, obj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Progressing"))
-		})
-
-		It("should block deletion while cluster is being provisioned", func() {
-			cluster := &provisioningv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
-				Status:     provisioningv1.ClusterStatus{Ready: false},
-			}
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
-			}
-			obj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
-			}
-
-			_, err := validator.ValidateDelete(ctx, obj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("cluster is being provisioned"))
-		})
-
-		It("should block deletion while nodes are being upgraded", func() {
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			}
-			obj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
-				Status: managementv1beta1.UpgradePlanStatus{
-					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
-				},
-			}
-
-			_, err := validator.ValidateDelete(ctx, obj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("nodes are being upgraded"))
-		})
-
-		It("should allow deletion when cluster is ready and not node upgrading", func() {
-			cluster := &provisioningv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
-				Status:     provisioningv1.ClusterStatus{Ready: true},
-			}
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(cluster).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
@@ -1860,6 +1799,112 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 			_, err := validator.ValidateDelete(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should block deletion when Progressing=True without allow-deletion annotation", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseISODownloading,
+					Conditions: []metav1.Condition{
+						{
+							Type:   managementv1beta1.UpgradePlanProgressing,
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("allow-deletion"))
+		})
+
+		It("should allow deletion when Progressing=True with allow-deletion annotation", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "upgrade-1",
+					Annotations: map[string]string{
+						upgradeplan.AnnotationAllowDeletion: "true",
+					},
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseISODownloading,
+					Conditions: []metav1.Condition{
+						{
+							Type:   managementv1beta1.UpgradePlanProgressing,
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should block deletion during ClusterUpgrading even with allow-deletion annotation", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "upgrade-1",
+					Annotations: map[string]string{
+						upgradeplan.AnnotationAllowDeletion: "true",
+					},
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseClusterUpgrading,
+					Conditions: []metav1.Condition{
+						{
+							Type:   managementv1beta1.UpgradePlanProgressing,
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cluster is being upgraded"))
+		})
+
+		It("should block deletion during NodeUpgrading even with allow-deletion annotation", func() {
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "upgrade-1",
+					Annotations: map[string]string{
+						upgradeplan.AnnotationAllowDeletion: "true",
+					},
+				},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Status: managementv1beta1.UpgradePlanStatus{
+					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
+					Conditions: []metav1.Condition{
+						{
+							Type:   managementv1beta1.UpgradePlanProgressing,
+							Status: metav1.ConditionTrue,
+						},
+					},
+				},
+			}
+
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("nodes are being upgraded"))
 		})
 	})
 

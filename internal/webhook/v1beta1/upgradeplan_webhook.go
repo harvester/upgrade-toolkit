@@ -165,43 +165,37 @@ func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, oldObj,
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type UpgradePlan.
-func (v *UpgradePlanCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *UpgradePlanCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	upgradePlan, ok := obj.(*managementv1beta1.UpgradePlan)
 	if !ok {
 		return nil, fmt.Errorf("expected an UpgradePlan object but got %T", obj)
 	}
 	upgradeplanlog.Info("Validation for UpgradePlan upon deletion", "name", upgradePlan.GetName())
 
+	// Non-progressing UpgradePlans can be freely deleted
+	if !upgradePlan.ConditionTrue(managementv1beta1.UpgradePlanProgressing) {
+		return nil, nil
+	}
+
 	var allErrs field.ErrorList
 
-	if upgradePlan.ConditionTrue(managementv1beta1.UpgradePlanProgressing) {
+	// Hard block: ClusterUpgrading and NodeUpgrading phases cannot be interrupted
+	switch upgradePlan.Status.CurrentPhase {
+	case managementv1beta1.UpgradePlanPhaseClusterUpgrading:
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("metadata", "name"),
-			"cannot delete UpgradePlan while Progressing condition is True"))
-	}
-
-	// Block deletion while the cluster is being provisioned (not ready)
-	var cluster provisioningv1.Cluster
-	if err := v.Client.Get(ctx, client.ObjectKey{
-		Namespace: upgradeplan.FleetLocalNamespace,
-		Name:      upgradeplan.LocalClusterName,
-	}, &cluster); err != nil {
-		if !apierrors.IsNotFound(err) {
-			allErrs = append(allErrs, field.InternalError(
-				field.NewPath("metadata", "name"),
-				fmt.Errorf("failed to get cluster: %w", err)))
-		}
-	} else if !cluster.Status.Ready {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("metadata", "name"),
-			"cannot delete UpgradePlan while the cluster is being provisioned"))
-	}
-
-	// Block deletion while nodes are being upgraded
-	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseNodeUpgrading {
+			"cannot delete UpgradePlan while cluster is being upgraded"))
+	case managementv1beta1.UpgradePlanPhaseNodeUpgrading:
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("metadata", "name"),
 			"cannot delete UpgradePlan while nodes are being upgraded"))
+	default:
+		// Soft block: other progressing phases require the allow-deletion annotation
+		if upgradePlan.Annotations[upgradeplan.AnnotationAllowDeletion] != annotationValueTrue {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("metadata", "name"),
+				fmt.Sprintf("cannot delete a progressing UpgradePlan without the %s annotation", upgradeplan.AnnotationAllowDeletion)))
+		}
 	}
 
 	if len(allErrs) > 0 {

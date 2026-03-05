@@ -62,6 +62,9 @@ const (
 	// Finalizer for UpgradePlan cleanup on deletion
 	UpgradePlanFinalizer = AnnotationPrefix + "/" + "upgradeplan-cleanup"
 
+	// Annotation to allow deletion of a progressing UpgradePlan (two-step safeguard)
+	AnnotationAllowDeletion = AnnotationPrefix + "/" + "allow-deletion"
+
 	// Annotation to skip webhook validation entirely
 	AnnotationSkipWebhook = UpstreamAnnotationPrefix + "/" + "skipWebhook"
 
