@@ -250,6 +250,10 @@ HELM_CHART_DIR ?= dist/chart
 ## Additional arguments to pass to helm commands
 HELM_EXTRA_ARGS ?=
 
+.PHONY: install-test-chart-crds
+install-test-chart-crds: ## Install stub CRDs required by the test-chart CI workflow.
+	kubectl apply -f hack/test-chart-crds.yaml
+
 .PHONY: install-helm
 install-helm: ## Install the latest version of Helm.
 	@command -v $(HELM) >/dev/null 2>&1 || { \
