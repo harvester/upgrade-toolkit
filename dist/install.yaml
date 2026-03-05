@@ -477,6 +477,14 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - nodes
   - secrets
   verbs:
@@ -485,6 +493,13 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/proxy
+  - nodes/stats
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:
@@ -548,7 +563,10 @@ rules:
 - apiGroups:
   - harvesterhci.io
   resources:
+  - addons
+  - schedulevmbackups
   - settings
+  - virtualmachinebackups
   verbs:
   - get
   - list
@@ -565,6 +583,30 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - kubevirt.io
+  resources:
+  - virtualmachineinstances
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - longhorn.io
+  resources:
+  - volumes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - management.cattle.io
+  resources:
+  - managedcharts
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - management.harvesterhci.io

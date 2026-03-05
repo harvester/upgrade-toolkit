@@ -58,6 +58,15 @@ const (
 	// Annotation to skip single-replica detached volume check
 	AnnotationSkipSingleReplicaDetachedVol = UpstreamAnnotationPrefix + "/" + "skipSingleReplicaDetachedVol"
 
+	// Annotation to skip garbage collection threshold check during upgrade
+	AnnotationSkipGCThresholdCheck = UpstreamAnnotationPrefix + "/" + "skipGarbageCollectionThresholdCheck"
+
+	// Annotation to set minimum certificate expiration days before upgrade
+	AnnotationMinCertsExpirationInDay = UpstreamAnnotationPrefix + "/" + "minCertsExpirationInDay"
+
+	// RKE2 internal IP annotation on nodes
+	RKE2InternalIPAnnotation = "rke2.io/internal-ip"
+
 	// Machine-plan Secret
 	MachinePlanSecretType   = "rke.cattle.io/machine-plan"
 	MachinePlanMachineLabel = "rke.cattle.io/machine-name"
