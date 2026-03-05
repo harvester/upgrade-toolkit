@@ -1,5 +1,5 @@
 # Build the upgrade-toolkit binary
-FROM registry.suse.com/bci/golang:1.25 AS builder
+FROM registry.suse.com/bci/golang:1.25.7 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o up
 FROM registry.opensuse.org/isv/rancher/harvester/os/dev/main/baseos:latest AS baseos
 
 # Generate addon manifests
-FROM registry.suse.com/bci/golang:1.25 AS addons_generator
+FROM registry.suse.com/bci/golang:1.25.7 AS addons_generator
 
 WORKDIR /workspace
 
@@ -38,7 +38,7 @@ RUN git clone --branch ${HARVESTER_ADDONS_VERSION} --single-branch --depth 1 htt
     go run . -generateAddons -path ../generated_addons/
 
 # Use the base BCI image to package the upgrade-toolkit binary
-FROM registry.suse.com/bci/bci-base:15.7
+FROM registry.suse.com/bci/bci-base:16.0
 ARG TARGETARCH
 
 RUN zypper rm -y container-suseconnect && \
