@@ -183,7 +183,7 @@ func reEnableDeschedulerAddon(
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
 	wasEnabled, ok := upgradePlan.Annotations[AnnotationDeschedulerWasEnabled]
-	if !ok || wasEnabled != "true" {
+	if !ok || wasEnabled != valueTrue {
 		return nil
 	}
 

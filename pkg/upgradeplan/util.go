@@ -483,7 +483,7 @@ func listManagedNodes(ctx context.Context, c client.Reader) ([]corev1.Node, erro
 	var nodeList corev1.NodeList
 	if err := c.List(ctx, &nodeList, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(labels.Set{
-			harvesterManagedLabel: "true",
+			harvesterManagedLabel: valueTrue,
 		}),
 	}); err != nil {
 		return nil, err

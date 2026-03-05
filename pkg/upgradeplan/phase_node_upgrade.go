@@ -143,7 +143,7 @@ func (p *NodeUpgradePhase) disableDeschedulerAddon(
 	if upgradePlan.Annotations == nil {
 		upgradePlan.Annotations = make(map[string]string)
 	}
-	upgradePlan.Annotations[AnnotationDeschedulerWasEnabled] = "true"
+	upgradePlan.Annotations[AnnotationDeschedulerWasEnabled] = valueTrue
 
 	patch := client.MergeFrom(addon.DeepCopy())
 	addon.Spec.Enabled = false

@@ -80,4 +80,7 @@ const (
 	// Machine-plan Secret
 	MachinePlanSecretType   = "rke.cattle.io/machine-plan"
 	MachinePlanMachineLabel = "rke.cattle.io/machine-name"
+
+	// Common label/annotation values
+	valueTrue = "true"
 )

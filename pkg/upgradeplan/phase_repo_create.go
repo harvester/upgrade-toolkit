@@ -129,7 +129,7 @@ func (p *RepoCreatePhase) getDeploymentReplicaCount(ctx context.Context) (*int32
 
 	nonWitnessCount := 0
 	for i := range nodes {
-		if nodes[i].Labels[witnessNodeRoleLabel] != "true" {
+		if nodes[i].Labels[witnessNodeRoleLabel] != valueTrue {
 			nonWitnessCount++
 		}
 	}

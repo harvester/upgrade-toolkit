@@ -114,7 +114,7 @@ func constructPlanForImagePreload(
 ) *upgradev1.Plan {
 	selector := &metav1.LabelSelector{
 		MatchLabels: map[string]string{
-			harvesterManagedLabel: "true",
+			harvesterManagedLabel: valueTrue,
 		},
 	}
 	container := &upgradev1.ContainerSpec{
