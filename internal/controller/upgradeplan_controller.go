@@ -141,8 +141,11 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	result, err := r.pipeline.Execute(ctx, upgradePlanCopy)
 	if err != nil {
+		prevDegraded := upgradePlan.LookupCondition(managementv1beta1.UpgradePlanDegraded)
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionTrue, "ReconcileError", err.Error())
-		r.EventRecorder.Eventf(&upgradePlan, corev1.EventTypeWarning, "ReconcileError", "Pipeline error: %v", err)
+		if prevDegraded.Status != metav1.ConditionTrue || prevDegraded.Message != err.Error() {
+			r.EventRecorder.Eventf(&upgradePlan, corev1.EventTypeWarning, "ReconcileError", "Pipeline error: %v", err)
+		}
 	} else {
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionFalse, "ReconcileSuccess", "")
 	}

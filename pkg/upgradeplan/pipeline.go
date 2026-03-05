@@ -109,9 +109,6 @@ func (p *Pipeline) Execute(
 
 	// Completed phase: run PostRun if implemented, then advance
 	if currentPhase == entry.CompletedPhase {
-		p.recordEvent(upgradePlan, corev1.EventTypeNormal, "PhaseCompleted",
-			fmt.Sprintf("Completed phase %s", entry.ActivePhase))
-
 		if postRunnable, ok := entry.Phase.(PostRunnable); ok {
 			if err := postRunnable.PostRun(ctx, upgradePlan); err != nil {
 				return ctrl.Result{}, err
@@ -121,6 +118,9 @@ func (p *Pipeline) Execute(
 		if isTerminalPhase(upgradePlan.Status.CurrentPhase) {
 			return ctrl.Result{}, nil
 		}
+
+		p.recordEvent(upgradePlan, corev1.EventTypeNormal, "PhaseCompleted",
+			fmt.Sprintf("Completed phase %s", entry.ActivePhase))
 
 		nextIdx := idx + 1
 		if nextIdx >= len(p.phases) {
