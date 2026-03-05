@@ -105,28 +105,8 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 
 	var allErrs field.ErrorList
 
-	// Validate spec.version references an existing Version CR
-	var version managementv1beta1.Version
-	if err := v.Client.Get(ctx, client.ObjectKey{Name: upgradePlan.Spec.Version}, &version); err != nil {
-		if apierrors.IsNotFound(err) {
-			allErrs = append(allErrs, field.NotFound(
-				field.NewPath("spec", "version"), upgradePlan.Spec.Version))
-		} else {
-			allErrs = append(allErrs, field.InternalError(
-				field.NewPath("spec", "version"), err))
-		}
-	}
-
-	// No concurrent upgrade: block if any other UpgradePlan has Progressing=True
-	conflicting, err := upgradeplan.FindConflictingUpgrade(ctx, v.Client, upgradePlan.Name)
-	if err != nil {
-		allErrs = append(allErrs, field.InternalError(field.NewPath(""), err))
-	} else if conflicting != "" {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("spec"),
-			fmt.Sprintf("another upgrade %q is in progress", conflicting)))
-	}
-
+	allErrs = append(allErrs, validateVersionExists(ctx, v.Client, upgradePlan)...)
+	allErrs = append(allErrs, validateNoConcurrentUpgrade(ctx, v.Client, upgradePlan.Name)...)
 	allErrs = append(allErrs, validateNodeReadiness(ctx, v.Client)...)
 	allErrs = append(allErrs, validateClusterReady(ctx, v.Client)...)
 	allErrs = append(allErrs, validateMachinesRunning(ctx, v.Client)...)
@@ -230,6 +210,40 @@ func (v *UpgradePlanCustomValidator) ValidateDelete(ctx context.Context, obj run
 			upgradePlan.Name, allErrs)
 	}
 	return nil, nil
+}
+
+// validateVersionExists checks that spec.version references an existing Version CR.
+func validateVersionExists(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
+	var allErrs field.ErrorList
+
+	var version managementv1beta1.Version
+	if err := c.Get(ctx, client.ObjectKey{Name: upgradePlan.Spec.Version}, &version); err != nil {
+		if apierrors.IsNotFound(err) {
+			allErrs = append(allErrs, field.NotFound(
+				field.NewPath("spec", "version"), upgradePlan.Spec.Version))
+		} else {
+			allErrs = append(allErrs, field.InternalError(
+				field.NewPath("spec", "version"), err))
+		}
+	}
+
+	return allErrs
+}
+
+// validateNoConcurrentUpgrade blocks creation if any other UpgradePlan has Progressing=True.
+func validateNoConcurrentUpgrade(ctx context.Context, c client.Reader, currentName string) field.ErrorList {
+	var allErrs field.ErrorList
+
+	conflicting, err := upgradeplan.FindConflictingUpgrade(ctx, c, currentName)
+	if err != nil {
+		allErrs = append(allErrs, field.InternalError(field.NewPath(""), err))
+	} else if conflicting != "" {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("another upgrade %q is in progress", conflicting)))
+	}
+
+	return allErrs
 }
 
 // validateNodeReadiness checks that all nodes are Ready and schedulable.
