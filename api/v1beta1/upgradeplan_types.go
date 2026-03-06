@@ -192,6 +192,11 @@ type UpgradePlanSpec struct {
 	// nodeUpgradeOption configures node upgrade behavior including pause/unpause control.
 	// +optional
 	NodeUpgradeOption *NodeUpgradeOption `json:"nodeUpgradeOption,omitempty"`
+
+	// restoreVM enables automatic restoration of non-live-migratable VMs
+	// that were shut down during node upgrade. Default to false.
+	// +optional
+	RestoreVM *bool `json:"restoreVM,omitempty"`
 }
 
 // UpgradePlanStatus defines the observed state of UpgradePlan.

@@ -572,3 +572,89 @@ func TestFindConflictingUpgrade(t *testing.T) {
 		assert.Empty(t, name)
 	})
 }
+
+func TestIsWitnessNode(t *testing.T) {
+	t.Run("node with witness label", func(t *testing.T) {
+		node := &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "witness-node",
+				Labels: map[string]string{"node-role.harvesterhci.io/witness": "true"},
+			},
+		}
+		assert.True(t, IsWitnessNode(node))
+	})
+
+	t.Run("node without witness label", func(t *testing.T) {
+		node := &corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "regular-node",
+			},
+		}
+		assert.False(t, IsWitnessNode(node))
+	})
+}
+
+func TestIsRestoreVMEnabled(t *testing.T) {
+	t.Run("nil restoreVM", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{}
+		assert.False(t, IsRestoreVMEnabled(up))
+	})
+
+	t.Run("restoreVM=false", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			Spec: managementv1beta1.UpgradePlanSpec{RestoreVM: ptr.To(false)},
+		}
+		assert.False(t, IsRestoreVMEnabled(up))
+	})
+
+	t.Run("restoreVM=true", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			Spec: managementv1beta1.UpgradePlanSpec{RestoreVM: ptr.To(true)},
+		}
+		assert.True(t, IsRestoreVMEnabled(up))
+	})
+}
+
+func TestConstructRestoreVMJob(t *testing.T) {
+	up := &managementv1beta1.UpgradePlan{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-upgrade",
+		},
+		Spec: managementv1beta1.UpgradePlanSpec{
+			Version: "v1.4.0",
+		},
+	}
+
+	job := ConstructRestoreVMJob(up, "node-1", "test-upgrade-restore-vm-node-1", "harvester")
+
+	// Verify labels
+	assert.Equal(t, "test-upgrade", job.Labels[HarvesterUpgradePlanLabel])
+	assert.Equal(t, NodeComponent, job.Labels[HarvesterUpgradeComponentLabel])
+	assert.Equal(t, JobTypeRestoreVM, job.Labels[HarvesterJobTypeLabel])
+	assert.Equal(t, "node-1", job.Labels[HarvesterUpgradeNodeLabel])
+
+	// Verify namespace
+	assert.Equal(t, "harvester-system", job.Namespace)
+
+	// Verify container
+	require.Len(t, job.Spec.Template.Spec.Containers, 1)
+	container := job.Spec.Template.Spec.Containers[0]
+	assert.Equal(t, "restore-vm", container.Name)
+	assert.Equal(t, []string{"harvester-upgrade-toolkit"}, container.Command)
+	assert.Equal(t, []string{"restore-vm", "--node", "node-1", "--upgrade", "test-upgrade"}, container.Args)
+
+	// Verify no hostPID, no privileged, no volume mounts
+	podSpec := job.Spec.Template.Spec
+	assert.False(t, podSpec.HostPID)
+	assert.Nil(t, container.SecurityContext)
+	assert.Empty(t, container.VolumeMounts)
+	assert.Empty(t, podSpec.Volumes)
+
+	// Verify pod spec
+	assert.Equal(t, "node-1", podSpec.NodeName)
+	assert.Equal(t, corev1.RestartPolicyNever, podSpec.RestartPolicy)
+	assert.Equal(t, "harvester", podSpec.ServiceAccountName)
+
+	// Verify tolerations
+	assert.NotEmpty(t, podSpec.Tolerations)
+}

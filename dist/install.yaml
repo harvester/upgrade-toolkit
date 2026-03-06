@@ -98,6 +98,11 @@ spec:
                     type: array
                     x-kubernetes-list-type: set
                 type: object
+              restoreVM:
+                description: |-
+                  restoreVM enables automatic restoration of non-live-migratable VMs
+                  that were shut down during node upgrade. Default to false.
+                type: boolean
               upgrade:
                 description: |-
                   upgrade can be specified to opt for any other specific upgrade image. If not provided, the version resource name is used.
@@ -474,6 +479,14 @@ kind: ClusterRole
 metadata:
   name: upgrade-toolkit-manager-role
 rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - ""
   resources:

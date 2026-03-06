@@ -58,6 +58,7 @@ const (
 	JobTypePreDrain           = "pre-drain"
 	JobTypePostDrain          = "post-drain"
 	JobTypeSingleNodeUpgrade  = "single-node-upgrade"
+	JobTypeRestoreVM          = "restore-vm"
 
 	// Finalizer for UpgradePlan cleanup on deletion
 	UpgradePlanFinalizer = AnnotationPrefix + "/" + "upgradeplan-cleanup"

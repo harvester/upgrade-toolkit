@@ -500,6 +500,63 @@ func countManagedNodes(ctx context.Context, c client.Reader) (int, error) {
 	return len(nodes), nil
 }
 
+// IsWitnessNode returns true if the node has the witness role label.
+func IsWitnessNode(node *corev1.Node) bool {
+	_, ok := node.Labels[witnessNodeRoleLabel]
+	return ok
+}
+
+// IsRestoreVMEnabled returns true if the UpgradePlan has restoreVM enabled.
+func IsRestoreVMEnabled(up *managementv1beta1.UpgradePlan) bool {
+	return up.Spec.RestoreVM != nil && *up.Spec.RestoreVM
+}
+
+// ConstructRestoreVMJob builds a Job that runs the restore-vm CLI command on a specific node.
+func ConstructRestoreVMJob(
+	upgradePlan *managementv1beta1.UpgradePlan,
+	nodeName, jobName, serviceAccountName string,
+) *batchv1.Job {
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobName,
+			Namespace: harvesterSystemNamespace,
+			Labels: map[string]string{
+				HarvesterUpgradePlanLabel:      upgradePlan.Name,
+				HarvesterUpgradeComponentLabel: NodeComponent,
+				HarvesterJobTypeLabel:          JobTypeRestoreVM,
+				HarvesterUpgradeNodeLabel:      nodeName,
+			},
+		},
+		Spec: batchv1.JobSpec{
+			TTLSecondsAfterFinished: ptr.To[int32](defaultTTLSecondsAfterFinished),
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						HarvesterUpgradePlanLabel:      upgradePlan.Name,
+						HarvesterUpgradeComponentLabel: NodeComponent,
+						HarvesterJobTypeLabel:          JobTypeRestoreVM,
+						HarvesterUpgradeNodeLabel:      nodeName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy:      corev1.RestartPolicyNever,
+					NodeName:           nodeName,
+					ServiceAccountName: serviceAccountName,
+					Tolerations:        getDefaultTolerations(),
+					Containers: []corev1.Container{
+						{
+							Name:    "restore-vm",
+							Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							Command: []string{"harvester-upgrade-toolkit"},
+							Args:    []string{"restore-vm", "--node", nodeName, "--upgrade", upgradePlan.Name},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // resolveImagePreloadConcurrency computes the effective SUC plan concurrency.
 // It returns:
 // - (concurrency, false) for normal operation
