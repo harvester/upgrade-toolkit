@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -657,4 +658,75 @@ func TestConstructRestoreVMJob(t *testing.T) {
 
 	// Verify tolerations
 	assert.NotEmpty(t, podSpec.Tolerations)
+}
+
+func TestIsServiceReady(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = discoveryv1.AddToScheme(scheme)
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-svc",
+			Namespace: "harvester-system",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.53.24.95",
+		},
+	}
+
+	readyEPS := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-svc-abc",
+			Namespace: "harvester-system",
+			Labels: map[string]string{
+				serviceNameLabel: "test-svc",
+			},
+		},
+		Endpoints: []discoveryv1.Endpoint{
+			{
+				Conditions: discoveryv1.EndpointConditions{
+					Ready: ptr.To(true),
+				},
+			},
+		},
+	}
+
+	t.Run("ready when ClusterIP and ready endpoint exist", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyEPS).Build()
+		assert.True(t, isServiceReady(context.Background(), c, svc))
+	})
+
+	t.Run("not ready when no ClusterIP", func(t *testing.T) {
+		noClusterIP := svc.DeepCopy()
+		noClusterIP.Spec.ClusterIP = ""
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyEPS).Build()
+		assert.False(t, isServiceReady(context.Background(), c, noClusterIP))
+	})
+
+	t.Run("not ready when no EndpointSlice exists", func(t *testing.T) {
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
+		assert.False(t, isServiceReady(context.Background(), c, svc))
+	})
+
+	t.Run("not ready when endpoint is not ready", func(t *testing.T) {
+		notReadyEPS := readyEPS.DeepCopy()
+		notReadyEPS.Endpoints[0].Conditions.Ready = ptr.To(false)
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(notReadyEPS).Build()
+		assert.False(t, isServiceReady(context.Background(), c, svc))
+	})
+
+	t.Run("not ready when endpoint ready is nil", func(t *testing.T) {
+		nilReadyEPS := readyEPS.DeepCopy()
+		nilReadyEPS.Endpoints[0].Conditions.Ready = nil
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(nilReadyEPS).Build()
+		assert.False(t, isServiceReady(context.Background(), c, svc))
+	})
+
+	t.Run("not ready when EndpointSlice is in a different namespace", func(t *testing.T) {
+		wrongNsEPS := readyEPS.DeepCopy()
+		wrongNsEPS.Namespace = "default"
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wrongNsEPS).Build()
+		assert.False(t, isServiceReady(context.Background(), c, svc))
+	})
 }

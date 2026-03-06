@@ -193,11 +193,10 @@ func isServiceReady(ctx context.Context, c client.Client, svc *corev1.Service) b
 
 func isAnyEndpointReady(ctx context.Context, c client.Client, svc *corev1.Service) bool {
 	var epsList discoveryv1.EndpointSliceList
-	if err := c.List(ctx, &epsList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			serviceNameLabel: svc.Name,
-		}),
-	}); err != nil {
+	if err := c.List(ctx, &epsList,
+		client.InNamespace(svc.Namespace),
+		client.MatchingLabels{serviceNameLabel: svc.Name},
+	); err != nil {
 		return false
 	}
 
