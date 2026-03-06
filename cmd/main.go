@@ -30,6 +30,7 @@ import (
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -245,6 +246,9 @@ func (c *ManagerCommand) Run() error {
 				&harvesterv1beta1.ScheduleVMBackup{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&harvesterv1beta1.Addon{}:                {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&kubevirtv1.VirtualMachineInstance{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
+				&discoveryv1.EndpointSlice{}: {
+					Namespaces: map[string]cache.Config{"default": {}, "harvester-system": {}},
+				},
 			},
 		},
 		Scheme:                 scheme,
