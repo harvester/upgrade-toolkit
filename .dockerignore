@@ -1,3 +1,27 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
 # Ignore build and test binaries.
 bin/
+
+# Version control
+.git/
+.github/
+
+# Development and tooling
+.claude/
+.golangci.yml
+.goreleaser.yml
+Makefile
+
+# Tests
+test/
+
+# Deployment manifests and Helm chart (not needed for image build)
+config/
+dist/
+
+# Code generation boilerplate
+hack/
+
+# Documentation
+*.md
+!package/**/*.md
