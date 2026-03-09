@@ -120,7 +120,7 @@ func (p *Pipeline) Execute(
 		}
 
 		p.recordEvent(upgradePlan, corev1.EventTypeNormal, "PhaseCompleted",
-			fmt.Sprintf("Completed phase %s", entry.ActivePhase))
+			fmt.Sprintf("Completed phase %s", entry))
 
 		nextIdx := idx + 1
 		if nextIdx >= len(p.phases) {
@@ -186,7 +186,7 @@ func (p *Pipeline) enterPhase(
 
 	updateProgressingPhase(upgradePlan, entry.ActivePhase, "")
 	p.recordEvent(upgradePlan, corev1.EventTypeNormal, "PhaseTransition",
-		fmt.Sprintf("Entering phase %s", entry.ActivePhase))
+		fmt.Sprintf("Entering phase %s", entry))
 	return ctrl.Result{RequeueAfter: RequeueAfterDuration}, nil
 }
 
