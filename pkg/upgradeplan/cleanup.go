@@ -9,6 +9,7 @@ import (
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
+	wranglername "github.com/rancher/wrangler/v3/pkg/name"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,23 +38,32 @@ func CleanupUpgradeResources(
 		obj       client.Object
 		namespace string
 		component string
+		jobType   string // optional: when set, also match HarvesterJobTypeLabel
 	}{
-		{&harvesterv1beta1.VirtualMachineImage{}, harvesterSystemNamespace, imageComponent},
-		{&appsv1.Deployment{}, harvesterSystemNamespace, repoComponent},
-		{&corev1.Service{}, harvesterSystemNamespace, repoComponent},
-		{&upgradev1.Plan{}, cattleSystemNamespace, PrepareComponent},
-		{&upgradev1.Plan{}, cattleSystemNamespace, ImageCleanupComponent},
-		{&batchv1.Job{}, harvesterSystemNamespace, ClusterComponent},
-		{&batchv1.Job{}, harvesterSystemNamespace, NodeComponent},
+		{&harvesterv1beta1.VirtualMachineImage{}, harvesterSystemNamespace, imageComponent, ""},
+		{&appsv1.Deployment{}, harvesterSystemNamespace, repoComponent, ""},
+		{&corev1.Service{}, harvesterSystemNamespace, repoComponent, ""},
+		{&upgradev1.Plan{}, cattleSystemNamespace, PrepareComponent, ""},
+		{&upgradev1.Plan{}, cattleSystemNamespace, ImageCleanupComponent, ""},
+		{&batchv1.Job{}, harvesterSystemNamespace, ClusterComponent, ""},
+		// Delete node-upgrade jobs by specific type so that restore-vm jobs
+		// (which may still be running for the last upgraded node) are preserved.
+		{&batchv1.Job{}, harvesterSystemNamespace, NodeComponent, JobTypePreDrain},
+		{&batchv1.Job{}, harvesterSystemNamespace, NodeComponent, JobTypePostDrain},
+		{&batchv1.Job{}, harvesterSystemNamespace, NodeComponent, JobTypeSingleNodeUpgrade},
 	}
 
 	for _, r := range resourcesToDelete {
+		labels := client.MatchingLabels{
+			HarvesterUpgradePlanLabel:      upgradePlan.Name,
+			HarvesterUpgradeComponentLabel: r.component,
+		}
+		if r.jobType != "" {
+			labels[HarvesterJobTypeLabel] = r.jobType
+		}
 		if err := c.DeleteAllOf(ctx, r.obj,
 			client.InNamespace(r.namespace),
-			client.MatchingLabels{
-				HarvesterUpgradePlanLabel:      upgradePlan.Name,
-				HarvesterUpgradeComponentLabel: r.component,
-			},
+			labels,
 			&client.DeleteAllOfOptions{DeleteOptions: client.DeleteOptions{
 				PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
 			}},
@@ -64,6 +74,10 @@ func CleanupUpgradeResources(
 			}
 			return err
 		}
+	}
+
+	if err := cleanupRestoreVMConfigMap(ctx, c, upgradePlan); err != nil {
+		return err
 	}
 
 	if err := cleanupNodePendingOSImageAnnotations(ctx, c); err != nil {
@@ -209,4 +223,30 @@ func reEnableDeschedulerAddon(
 	}
 
 	return nil
+}
+
+// cleanupRestoreVMConfigMap deletes the restore-vm ConfigMap if it exists.
+// This is best-effort; the ConfigMap may not exist if restoreVM was not enabled
+// or the ConfigMap was never created.
+func cleanupRestoreVMConfigMap(
+	ctx context.Context,
+	c client.Client,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      restoreVMConfigMapName(upgradePlan.Name),
+			Namespace: harvesterSystemNamespace,
+		},
+	}
+	if err := c.Delete(ctx, cm); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+// restoreVMConfigMapName returns the deterministic name for the restore-vm
+// ConfigMap associated with the given UpgradePlan.
+func restoreVMConfigMapName(upgradePlanName string) string {
+	return wranglername.SafeConcatName(upgradePlanName, "restore-vm")
 }

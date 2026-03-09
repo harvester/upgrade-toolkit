@@ -415,3 +415,85 @@ func TestCleanupUpgradeResources_SkipsDeschedulerWhenNoAnnotation(t *testing.T) 
 	require.NoError(t, err)
 	assert.False(t, patched.Spec.Enabled)
 }
+
+func TestCleanupUpgradeResources_PreservesRestoreVMJobs(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	// restore-vm job shares NodeComponent but has job-type=restore-vm
+	restoreVMJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s-%s-node1", testUpgradePlanName, NodeComponent, JobTypeRestoreVM),
+			Namespace: harvesterSystemNamespace,
+			Labels: map[string]string{
+				HarvesterUpgradePlanLabel:      testUpgradePlanName,
+				HarvesterUpgradeComponentLabel: NodeComponent,
+				HarvesterJobTypeLabel:          JobTypeRestoreVM,
+				HarvesterUpgradeNodeLabel:      "node1",
+			},
+		},
+	}
+	preDrainJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s-%s-node1", testUpgradePlanName, NodeComponent, JobTypePreDrain),
+			Namespace: harvesterSystemNamespace,
+			Labels: map[string]string{
+				HarvesterUpgradePlanLabel:      testUpgradePlanName,
+				HarvesterUpgradeComponentLabel: NodeComponent,
+				HarvesterJobTypeLabel:          JobTypePreDrain,
+				HarvesterUpgradeNodeLabel:      "node1",
+			},
+		},
+	}
+
+	c := newFakeClient(restoreVMJob, preDrainJob)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// restore-vm job should be preserved
+	err = c.Get(ctx, types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      restoreVMJob.Name,
+	}, &batchv1.Job{})
+	assert.NoError(t, err, "restore-vm Job should NOT be deleted")
+
+	// pre-drain job should be deleted
+	err = c.Get(ctx, types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      preDrainJob.Name,
+	}, &batchv1.Job{})
+	assert.Error(t, err, "pre-drain Job should be deleted")
+}
+
+func TestCleanupUpgradeResources_DeletesRestoreVMConfigMap(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      restoreVMConfigMapName(testUpgradePlanName),
+			Namespace: harvesterSystemNamespace,
+		},
+		Data: map[string]string{
+			"node1": "default/vm1,default/vm2",
+		},
+	}
+
+	c := newFakeClient(cm)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	err = c.Get(context.Background(), types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      cm.Name,
+	}, &corev1.ConfigMap{})
+	assert.Error(t, err, "restore-vm ConfigMap should be deleted")
+}
+
+func TestCleanupUpgradeResources_IdempotentOnMissingRestoreVMConfigMap(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	c := newFakeClient()
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+}
