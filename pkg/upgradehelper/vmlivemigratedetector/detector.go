@@ -75,7 +75,7 @@ func NewVMLiveMigrateDetector(options DetectorOptions) *VMLiveMigrateDetector {
 // Init initializes the clients needed by the detector.
 func (d *VMLiveMigrateDetector) Init() error {
 	if d.nodeName == "" {
-		logrus.Fatal("please specify a node name")
+		return fmt.Errorf("please specify a node name")
 	}
 
 	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -91,17 +91,17 @@ func (d *VMLiveMigrateDetector) Init() error {
 	var err error
 	d.virtClient, err = kubecli.GetKubevirtClientFromClientConfig(clientConfig)
 	if err != nil {
-		logrus.Fatalf("cannot obtain KubeVirt client: %v", err)
+		return fmt.Errorf("cannot obtain KubeVirt client: %w", err)
 	}
 
 	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
-		logrus.Fatalf("cannot obtain rest config: %v", err)
+		return fmt.Errorf("cannot obtain rest config: %w", err)
 	}
 
 	d.k8sClient, err = kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		logrus.Fatalf("cannot obtain Kubernetes client: %v", err)
+		return fmt.Errorf("cannot obtain Kubernetes client: %w", err)
 	}
 
 	s := runtime.NewScheme()
@@ -169,9 +169,9 @@ func (d *VMLiveMigrateDetector) Run(ctx context.Context) error {
 				logrus.Errorf("failed to stop VM %s: %v", namespacedName, err)
 				vmFailedCnt++
 			} else {
+				logrus.Infof("vm %s was administratively stopped", namespacedName)
 				vmSuccessCnt++
 			}
-			logrus.Infof("vm %s was administratively stopped", namespacedName)
 		}
 	}
 
@@ -243,7 +243,7 @@ func (d *VMLiveMigrateDetector) createOrUpdateConfigMap(ctx context.Context, res
 	return retry.OnError(
 		retry.DefaultBackoff,
 		func(err error) bool {
-			return errors.IsConflict(err) || errors.IsServerTimeout(err)
+			return errors.IsConflict(err) || errors.IsServerTimeout(err) || errors.IsAlreadyExists(err)
 		},
 		func() error {
 			configMap, err := d.k8sClient.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -267,7 +267,7 @@ func (d *VMLiveMigrateDetector) createOrUpdateConfigMap(ctx context.Context, res
 						},
 					}
 					_, createErr := d.k8sClient.CoreV1().ConfigMaps(namespace).Create(ctx, newConfigMap, metav1.CreateOptions{})
-					if createErr != nil && !errors.IsAlreadyExists(createErr) {
+					if createErr != nil {
 						return fmt.Errorf("failed to create ConfigMap: %w", createErr)
 					}
 					d.recordUpgradeEvent(corev1.EventTypeNormal, RestoreVMConfigMapCreated,
