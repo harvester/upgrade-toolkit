@@ -1,0 +1,36 @@
+name: Release Build and Publish
+
+on:
+  release:
+    types: [released, prereleased]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  metadata:
+    name: Extract Docker metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: rancher/harvester-upgrade-toolkit
+          tags: |
+            type=semver,pattern={{version}}
+          flavor: |
+            latest=auto
+
+  build:
+    name: Build and push
+    needs: metadata
+    uses: ./.github/workflows/build-image.yml
+    with:
+      push: true
+      tags: ${{ needs.metadata.outputs.tags }}
+      version: ${{ github.event.release.tag_name }}
+      git_commit: ${{ github.sha }}

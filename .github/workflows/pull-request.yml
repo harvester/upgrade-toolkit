@@ -1,0 +1,67 @@
+name: Pull Request Build
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.8.0
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: |
+          go mod tidy
+          make test
+
+  build:
+    name: Build binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: make build
+
+  build-image:
+    name: Build image
+    uses: ./.github/workflows/build-image.yml
+    with:
+      push: false
+      tags: rancher/harvester-upgrade-toolkit:ci-${{ github.event.pull_request.number }}
+      version: pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+      git_commit: ${{ github.sha }}

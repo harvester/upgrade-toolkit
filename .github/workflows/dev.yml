@@ -1,0 +1,41 @@
+name: Dev Build and Publish
+
+on:
+  push:
+    branches:
+      - main
+      - v*
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  prepare:
+    name: Determine image tag and version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.info.outputs.tag }}
+      version: ${{ steps.info.outputs.version }}
+      commit: ${{ steps.info.outputs.commit }}
+    steps:
+      - name: Compute tag and version
+        id: info
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          # Replace / with - for Docker tag compatibility
+          TAG="${BRANCH_NAME//\//-}-head"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and push
+    needs: prepare
+    uses: ./.github/workflows/build-image.yml
+    with:
+      push: true
+      tags: rancher/harvester-upgrade-toolkit:${{ needs.prepare.outputs.tag }}
+      version: ${{ needs.prepare.outputs.version }}
+      git_commit: ${{ needs.prepare.outputs.commit }}
