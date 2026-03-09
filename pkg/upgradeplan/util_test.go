@@ -641,7 +641,7 @@ func TestConstructRestoreVMJob(t *testing.T) {
 	require.Len(t, job.Spec.Template.Spec.Containers, 1)
 	container := job.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, "restore-vm", container.Name)
-	assert.Equal(t, []string{"harvester-upgrade-toolkit"}, container.Command)
+	assert.Equal(t, []string{"upgrade-toolkit"}, container.Command)
 	assert.Equal(t, []string{"restore-vm", "--node", "node-1", "--upgrade", "test-upgrade"}, container.Args)
 
 	// Verify no hostPID, no privileged, no volume mounts

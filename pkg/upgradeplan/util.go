@@ -546,7 +546,7 @@ func ConstructRestoreVMJob(
 						{
 							Name:    "restore-vm",
 							Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
-							Command: []string{"harvester-upgrade-toolkit"},
+							Command: []string{"upgrade-toolkit"},
 							Args:    []string{"restore-vm", "--node", nodeName, "--upgrade", upgradePlan.Name},
 						},
 					},
