@@ -155,7 +155,35 @@ status:
     isoURL: https://releases.rancher.com/harvester/master/harvester-master-amd64.iso
 ```
 
-## Development Guide
+### User-facing annotations
+
+The following annotations can be set on an UpgradePlan CR to skip or override specific pre-flight checks.
+
+| Annotation | Value | Scope | Description |
+|---|---|---|---|
+| `management.harvesterhci.io/skip-webhook` | `"true"` | Webhook (create) | Bypasses all create-time validation checks |
+| `management.harvesterhci.io/skip-single-replica-detached-vol` | `"true"` | Webhook (create) | Skips the detached single-replica Longhorn volume check (active single-replica volumes are still blocked) |
+| `management.harvesterhci.io/allow-deletion` | `"true"` | Webhook (delete) | Allows deletion of a progressing UpgradePlan (hard-blocked during `ClusterUpgrading` and `NodeUpgrading` phases regardless) |
+| `management.harvesterhci.io/skip-garbage-collection-threshold-check` | `"true"` | Controller (init phase) | Skips the kubelet disk-space / image GC threshold pre-flight check |
+| `management.harvesterhci.io/min-certs-expiration-in-day` | Integer > 0 | Controller (init phase) | Overrides the minimum certificate expiration window in days (default: 7) |
+
+Example usage:
+
+```bash
+cat <<EOF | kubectl create -f -
+apiVersion: management.harvesterhci.io/v1beta1
+kind: UpgradePlan
+metadata:
+  generateName: hvst-upgrade-
+  annotations:
+    management.harvesterhci.io/skip-single-replica-detached-vol: "true"
+    management.harvesterhci.io/min-certs-expiration-in-day: "3"
+spec:
+  version: master-head
+EOF
+```
+
+## Developer Guide
 
 After making changes, build and test the upgrade-toolkit binary and container image.
 
@@ -282,6 +310,15 @@ make helm-deploy IMG=starbops/harvester-upgrade-toolkit:dev
 ```
 
 [Create the Version and UpgradePlan CRs](#customized-upgrades) to kickstart the upgrade process.
+
+### Introduce new phases
+
+The phase-based runner design facilitates well-organized phase ordering and allows for the easy integration of new phases.
+
+Let's say we want to introduce a new phase called `PreCheck`. There will be three places in the codebase that require us to modify:
+
+1. Update the `pkg/upgradeplan/pipeline.go` file
+2. Create the new `pkg/upgradeplan/phase_precheck.go` file
 
 ## License
 

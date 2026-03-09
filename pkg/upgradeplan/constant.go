@@ -67,16 +67,16 @@ const (
 	AnnotationAllowDeletion = AnnotationPrefix + "/" + "allow-deletion"
 
 	// Annotation to skip webhook validation entirely
-	AnnotationSkipWebhook = UpstreamAnnotationPrefix + "/" + "skipWebhook"
+	AnnotationSkipWebhook = AnnotationPrefix + "/" + "skip-webhook"
 
 	// Annotation to skip single-replica detached volume check
-	AnnotationSkipSingleReplicaDetachedVol = UpstreamAnnotationPrefix + "/" + "skipSingleReplicaDetachedVol"
+	AnnotationSkipSingleReplicaDetachedVol = AnnotationPrefix + "/" + "skip-single-replica-detached-vol"
 
 	// Annotation to skip garbage collection threshold check during upgrade
-	AnnotationSkipGCThresholdCheck = UpstreamAnnotationPrefix + "/" + "skipGarbageCollectionThresholdCheck"
+	AnnotationSkipGCThresholdCheck = AnnotationPrefix + "/" + "skip-garbage-collection-threshold-check"
 
 	// Annotation to set minimum certificate expiration days before upgrade
-	AnnotationMinCertsExpirationInDay = UpstreamAnnotationPrefix + "/" + "minCertsExpirationInDay"
+	AnnotationMinCertsExpirationInDay = AnnotationPrefix + "/" + "min-certs-expiration-in-day"
 
 	// RKE2 internal IP annotation on nodes
 	RKE2InternalIPAnnotation = "rke2.io/internal-ip"
