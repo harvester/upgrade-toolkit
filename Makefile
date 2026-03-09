@@ -1,6 +1,14 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
+# Version information injected at build time via ldflags
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_TREE_STATE ?= $(shell if git diff --quiet 2>/dev/null; then echo "clean"; else echo "dirty"; fi)
+LDFLAGS := -X github.com/harvester/upgrade-toolkit/pkg/version.Version=$(VERSION) \
+           -X github.com/harvester/upgrade-toolkit/pkg/version.GitCommit=$(GIT_COMMIT) \
+           -X github.com/harvester/upgrade-toolkit/pkg/version.GitTreeState=$(GIT_TREE_STATE)
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -105,7 +113,7 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 .PHONY: build
 build: manifests generate fmt vet ## Build upgrade-toolkit binary.
-	go build -o bin/upgrade-toolkit ./cmd/
+	go build -ldflags "$(LDFLAGS)" -o bin/upgrade-toolkit ./cmd/
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -116,7 +124,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} -f ./Dockerfile .
+	$(CONTAINER_TOOL) build -t ${IMG} \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_TREE_STATE=$(GIT_TREE_STATE) \
+		-f ./Dockerfile .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -135,7 +147,11 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' ./Dockerfile > ./Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name upgrade-toolkit-builder
 	$(CONTAINER_TOOL) buildx use upgrade-toolkit-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f ./Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		--build-arg GIT_TREE_STATE=$(GIT_TREE_STATE) \
+		-f ./Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm upgrade-toolkit-builder
 	rm ./Dockerfile.cross
 

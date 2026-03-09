@@ -2,6 +2,9 @@
 FROM registry.suse.com/bci/golang:1.25.7 AS builder
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG GIT_TREE_STATE=clean
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -22,7 +25,9 @@ COPY pkg/ pkg/
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o upgrade-toolkit ./cmd/
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a \
+    -ldflags "-X github.com/harvester/upgrade-toolkit/pkg/version.Version=${VERSION} -X github.com/harvester/upgrade-toolkit/pkg/version.GitCommit=${GIT_COMMIT} -X github.com/harvester/upgrade-toolkit/pkg/version.GitTreeState=${GIT_TREE_STATE}" \
+    -o upgrade-toolkit ./cmd/
 
 FROM registry.opensuse.org/isv/rancher/harvester/os/dev/main/baseos:latest AS baseos
 

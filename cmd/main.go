@@ -82,6 +82,7 @@ var commands = []Command{
 	&VMLiveMigrateDetectorCommand{},
 	&VersionGuardCommand{},
 	&RestoreVMCommand{},
+	&VersionCommand{},
 }
 
 func main() {
