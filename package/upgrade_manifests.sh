@@ -1182,13 +1182,6 @@ upgrade_addons()
   manage_kubeovn
 }
 
-reuse_vlan_cn() {
-  [[ $UPGRADEPLAN_PREVIOUS_VERSION != "v1.0.3" ]] && return
-
-  # delete finalizer
-  kubectl get clusternetwork vlan -o yaml | yq '.metadata.finalizers = []' | kubectl apply -f -
-}
-
 sync_containerd_registry_to_rancher() {
   echo "Sync containerd-registry setting to Rancher"
 
@@ -1270,56 +1263,6 @@ wait_for_fleet_agent(){
   echo "end with new timestamp $newtimestamp"
 }
 
-upgrade_harvester_csi_rbac() {
-
-  # only versions before v1.4.0 that upgrading to v1.4.0 need this patch
-  if [[ ! "${UPGRADEPLAN_PREVIOUS_VERSION%%-rc*}" < "v1.4.0" ]]; then
-    echo "Only versions before v1.4.0 need this patch."
-    return
-  fi
-
-  if kubectl get clusterrole harvesterhci.io:csi-driver 2> /dev/null; then
-    echo "Upgrade ClusterRole harvesterhci.io:csi-driver ..."
-
-    cat <<EOF | kubectl apply -f -
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/component: apiserver
-    app.kubernetes.io/name: harvester
-    app.kubernetes.io/part-of: harvester
-  name: harvesterhci.io:csi-driver
-rules:
-- apiGroups:
-  - storage.k8s.io
-  resources:
-  - storageclasses
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - harvesterhci.io
-  resources:
-  - networkfilesystems
-  - networkfilesystems/status
-  verbs:
-  - '*'
-- apiGroups:
-  - longhorn.io
-  resources:
-  - volumes
-  - volumes/status
-  verbs:
-  - get
-  - list
-EOF
-  else
-    echo "ClusterRole harvesterhci.io:csi-driver not found, skip updating."
-  fi
-}
-
 apply_extra_nonversion_manifests()
 {
   shopt -s nullglob
@@ -1335,43 +1278,6 @@ apply_extra_nonversion_manifests()
   shopt -u nullglob
 }
 
-migrate_longhorn_v1beta1_crds() {
-
-  # reference: https://longhorn.io/docs/1.10.0/important-notes/#upgrade
-  # Harvester v1.6.x -> v1.7.x, Longhorn is upgraded from v1.9.x to v1.10.x
-  echo "Checking if migrating Longhorn v1beta1 CRDs to v1beta2 is required, it only occurs from v1.6.x to v1.7.x upgrade"
-  if [[ ! "$UPGRADEPLAN_PREVIOUS_VERSION" =~ ^v1\.6\.[0-9]$ ]]; then
-    echo "Skip migrate longhorn v1beta1 CRDs with Harvester version $UPGRADEPLAN_PREVIOUS_VERSION"
-    return
-  fi
-
-  # Temporarily disable the Longhorn webhook for CR validation
-  echo "Temporarily disabling the Longhorn webhook validator..."
-  kubectl patch validatingwebhookconfiguration longhorn-webhook-validator \
-      --type=merge \
-      -p "$(kubectl get validatingwebhookconfiguration longhorn-webhook-validator -o json | jq '.webhooks[0].rules |= map(if .apiGroups == ["longhorn.io"] and .resources == ["settings"] then .operations |= map(select(. != "UPDATE")) else . end)')"
-
-  # Find and migrate CRDs with v1beta1 stored versions
-  echo "Starting migration of CRDs that store v1beta1 resources to v1beta2"
-  migration_time="$(date +%Y-%m-%dT%H:%M:%S)"
-  crds=($(kubectl get crd -l app.kubernetes.io/name=longhorn -o json | jq -r '.items[] | select(.status.storedVersions | index("v1beta1")) | .metadata.name'))
-  for crd in "${crds[@]}"; do
-    echo "Migrating ${crd} ..."
-    for name in $(kubectl -n longhorn-system get "$crd" -o jsonpath='{.items[*].metadata.name}'); do
-      echo "migrating ${name} ..."
-      kubectl patch "${crd}" "${name}" -n longhorn-system --type=merge -p='{"metadata":{"annotations":{"migration-time":"'"${migration_time}"'"}}}'
-    done
-
-    kubectl patch crd "${crd}" --type=merge -p '{"status":{"storedVersions":["v1beta2"]}}' --subresource=status
-  done
-
-  # Re-enable the Longhorn webhook
-  echo "Re-enabling the CR validation webhook..."
-  kubectl patch validatingwebhookconfiguration longhorn-webhook-validator \
-      --type=merge \
-      -p "$(kubectl get validatingwebhookconfiguration longhorn-webhook-validator -o json | jq '.webhooks[0].rules |= map(if .apiGroups == ["longhorn.io"] and .resources == ["settings"] then .operations |= (. + ["UPDATE"] | unique) else . end)')"
-}
-
 wait_repo
 detect_repo
 detect_upgrade
@@ -1381,18 +1287,15 @@ skip_restart_rancher_system_agent
 upgrade_rancher
 patch_local_cluster_details
 update_local_rke_state_secret
-migrate_longhorn_v1beta1_crds
 upgrade_harvester_cluster_repo
 ensure_ingress_class_name
 apply_extra_nonversion_manifests
 upgrade_harvester
 sync_containerd_registry_to_rancher
 wait_longhorn_upgrade
-reuse_vlan_cn
 upgrade_monitoring
 upgrade_logging_event_audit
 apply_extra_manifests
 upgrade_addons
-upgrade_harvester_csi_rbac
 # wait fleet bundles upto 90 seconds
 wait_for_fleet_bundles 9

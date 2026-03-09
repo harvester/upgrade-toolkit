@@ -519,118 +519,6 @@ calculateCPUReservedInMilliCPU() {
   echo $reserved
 }
 
-generate_networkmanager_config() {
-   if [ -z "$UPGRADEPLAN_PREVIOUS_VERSION" ]; then
-    detect_upgrade
-  fi
-
-  # NetworkManager is new in Harvester v1.7.0, and we can only upgrade to
-  # v1.7.x from v1.6.x, which means we only need to generate NetworkManager
-  # config if the previous version is v1.6.x.
-  if [[ ! "$UPGRADEPLAN_PREVIOUS_VERSION" =~ ^v1\.6\.[0-9]$ ]]; then
-    echo "version: $UPGRADEPLAN_PREVIOUS_VERSION does not require generating NetworkManager config"
-    return
-  fi
-
-  local CUSTOM90_FILE="${HOST_DIR}/oem/90_custom.yaml"
-  if [[ -f "$CUSTOM90_FILE" ]]; then
-    # We need to ensure /var/lib/NetworkManager is in the list of persistent paths
-    local current_paths_line=$(grep 'PERSISTENT_STATE_PATHS:.*/var/lib/wicked' $CUSTOM90_FILE)
-    if [ -n "$current_paths_line" ]; then
-      if ! [[ "$current_paths_line" =~ "/var/lib/NetworkManager" ]]; then
-        echo "Adding /var/lib/NetworkManager to PERSISTENT_STATE_PATHS in $CUSTOM90_FILE"
-        sed -i 's%PERSISTENT_STATE_PATHS:.*/var/lib/wicked%& /var/lib/NetworkManager /etc/NetworkManager%' $CUSTOM90_FILE
-        local updated_paths_line=$(grep 'PERSISTENT_STATE_PATHS:.*/var/lib/wicked' $CUSTOM90_FILE)
-        if ! [[ "$updated_paths_line" =~ "/var/lib/NetworkManager" ]]; then
-          echo "Failed to add /var/lib/NetworkManager to PERSISTENT_STATE_PATHS in $CUSTOM90_FILE"
-        fi
-      fi
-    else
-      echo "Unable to find expected PERSISTENT_STATE_PATHS line in $CUSTOM90_FILE"
-    fi
-  else
-    echo "File not found: $CUSTOM90_FILE"
-  fi
-
-  echo "Generating NetworkManager config..."
-  # Whether this succeeds or fails, it will print a message either way...
-  /usr/local/bin/harvester-installer generate-network-config --config ${HOST_DIR}/oem/harvester.config --connection-path ${HOST_DIR}/usr/local/.state/etc-NetworkManager.bind/system-connections 2>&1
-  # ...but because we're running with set -e, if the above fails, the script
-  # will abort, and the rest of the OS upgrade will not proceed.  If that
-  # happens, the upgrade job will probably be re-run indefinitely.  Is it
-  # better to get stuck here in that way?  Or would it be better to barrel
-  # on regardless and continue the OS upgrade with the knowledge that
-  # when the node comes back up after reboot, networking may be broken?
-
-  # In case the system is configured for DHCP, we need to try to keep the
-  # previous DHCP client ID to ensure that IP addresses don't change on
-  # upgrade.  If we're using DHCP, there will be exactly one NM connection
-  # profile which includes the string "method=auto" (it will be either
-  # bridge-mgmt or vlan-mgmt), and there will also be a wicked DHCP lease
-  # file.  To be careful, we assign to arrays here to be sure that there's
-  # only one matching NM connection profile, and one wicked lease file.
-  # If either of these things are not true, we do nothing.
-  local dhcp_connection_profiles=($(grep -l '^method=auto$' ${HOST_DIR}/usr/local/.state/etc-NetworkManager.bind/system-connections/*nmconnection 2>/dev/null))
-  local wicked_leases=($(ls ${HOST_DIR}/var/lib/wicked/lease*xml 2>/dev/null))
-  if [ ${#dhcp_connection_profiles[@]} -eq 1 ] && [ ${#wicked_leases[@]} -eq 1 ]; then
-    echo "Found wicked lease and DHCP connection profile, attempting to update DHCP client ID"
-    local dhcp_client_id=$(yq '.lease."ipv4:dhcp".client-id // ""' ${wicked_leases[0]})
-    if [ -n "$dhcp_client_id" ]; then
-      if ! grep -q ^dhcp-client-id ${dhcp_connection_profiles[0]}; then
-        echo "Adding DHCP client ID to ${dhcp_connection_profiles[0]}"
-        sed -i /^method=auto$/adhcp-client-id=$dhcp_client_id ${dhcp_connection_profiles[0]}
-      else
-        echo "DHCP client ID already set in ${dhcp_connection_profiles[0]} - will not update"
-      fi
-    else
-      echo "Unable to find DHCP client ID in ${wicked_leases[0]}"
-    fi
-  fi
-}
-
-generate_hostname_persistance() {
-   if [ -z "$UPGRADEPLAN_PREVIOUS_VERSION" ]; then
-    detect_upgrade
-  fi
-
-  # NetworkManager is new in Harvester v1.7.0
-  # nodes installed via v1.5.x or lower which may have used fqdn hostnames
-  # only render short hostname in the k8s node name however the
-  # harvester.config and /oem/90_custom.yaml set hostname to fqdn
-  # the /oem/90_custom.yaml sets hostname to fqdn as part which was ignored
-  # we need to ensure the hostname does not change after bump to NetworkManager
-  # as this will cause the node to be re-registered with apiserver using
-  # the fqdn hostname which will cause upgrade to break as the node never
-  # completes the upgrade
-  if [[ ! "$UPGRADEPLAN_PREVIOUS_VERSION" =~ ^v1\.6\.[0-9]$ ]]; then
-    echo "version: $UPGRADEPLAN_PREVIOUS_VERSION does not require generating Hostname override"
-    return
-  fi
-
-  # Just in case Hostname override has already been generated
-  # and/or potentially modified by the user, let's not overwrite it.
-  if [ -e ${HOST_DIR}/oem/92_hostname_override.yaml ]; then
-    echo "skipping hostname override config generation (${HOST_DIR}/oem/92_hostname_override.yaml already exists)"
-    return
-  fi
-
-  HARVESTER_CONFIG_HOSTNAME=$(cat ${HOST_DIR}/oem/harvester.config | yq -r .os.hostname)
-  CURRENT_HOSTNAME=$(${HOST_DIR}/usr/bin/hostname)
-
-  if [ "$CURRENT_HOSTNAME" = "$HARVESTER_CONFIG_HOSTNAME" ]; then
-    echo "skipping hostname override config generation as current hostname matches harvester config"
-    return
-  fi
-
-  echo "Generating Hostname override"
-  cat > ${HOST_DIR}/oem/92_hostname_override.yaml << EOF
-name: "ensure hostname persists across upgrade to NetworkManager"
-stages:
-   network:
-     - hostname: $CURRENT_HOSTNAME
-EOF
-}
-
 set_nic_names_by_mac_address() {
   # get current third_party_kernel_args
   local args=$(chroot $HOST_DIR grub2-editenv /oem/grubenv list |grep third_party_kernel_args | awk -F"third_party_kernel_args=" '{print $2}')
@@ -822,10 +710,6 @@ command_post_drain() {
 
   kubectl taint node $HARVESTER_UPGRADE_NODE_NAME kubevirt.io/drain- || true
 
-  generate_networkmanager_config
-
-  generate_hostname_persistance
-
   upgrade_os
 }
 
@@ -863,9 +747,6 @@ command_single_node_upgrade() {
   wait_rke2_upgrade
   clean_rke2_archives
 
-  generate_networkmanager_config
-
-  generate_hostname_persistance
   # Upgrade OS
   upgrade_os
 }
