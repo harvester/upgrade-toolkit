@@ -49,6 +49,7 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/internal/controller"
 	webhookv1beta1 "github.com/harvester/upgrade-toolkit/internal/webhook/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/preflight"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -339,6 +340,17 @@ func (c *ManagerCommand) Run() error {
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		return err
+	}
+
+	// Pre-flight: reject unsupported Harvester versions.
+	directClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "unable to create direct API client for pre-flight check")
+		return err
+	}
+	if err := preflight.CheckMinimumVersion(ctx, directClient, setupLog); err != nil {
+		setupLog.Error(err, "minimum version pre-flight check for Upgrade Manager failed")
 		return err
 	}
 
