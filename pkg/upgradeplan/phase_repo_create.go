@@ -153,7 +153,13 @@ func constructDeployment(
 	replicas *int32,
 ) *appsv1.Deployment {
 	deployName := name.SafeConcatName(upgradePlan.Name, repoComponent)
-	pvcName := name.SafeConcatName(upgradePlan.Name, imageComponent)
+
+	var pvcName string
+	if upgradePlan.Status.ISOImageID != nil {
+		pvcName = pvcNameFromISOImageID(*upgradePlan.Status.ISOImageID)
+	} else {
+		pvcName = name.SafeConcatName(upgradePlan.Name, imageComponent)
+	}
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

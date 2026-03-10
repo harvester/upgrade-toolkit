@@ -64,6 +64,12 @@ spec:
                             force:
                                 description: force indicates the UpgradePlan will be forcibly applied, ignoring any pre-upgrade check failures. Default to "false".
                                 type: boolean
+                            image:
+                                description: |-
+                                    image references a pre-uploaded VirtualMachineImage (in "namespace/name" format)
+                                    to use as the upgrade ISO. When set, the ISODownloading phase uses this existing
+                                    VMImage instead of downloading a new one. The VMI can be in any namespace.
+                                type: string
                             imagePreloadOption:
                                 description: imagePreloadOption configures image preload behavior including concurrency control.
                                 properties:
@@ -114,6 +120,8 @@ spec:
                         x-kubernetes-validations:
                             - message: spec.upgrade is immutable after creation
                               rule: has(self.upgrade) == has(oldSelf.upgrade) && (!has(self.upgrade) || self.upgrade == oldSelf.upgrade)
+                            - message: spec.image is immutable after creation
+                              rule: has(self.image) == has(oldSelf.image) && (!has(self.image) || self.image == oldSelf.image)
                     status:
                         description: status defines the observed state of UpgradePlan
                         properties:

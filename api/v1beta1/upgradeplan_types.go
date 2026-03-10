@@ -169,6 +169,7 @@ type ReleaseMetadata struct {
 
 // UpgradePlanSpec defines the desired state of UpgradePlan
 // +kubebuilder:validation:XValidation:rule="has(self.upgrade) == has(oldSelf.upgrade) && (!has(self.upgrade) || self.upgrade == oldSelf.upgrade)",message="spec.upgrade is immutable after creation"
+// +kubebuilder:validation:XValidation:rule="has(self.image) == has(oldSelf.image) && (!has(self.image) || self.image == oldSelf.image)",message="spec.image is immutable after creation"
 type UpgradePlanSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -185,6 +186,12 @@ type UpgradePlanSpec struct {
 	// For instance, specifying "dev" for the field can go for the "rancher/harvester-upgrade:dev" image.
 	// +optional
 	Upgrade *string `json:"upgrade,omitempty"`
+
+	// image references a pre-uploaded VirtualMachineImage (in "namespace/name" format)
+	// to use as the upgrade ISO. When set, the ISODownloading phase uses this existing
+	// VMImage instead of downloading a new one. The VMI can be in any namespace.
+	// +optional
+	Image *string `json:"image,omitempty"`
 
 	// force indicates the UpgradePlan will be forcibly applied, ignoring any pre-upgrade check failures. Default to "false".
 	// +optional

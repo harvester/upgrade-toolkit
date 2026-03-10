@@ -1644,6 +1644,185 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 	})
 
+	Context("validateImageRef", func() {
+		It("should reject when spec.image references a non-existent VMImage", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "node-1",
+					Labels:      map[string]string{"harvesterhci.io/managed": "true"},
+					Annotations: map[string]string{"cluster.x-k8s.io/machine": "machine-1"},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			machine := &clusterv1.Machine{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "machine-1"},
+				Status: clusterv1.MachineStatus{
+					Phase:   string(clusterv1.MachinePhaseRunning),
+					NodeRef: &corev1.ObjectReference{Name: "node-1"},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					Image:   ptr.To("default/nonexistent-iso"),
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.image"))
+		})
+
+		It("should reject when spec.image has malformed value", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "node-1",
+					Labels:      map[string]string{"harvesterhci.io/managed": "true"},
+					Annotations: map[string]string{"cluster.x-k8s.io/machine": "machine-1"},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			machine := &clusterv1.Machine{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "machine-1"},
+				Status: clusterv1.MachineStatus{
+					Phase:   string(clusterv1.MachinePhaseRunning),
+					NodeRef: &corev1.ObjectReference{Name: "node-1"},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					Image:   ptr.To("no-slash-here"),
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.image"))
+		})
+
+		It("should allow when spec.image references an existing VMImage", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "node-1",
+					Labels:      map[string]string{"harvesterhci.io/managed": "true"},
+					Annotations: map[string]string{"cluster.x-k8s.io/machine": "machine-1"},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			machine := &clusterv1.Machine{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "machine-1"},
+				Status: clusterv1.MachineStatus{
+					Phase:   string(clusterv1.MachinePhaseRunning),
+					NodeRef: &corev1.ObjectReference{Name: "node-1"},
+				},
+			}
+			vmImage := &harvesterv1beta1.VirtualMachineImage{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "default",
+					Name:      "my-iso",
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, vmImage).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Version: "v1.4.0",
+					Image:   ptr.To("default/my-iso"),
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow when spec.image is nil", func() {
+			version := &managementv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "node-1",
+					Labels:      map[string]string{"harvesterhci.io/managed": "true"},
+					Annotations: map[string]string{"cluster.x-k8s.io/machine": "machine-1"},
+				},
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+					},
+				},
+			}
+			machine := &clusterv1.Machine{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "machine-1"},
+				Status: clusterv1.MachineStatus{
+					Phase:   string(clusterv1.MachinePhaseRunning),
+					NodeRef: &corev1.ObjectReference{Name: "node-1"},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("ValidateUpdate", func() {
 		// NOTE: spec.version and spec.upgrade immutability tests have been removed.
 		// These checks are now enforced by CEL transition rules on the CRD schema.

@@ -3,6 +3,7 @@ package upgradeplan
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/rancher/wrangler/v3/pkg/name"
@@ -31,11 +32,19 @@ func (p *ISODownloadPhase) Run(
 ) (ctrl.Result, error) {
 	p.Log.V(1).Info("handle iso download")
 
-	vmImage, err := p.getOrCreateVirtualMachineImageForRepo(ctx, upgradePlan)
+	var vmImage *harvesterv1beta1.VirtualMachineImage
+	var err error
+
+	if upgradePlan.Spec.Image != nil {
+		vmImage, err = p.fetchExistingVirtualMachineImage(ctx, *upgradePlan.Spec.Image)
+	} else {
+		vmImage, err = p.getOrCreateVirtualMachineImageForRepo(ctx, upgradePlan)
+	}
 	if err != nil {
 		p.Log.Error(err, "unable to retrieve iso vmimage from upgradeplan")
 		return ctrl.Result{}, err
 	}
+
 	if upgradePlan.Status.ISOImageID == nil {
 		upgradePlan.Status.ISOImageID = ptr.To(fmt.Sprintf("%s/%s", vmImage.Namespace, vmImage.Name))
 	}
@@ -56,6 +65,24 @@ func (p *ISODownloadPhase) Run(
 
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseISODownloaded, "")
 	return ctrl.Result{}, nil
+}
+
+// fetchExistingVirtualMachineImage retrieves a user-provided VirtualMachineImage
+// by its namespaced name (format: "namespace/name").
+func (p *ISODownloadPhase) fetchExistingVirtualMachineImage(
+	ctx context.Context,
+	imageRef string,
+) (*harvesterv1beta1.VirtualMachineImage, error) {
+	ns, n, ok := strings.Cut(imageRef, "/")
+	if !ok {
+		return nil, fmt.Errorf("invalid image reference %q: expected namespace/name format", imageRef)
+	}
+
+	var vmImage harvesterv1beta1.VirtualMachineImage
+	if err := p.Client.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, &vmImage); err != nil {
+		return nil, fmt.Errorf("failed to get VirtualMachineImage %s: %w", imageRef, err)
+	}
+	return &vmImage, nil
 }
 
 func (p *ISODownloadPhase) getOrCreateVirtualMachineImageForRepo(

@@ -56,6 +56,14 @@ func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
 	return upgradePlan.Spec.Version
 }
 
+// pvcNameFromISOImageID extracts the VMImage name from a namespaced image ID
+// (format: "namespace/name"). The PVC backing a VirtualMachineImage shares
+// the VMImage's name and is always created in the harvester-system namespace.
+func pvcNameFromISOImageID(isoImageID string) string {
+	_, n, _ := strings.Cut(isoImageID, "/")
+	return n
+}
+
 func sanitizedVersion(version string) string {
 	return strings.Replace(version, "+", "-", 1)
 }

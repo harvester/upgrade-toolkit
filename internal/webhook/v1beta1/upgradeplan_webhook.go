@@ -117,6 +117,7 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	allErrs = append(allErrs, validateManagedCharts(ctx, v.Client)...)
 	allErrs = append(allErrs, validateAddons(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
+	allErrs = append(allErrs, validateImageRef(ctx, v.Client, upgradePlan)...)
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, upgradePlan)...)
 
 	if len(allErrs) > 0 {
@@ -659,6 +660,36 @@ func validateNonLiveMigratableVMs(ctx context.Context, c client.Reader) field.Er
 			field.NewPath("spec"),
 			fmt.Sprintf("there are non-live migratable VMs that need to be shut off before initiating the upgrade: %s",
 				strings.Join(nonMigratable, ", "))))
+	}
+
+	return allErrs
+}
+
+// validateImageRef checks that spec.image, if provided, references an existing VirtualMachineImage.
+func validateImageRef(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if upgradePlan.Spec.Image == nil {
+		return nil
+	}
+
+	imageRef := *upgradePlan.Spec.Image
+	imagePath := field.NewPath("spec", "image")
+
+	ns, name, ok := strings.Cut(imageRef, "/")
+	if !ok || ns == "" || name == "" {
+		allErrs = append(allErrs, field.Invalid(
+			imagePath, imageRef, "must be in namespace/name format"))
+		return allErrs
+	}
+
+	var vmImage harvesterv1beta1.VirtualMachineImage
+	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &vmImage); err != nil {
+		if apierrors.IsNotFound(err) {
+			allErrs = append(allErrs, field.NotFound(imagePath, imageRef))
+		} else {
+			allErrs = append(allErrs, field.InternalError(imagePath, err))
+		}
 	}
 
 	return allErrs

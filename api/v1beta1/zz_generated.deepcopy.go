@@ -178,6 +178,11 @@ func (in *UpgradePlanSpec) DeepCopyInto(out *UpgradePlanSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.Image != nil {
+		in, out := &in.Image, &out.Image
+		*out = new(string)
+		**out = **in
+	}
 	if in.Force != nil {
 		in, out := &in.Force, &out.Force
 		*out = new(bool)

@@ -98,6 +98,49 @@ func TestConstructDeployment_UsesUpgradeOverride(t *testing.T) {
 	assert.Equal(t, upgradeToolkitImage+":dev", c.Image)
 }
 
+func TestPVCNameFromISOImageID(t *testing.T) {
+	tests := []struct {
+		name       string
+		isoImageID string
+		expected   string
+	}{
+		{
+			name:       "operator-created VMImage",
+			isoImageID: "harvester-system/test-upgradeplan-iso",
+			expected:   "test-upgradeplan-iso",
+		},
+		{
+			name:       "user-provided VMImage in default namespace",
+			isoImageID: "default/my-uploaded-iso",
+			expected:   "my-uploaded-iso",
+		},
+		{
+			name:       "user-provided VMImage in custom namespace",
+			isoImageID: "my-namespace/custom-image",
+			expected:   "custom-image",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, pvcNameFromISOImageID(tt.isoImageID))
+		})
+	}
+}
+
+func TestConstructDeployment_UserProvidedVMImage(t *testing.T) {
+	up := newTestUpgradePlan()
+	up.Status.ISOImageID = ptr.To("default/my-uploaded-iso")
+	replicas := ptr.To[int32](2)
+
+	deploy := constructDeployment(up, replicas)
+
+	// Volume should reference the user-provided VMImage's PVC name
+	require.Len(t, deploy.Spec.Template.Spec.Volumes, 1)
+	vol := deploy.Spec.Template.Spec.Volumes[0]
+	assert.Equal(t, "my-uploaded-iso", vol.PersistentVolumeClaim.ClaimName)
+}
+
 func TestConstructService(t *testing.T) {
 	up := newTestUpgradePlan()
 
