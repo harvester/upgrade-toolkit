@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -353,4 +354,19 @@ func (u *UpgradePlan) ConditionFalse(conditionType string) bool {
 func (u *UpgradePlan) ConditionUnknown(conditionType string) bool {
 	condition := u.LookupCondition(conditionType)
 	return condition.Status == metav1.ConditionUnknown
+}
+
+// ObjectReference returns a corev1.ObjectReference for this UpgradePlan
+// placed in the given namespace. UpgradePlan is cluster-scoped, but Events
+// are namespaced, so callers must specify which namespace the event should
+// be created in.
+func (u *UpgradePlan) ObjectReference(namespace string) *corev1.ObjectReference {
+	return &corev1.ObjectReference{
+		Kind:            "UpgradePlan",
+		APIVersion:      GroupVersion.String(),
+		Name:            u.Name,
+		Namespace:       namespace,
+		UID:             u.UID,
+		ResourceVersion: u.ResourceVersion,
+	}
 }

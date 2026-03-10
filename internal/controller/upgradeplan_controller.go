@@ -125,7 +125,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.Log.Info("blocking concurrent upgrade",
 			"upgradePlan", upgradePlan.Name,
 			"conflicting", conflicting)
-		r.EventRecorder.Eventf(&upgradePlan, corev1.EventTypeWarning, "ConcurrentUpgradeBlocked",
+		r.EventRecorder.Eventf(upgradePlan.ObjectReference(upgradeplan.HarvesterSystemNamespace), corev1.EventTypeWarning, "ConcurrentUpgradeBlocked",
 			"Blocked by in-progress upgrade %q", conflicting)
 		upgradePlanCopy.SetCondition(
 			managementv1beta1.UpgradePlanAvailable,
@@ -144,7 +144,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		prevDegraded := upgradePlan.LookupCondition(managementv1beta1.UpgradePlanDegraded)
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionTrue, "ReconcileError", err.Error())
 		if prevDegraded.Status != metav1.ConditionTrue || prevDegraded.Message != err.Error() {
-			r.EventRecorder.Eventf(&upgradePlan, corev1.EventTypeWarning, "ReconcileError", "Pipeline error: %v", err)
+			r.EventRecorder.Eventf(upgradePlan.ObjectReference(upgradeplan.HarvesterSystemNamespace), corev1.EventTypeWarning, "ReconcileError", "Pipeline error: %v", err)
 		}
 	} else {
 		upgradePlanCopy.SetCondition(managementv1beta1.UpgradePlanDegraded, metav1.ConditionFalse, "ReconcileSuccess", "")
@@ -154,7 +154,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if upgradePlanCopy.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseSucceeded &&
 		upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseSucceeded {
-		r.EventRecorder.Event(&upgradePlan, corev1.EventTypeNormal, "UpgradeSucceeded", "Upgrade completed successfully")
+		r.EventRecorder.Event(upgradePlan.ObjectReference(upgradeplan.HarvesterSystemNamespace), corev1.EventTypeNormal, "UpgradeSucceeded", "Upgrade completed successfully")
 	} else if upgradePlanCopy.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseFailed &&
 		upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseFailed {
 		cond := upgradePlanCopy.LookupCondition(managementv1beta1.UpgradePlanProgressing)
@@ -162,7 +162,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if cond.Message != "" {
 			msg = fmt.Sprintf("Upgrade failed: %s", cond.Message)
 		}
-		r.EventRecorder.Event(&upgradePlan, corev1.EventTypeWarning, "UpgradeFailed", msg)
+		r.EventRecorder.Event(upgradePlan.ObjectReference(upgradeplan.HarvesterSystemNamespace), corev1.EventTypeWarning, "UpgradeFailed", msg)
 	}
 
 	if !reflect.DeepEqual(upgradePlan.Status, upgradePlanCopy.Status) {

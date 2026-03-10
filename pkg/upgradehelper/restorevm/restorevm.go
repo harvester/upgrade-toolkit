@@ -218,18 +218,6 @@ func (h *RestoreVMHandler) recordUpgradeEvent(eventType, reason, message string)
 		return
 	}
 
-	// UpgradePlan is cluster-scoped (Namespace is ""), but Events are namespaced.
-	// Build an explicit ObjectReference with the target namespace so the event
-	// lands in harvester-system and matches the EventSink namespace.
-	ref := &corev1.ObjectReference{
-		Kind:            "UpgradePlan",
-		APIVersion:      managementv1beta1.GroupVersion.String(),
-		Name:            upgradePlan.Name,
-		Namespace:       harvesterSystemNamespace,
-		UID:             upgradePlan.UID,
-		ResourceVersion: upgradePlan.ResourceVersion,
-	}
-
 	logrus.Info("Recording event for upgrade ", h.upgradeName, ": ", eventType, " ", reason, " ", message)
-	h.recorder.Event(ref, eventType, reason, message)
+	h.recorder.Event(upgradePlan.ObjectReference(harvesterSystemNamespace), eventType, reason, message)
 }

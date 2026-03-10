@@ -317,20 +317,8 @@ func (d *VMLiveMigrateDetector) recordUpgradeEvent(eventType, reason, message st
 		return
 	}
 
-	// UpgradePlan is cluster-scoped (Namespace is ""), but Events are namespaced.
-	// Build an explicit ObjectReference with the target namespace so the event
-	// lands in harvester-system and matches the EventSink namespace.
-	ref := &corev1.ObjectReference{
-		Kind:            "UpgradePlan",
-		APIVersion:      managementv1beta1.GroupVersion.String(),
-		Name:            upgradePlan.Name,
-		Namespace:       harvesterSystemNamespace,
-		UID:             upgradePlan.UID,
-		ResourceVersion: upgradePlan.ResourceVersion,
-	}
-
 	logrus.Info("Recording event for upgrade ", d.upgradeName, ": ", eventType, " ", reason, " ", message)
-	d.recorder.Event(ref, eventType, reason, message)
+	d.recorder.Event(upgradePlan.ObjectReference(harvesterSystemNamespace), eventType, reason, message)
 }
 
 // GetRestoreVMConfigMapName returns the ConfigMap name used to store VM names for restoration.
