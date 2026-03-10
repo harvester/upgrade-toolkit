@@ -19,7 +19,6 @@ package v1beta1
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
@@ -129,11 +128,8 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type UpgradePlan.
-func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldUpgradePlan, ok := oldObj.(*managementv1beta1.UpgradePlan)
-	if !ok {
-		return nil, fmt.Errorf("expected an UpgradePlan object but got %T", oldObj)
-	}
+// NOTE: spec.version and spec.upgrade immutability is enforced by CEL transition rules on the CRD schema.
+func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
 	newUpgradePlan, ok := newObj.(*managementv1beta1.UpgradePlan)
 	if !ok {
 		return nil, fmt.Errorf("expected an UpgradePlan object but got %T", newObj)
@@ -141,18 +137,6 @@ func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, oldObj,
 	upgradeplanlog.Info("Validation for UpgradePlan upon update", "name", newUpgradePlan.GetName())
 
 	var allErrs field.ErrorList
-
-	if oldUpgradePlan.Spec.Version != newUpgradePlan.Spec.Version {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("spec", "version"),
-			"field is immutable after creation"))
-	}
-
-	if !reflect.DeepEqual(oldUpgradePlan.Spec.Upgrade, newUpgradePlan.Spec.Upgrade) {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("spec", "upgrade"),
-			"field is immutable after creation"))
-	}
 
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, newUpgradePlan)...)
 
@@ -703,24 +687,14 @@ func validateNodeUpgradeOption(ctx context.Context, c client.Reader, upgradePlan
 		nodeSet[node.Name] = struct{}{}
 	}
 
-	// Validate individual pauseNodes entries
-	seen := make(map[string]bool, len(opt.PauseNodes))
+	// Validate individual pauseNodes entries.
+	// NOTE: empty-string and duplicate checks are enforced by CRD schema
+	// (items:MinLength=1 and listType=set respectively).
 	for i, n := range opt.PauseNodes {
-		if n == "" {
-			allErrs = append(allErrs, field.Required(
-				pauseNodesPath.Index(i),
-				"node name must not be empty"))
-		} else {
-			if _, exists := nodeSet[n]; !exists {
-				allErrs = append(allErrs, field.NotFound(
-					pauseNodesPath.Index(i), n))
-			}
-		}
-		if seen[n] {
-			allErrs = append(allErrs, field.Duplicate(
+		if _, exists := nodeSet[n]; !exists {
+			allErrs = append(allErrs, field.NotFound(
 				pauseNodesPath.Index(i), n))
 		}
-		seen[n] = true
 	}
 
 	return allErrs

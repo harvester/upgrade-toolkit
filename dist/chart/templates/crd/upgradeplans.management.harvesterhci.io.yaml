@@ -86,6 +86,7 @@ spec:
                                             paused. Removing a node from this list unpauses it. To pause all nodes,
                                             list every node name explicitly.
                                         items:
+                                            minLength: 1
                                             type: string
                                         type: array
                                         x-kubernetes-list-type: set
@@ -102,10 +103,17 @@ spec:
                                 type: string
                             version:
                                 description: version refers to the corresponding version resource.
+                                minLength: 1
                                 type: string
+                                x-kubernetes-validations:
+                                    - message: spec.version is immutable after creation
+                                      rule: self == oldSelf
                         required:
                             - version
                         type: object
+                        x-kubernetes-validations:
+                            - message: spec.upgrade is immutable after creation
+                              rule: has(self.upgrade) == has(oldSelf.upgrade) && (!has(self.upgrade) || self.upgrade == oldSelf.upgrade)
                     status:
                         description: status defines the observed state of UpgradePlan
                         properties:

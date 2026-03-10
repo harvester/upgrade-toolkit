@@ -145,6 +145,7 @@ type NodeUpgradeOption struct {
 	// list every node name explicitly.
 	// +listType=set
 	// +optional
+	// +kubebuilder:validation:items:MinLength=1
 	PauseNodes []string `json:"pauseNodes,omitempty"`
 }
 
@@ -167,6 +168,7 @@ type ReleaseMetadata struct {
 }
 
 // UpgradePlanSpec defines the desired state of UpgradePlan
+// +kubebuilder:validation:XValidation:rule="has(self.upgrade) == has(oldSelf.upgrade) && (!has(self.upgrade) || self.upgrade == oldSelf.upgrade)",message="spec.upgrade is immutable after creation"
 type UpgradePlanSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -175,6 +177,8 @@ type UpgradePlanSpec struct {
 
 	// version refers to the corresponding version resource.
 	// +required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.version is immutable after creation"
 	Version string `json:"version"`
 
 	// upgrade can be specified to opt for any other specific upgrade image. If not provided, the version resource name is used.

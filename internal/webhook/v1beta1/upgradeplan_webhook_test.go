@@ -1645,47 +1645,8 @@ var _ = Describe("UpgradePlan Webhook", func() {
 	})
 
 	Context("ValidateUpdate", func() {
-		It("should reject when spec.version is changed", func() {
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			}
-			oldObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
-			}
-			newObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
-			}
-
-			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.version"))
-		})
-
-		It("should reject when spec.upgrade is changed", func() {
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			}
-			oldObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
-					Upgrade: ptr.To("custom-image"),
-				},
-			}
-			newObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
-					Upgrade: ptr.To("different-image"),
-				},
-			}
-
-			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.upgrade"))
-		})
+		// NOTE: spec.version and spec.upgrade immutability tests have been removed.
+		// These checks are now enforced by CEL transition rules on the CRD schema.
 
 		It("should allow when only spec.nodeUpgradeOption is changed", func() {
 			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
@@ -1931,52 +1892,8 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("nonexistent-node"))
 		})
 
-		It("should reject duplicate pauseNodes on update", func() {
-			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(node1).Build(),
-			}
-			oldObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
-			}
-			newObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
-					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						PauseNodes: []string{"node-1", "node-1"},
-					},
-				},
-			}
-
-			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Duplicate"))
-		})
-
-		It("should reject empty string in pauseNodes", func() {
-			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
-			}
-			oldObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
-			}
-			newObj := &managementv1beta1.UpgradePlan{
-				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
-					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
-						PauseNodes: []string{""},
-					},
-				},
-			}
-
-			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("node name must not be empty"))
-		})
+		// NOTE: duplicate pauseNodes and empty-string pauseNodes tests have been removed.
+		// These checks are now enforced by CRD schema (listType=set and items:MinLength=1 respectively).
 
 		It("should accept valid pauseNodes", func() {
 			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}

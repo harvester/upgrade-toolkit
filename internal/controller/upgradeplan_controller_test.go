@@ -58,6 +58,9 @@ func createUpgradePlan(ctx context.Context, name string) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
+		Spec: managementv1beta1.UpgradePlanSpec{
+			Version: "test-version",
+		},
 	}
 	Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 }
@@ -104,7 +107,9 @@ var _ = Describe("UpgradePlan Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: managementv1beta1.UpgradePlanSpec{
+						Version: "test-version",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
