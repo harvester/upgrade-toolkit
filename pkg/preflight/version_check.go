@@ -79,6 +79,7 @@ func CheckMinimumVersion(ctx context.Context, reader client.Reader, logger logr.
 			setting.Value, minSupportedVersion)
 	}
 
-	logger.Info("minimum version check for Upgrade Manager passed", "serverVersion", setting.Value, "minSupportedVersion", minSupportedVersion)
+	logger.Info("minimum version check for Upgrade Manager passed",
+		"serverVersion", setting.Value, "minSupportedVersion", minSupportedVersion)
 	return nil
 }
