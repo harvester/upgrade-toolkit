@@ -102,7 +102,7 @@ spec:
     listKind: SettingList
     plural: settings
     singular: setting
-  scope: Namespaced
+  scope: Cluster
   versions:
     - name: v1beta1
       served: true
