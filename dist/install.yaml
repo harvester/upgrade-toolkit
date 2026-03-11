@@ -74,7 +74,7 @@ spec:
                 description: |-
                   image references a pre-uploaded VirtualMachineImage (in "namespace/name" format)
                   to use as the upgrade ISO. When set, the ISODownloading phase uses this existing
-                  VMImage instead of downloading a new one. The VMI can be in any namespace.
+                  VMImage instead of downloading a new one. The VMImage can be in any namespace.
                 type: string
               imagePreloadOption:
                 description: imagePreloadOption configures image preload behavior
@@ -116,14 +116,11 @@ spec:
                   For instance, specifying "dev" for the field can go for the "rancher/harvester-upgrade:dev" image.
                 type: string
               version:
-                description: version refers to the corresponding version resource.
+                description: |-
+                  version refers to the corresponding version resource.
+                  When spec.image is set, this field is optional and no Version CR lookup is performed.
                 minLength: 1
                 type: string
-                x-kubernetes-validations:
-                - message: spec.version is immutable after creation
-                  rule: self == oldSelf
-            required:
-            - version
             type: object
             x-kubernetes-validations:
             - message: spec.upgrade is immutable after creation
@@ -132,6 +129,11 @@ spec:
             - message: spec.image is immutable after creation
               rule: has(self.image) == has(oldSelf.image) && (!has(self.image) ||
                 self.image == oldSelf.image)
+            - message: spec.version is immutable after creation
+              rule: has(self.version) == has(oldSelf.version) && (!has(self.version)
+                || self.version == oldSelf.version)
+            - message: at least one of spec.version or spec.image must be set
+              rule: has(self.version) || has(self.image)
           status:
             description: status defines the observed state of UpgradePlan
             properties:

@@ -50,10 +50,13 @@ func newTestUpgradePlanWithVersions(previousVersion, currentVersion string) *man
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: currentVersion,
+			Version: ptr.To(currentVersion),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To(previousVersion),
+			ReleaseMetadata: &managementv1beta1.ReleaseMetadata{
+				Harvester: currentVersion,
+			},
 		},
 	}
 	return up
@@ -187,7 +190,7 @@ func TestImageCleanupPhase_NoPreviousVersion(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			CurrentPhase: managementv1beta1.UpgradePlanPhaseCleaningUp,

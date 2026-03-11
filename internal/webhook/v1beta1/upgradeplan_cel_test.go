@@ -57,7 +57,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, plan)).To(Succeed())
@@ -65,7 +65,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				Expect(k8sClient.Delete(ctx, plan)).To(Succeed())
 			}()
 
-			plan.Spec.Version = "v1.5.0"
+			plan.Spec.Version = ptr.To("v1.5.0")
 			err := k8sClient.Update(ctx, plan)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("spec.version is immutable after creation"))
@@ -82,7 +82,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Upgrade: ptr.To("custom-image"),
 				},
 			}
@@ -106,7 +106,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, plan)).To(Succeed())
@@ -129,7 +129,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Upgrade: ptr.To("custom-image"),
 				},
 			}
@@ -155,7 +155,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "",
+					Version: ptr.To(""),
 				},
 			}
 			err := k8sClient.Create(ctx, plan)
@@ -174,7 +174,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
 						PauseNodes: []string{""},
 					},
@@ -196,7 +196,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, plan)).To(Succeed())

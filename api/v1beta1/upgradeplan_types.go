@@ -170,6 +170,8 @@ type ReleaseMetadata struct {
 // UpgradePlanSpec defines the desired state of UpgradePlan
 // +kubebuilder:validation:XValidation:rule="has(self.upgrade) == has(oldSelf.upgrade) && (!has(self.upgrade) || self.upgrade == oldSelf.upgrade)",message="spec.upgrade is immutable after creation"
 // +kubebuilder:validation:XValidation:rule="has(self.image) == has(oldSelf.image) && (!has(self.image) || self.image == oldSelf.image)",message="spec.image is immutable after creation"
+// +kubebuilder:validation:XValidation:rule="has(self.version) == has(oldSelf.version) && (!has(self.version) || self.version == oldSelf.version)",message="spec.version is immutable after creation"
+// +kubebuilder:validation:XValidation:rule="has(self.version) || has(self.image)",message="at least one of spec.version or spec.image must be set"
 type UpgradePlanSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
@@ -177,10 +179,10 @@ type UpgradePlanSpec struct {
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
 	// version refers to the corresponding version resource.
-	// +required
+	// When spec.image is set, this field is optional and no Version CR lookup is performed.
+	// +optional
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.version is immutable after creation"
-	Version string `json:"version"`
+	Version *string `json:"version,omitempty"`
 
 	// upgrade can be specified to opt for any other specific upgrade image. If not provided, the version resource name is used.
 	// For instance, specifying "dev" for the field can go for the "rancher/harvester-upgrade:dev" image.
@@ -189,7 +191,7 @@ type UpgradePlanSpec struct {
 
 	// image references a pre-uploaded VirtualMachineImage (in "namespace/name" format)
 	// to use as the upgrade ISO. When set, the ISODownloading phase uses this existing
-	// VMImage instead of downloading a new one. The VMI can be in any namespace.
+	// VMImage instead of downloading a new one. The VMImage can be in any namespace.
 	// +optional
 	Image *string `json:"image,omitempty"`
 

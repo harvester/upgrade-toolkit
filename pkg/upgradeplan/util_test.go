@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	buildversion "github.com/harvester/upgrade-toolkit/pkg/version"
 )
 
 func TestIsDeploymentReady(t *testing.T) {
@@ -290,7 +291,7 @@ func TestConstructNodeJob_SingleNodeUpgrade(t *testing.T) {
 			Name: "test-upgrade",
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.4.0",
+			Version: ptr.To("v1.4.0"),
 		},
 	}
 
@@ -358,7 +359,7 @@ func TestConstructNodeJob_SingleNodeUpgrade(t *testing.T) {
 func TestConstructNodeJob_Suspend(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-upgrade"},
-		Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+		Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 	}
 
 	t.Run("suspend=true sets spec.suspend", func(t *testing.T) {
@@ -622,7 +623,7 @@ func TestConstructRestoreVMJob(t *testing.T) {
 			Name: "test-upgrade",
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.4.0",
+			Version: ptr.To("v1.4.0"),
 		},
 	}
 
@@ -728,5 +729,61 @@ func TestIsServiceReady(t *testing.T) {
 		wrongNsEPS.Namespace = "default"
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wrongNsEPS).Build()
 		assert.False(t, isServiceReady(context.Background(), c, svc))
+	})
+}
+
+func TestGetUpgradeVersion(t *testing.T) {
+	t.Run("nil upgradePlan returns nonexistent", func(t *testing.T) {
+		assert.Equal(t, "nonexistent", getUpgradeVersion(nil))
+	})
+
+	t.Run("spec.upgrade takes highest priority", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			Spec: managementv1beta1.UpgradePlanSpec{
+				Version: ptr.To("v1.4.0"),
+				Upgrade: ptr.To("dev"),
+			},
+			Status: managementv1beta1.UpgradePlanStatus{
+				ReleaseMetadata: &managementv1beta1.ReleaseMetadata{
+					Harvester: "v1.5.0",
+				},
+			},
+		}
+		assert.Equal(t, "dev", getUpgradeVersion(up))
+	})
+
+	t.Run("releaseMetadata.Harvester used when spec.upgrade is nil", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			Spec: managementv1beta1.UpgradePlanSpec{
+				Version: ptr.To("v1.4.0"),
+			},
+			Status: managementv1beta1.UpgradePlanStatus{
+				ReleaseMetadata: &managementv1beta1.ReleaseMetadata{
+					Harvester: "v1.5.0",
+				},
+			},
+		}
+		assert.Equal(t, "v1.5.0", getUpgradeVersion(up))
+	})
+
+	t.Run("falls back to buildversion.Version when releaseMetadata is nil", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			Spec: managementv1beta1.UpgradePlanSpec{
+				Image: ptr.To("default/my-iso"),
+			},
+		}
+		assert.Equal(t, buildversion.Version, getUpgradeVersion(up))
+	})
+
+	t.Run("falls back to buildversion.Version when Harvester field is empty", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			Spec: managementv1beta1.UpgradePlanSpec{
+				Image: ptr.To("default/my-iso"),
+			},
+			Status: managementv1beta1.UpgradePlanStatus{
+				ReleaseMetadata: &managementv1beta1.ReleaseMetadata{},
+			},
+		}
+		assert.Equal(t, buildversion.Version, getUpgradeVersion(up))
 	})
 }

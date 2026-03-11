@@ -47,7 +47,7 @@ func TestImagePreloadPhase_PreRun_EligibleUpgrade(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.2",
+			Version: ptr.To("v1.2.2"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To("v1.2.1"),
@@ -71,7 +71,7 @@ func TestImagePreloadPhase_PreRun_IneligibleBelowMinVersion(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.2",
+			Version: ptr.To("v1.2.2"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To("v1.2.0"),
@@ -98,7 +98,7 @@ func TestImagePreloadPhase_PreRun_Downgrade(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To("v1.2.1"),
@@ -125,7 +125,7 @@ func TestImagePreloadPhase_PreRun_ForceBypassesCheck(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.2",
+			Version: ptr.To("v1.2.2"),
 			Force:   ptr.To(true),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
@@ -150,7 +150,7 @@ func TestImagePreloadPhase_PreRun_MissingReleaseMetadata(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.2",
+			Version: ptr.To("v1.2.2"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To("v1.2.1"),
@@ -170,7 +170,7 @@ func TestImagePreloadPhase_PreRun_DevToStableStrictMode(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.3.1",
+			Version: ptr.To("v1.3.1"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To("v1.2-head"),
@@ -197,7 +197,12 @@ func TestConstructPlanForImagePreload(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
+		},
+		Status: managementv1beta1.UpgradePlanStatus{
+			ReleaseMetadata: &managementv1beta1.ReleaseMetadata{
+				Harvester: "v1.2.0",
+			},
 		},
 	}
 
@@ -259,7 +264,7 @@ func TestImagePreloadPhase_Run_NegativeConcurrency_SkipsPreloading(t *testing.T)
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 			ImagePreloadOption: &managementv1beta1.ImagePreloadOption{
 				Concurrency: ptr.To(-1),
 			},
@@ -295,7 +300,7 @@ func TestImagePreloadPhase_Run_DefaultConcurrency_AllNodes(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			CurrentPhase: managementv1beta1.UpgradePlanPhaseImagePreloading,
@@ -327,7 +332,7 @@ func TestImagePreloadPhase_Run_PositiveConcurrency_Capped(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 			ImagePreloadOption: &managementv1beta1.ImagePreloadOption{
 				Concurrency: ptr.To(5),
 			},
@@ -362,7 +367,7 @@ func TestImagePreloadPhase_Run_PositiveConcurrency_Normal(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 			ImagePreloadOption: &managementv1beta1.ImagePreloadOption{
 				Concurrency: ptr.To(2),
 			},

@@ -65,7 +65,7 @@ func TestPipeline_Execute_PreRunFailedPhaseNotOverwritten(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.6.1",
+			Version: ptr.To("v1.6.1"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			PreviousVersion: ptr.To("v1.7.1"),
@@ -111,7 +111,7 @@ func TestPipeline_Execute_PostRunFailedPhaseNotOverwritten(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			CurrentPhase: "PhaseACompleted",
@@ -146,7 +146,7 @@ func TestPipeline_Execute_InitPostRunFailedPhaseNotOverwritten(t *testing.T) {
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "v1.2.0",
+			Version: ptr.To("v1.2.0"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			CurrentPhase: managementv1beta1.UpgradePlanPhaseInitialized,

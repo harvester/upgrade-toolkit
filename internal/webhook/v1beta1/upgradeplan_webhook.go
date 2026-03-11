@@ -192,14 +192,25 @@ func (v *UpgradePlanCustomValidator) ValidateDelete(_ context.Context, obj runti
 }
 
 // validateVersionExists checks that spec.version references an existing Version CR.
+// Skipped when spec.image is set, since the ISO is sourced from the existing VirtualMachineImage.
 func validateVersionExists(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
+	if upgradePlan.Spec.Image != nil {
+		return nil
+	}
+
 	var allErrs field.ErrorList
 
+	if upgradePlan.Spec.Version == nil {
+		allErrs = append(allErrs, field.Required(
+			field.NewPath("spec", "version"), "must be set when spec.image is not provided"))
+		return allErrs
+	}
+
 	var version managementv1beta1.Version
-	if err := c.Get(ctx, client.ObjectKey{Name: upgradePlan.Spec.Version}, &version); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Name: *upgradePlan.Spec.Version}, &version); err != nil {
 		if apierrors.IsNotFound(err) {
 			allErrs = append(allErrs, field.NotFound(
-				field.NewPath("spec", "version"), upgradePlan.Spec.Version))
+				field.NewPath("spec", "version"), *upgradePlan.Spec.Version))
 		} else {
 			allErrs = append(allErrs, field.InternalError(
 				field.NewPath("spec", "version"), err))

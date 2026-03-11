@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	buildversion "github.com/harvester/upgrade-toolkit/pkg/version"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	"github.com/rancher/wrangler/v3/pkg/name"
 	appsv1 "k8s.io/api/apps/v1"
@@ -53,7 +54,11 @@ func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
 		return *upgradePlan.Spec.Upgrade
 	}
 
-	return upgradePlan.Spec.Version
+	if upgradePlan.Status.ReleaseMetadata != nil && upgradePlan.Status.ReleaseMetadata.Harvester != "" {
+		return upgradePlan.Status.ReleaseMetadata.Harvester
+	}
+
+	return buildversion.Version
 }
 
 // pvcNameFromISOImageID extracts the VMImage name from a namespaced image ID

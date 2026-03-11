@@ -29,6 +29,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	upgradeplanpkg "github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -59,7 +60,7 @@ func createUpgradePlan(ctx context.Context, name string) {
 			Name: name,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: "test-version",
+			Version: ptr.To("test-version"),
 		},
 	}
 	Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -108,7 +109,7 @@ var _ = Describe("UpgradePlan Controller", func() {
 						Namespace: "default",
 					},
 					Spec: managementv1beta1.UpgradePlanSpec{
-						Version: "test-version",
+						Version: ptr.To("test-version"),
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())

@@ -94,7 +94,7 @@ var _ = Describe("Node Controller", func() {
 				Name: upgradePlanName,
 			},
 			Spec: managementv1beta1.UpgradePlanSpec{
-				Version: testVersion,
+				Version: ptr.To("test-version"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, up)).To(Succeed())
@@ -117,7 +117,7 @@ var _ = Describe("Node Controller", func() {
 				Name: upgradePlanName,
 			},
 			Spec: managementv1beta1.UpgradePlanSpec{
-				Version:   testVersion,
+				Version:   ptr.To("test-version"),
 				RestoreVM: restoreVM,
 			},
 		}
@@ -254,7 +254,7 @@ var _ = Describe("Node Controller", func() {
 					Name: upgradePlanName,
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: testVersion,
+					Version: ptr.To("test-version"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, up)).To(Succeed())
@@ -301,7 +301,7 @@ var _ = Describe("Node Controller", func() {
 					Name: upgradePlanName,
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: testVersion,
+					Version: ptr.To("test-version"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, up)).To(Succeed())
@@ -344,7 +344,7 @@ var _ = Describe("Node Controller", func() {
 					Name: upgradePlanName,
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: testVersion,
+					Version: ptr.To("test-version"),
 				},
 			}
 			Expect(k8sClient.Create(ctx, up)).To(Succeed())

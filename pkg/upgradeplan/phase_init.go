@@ -110,8 +110,10 @@ func (p *InitPhase) Run(
 	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseInitializing {
 		upgradePlan.SetCondition(managementv1beta1.UpgradePlanAvailable, metav1.ConditionTrue, "Executable", "")
 
-		if err := p.loadVersion(ctx, upgradePlan); err != nil {
-			return ctrl.Result{}, err
+		if upgradePlan.Spec.Image == nil {
+			if err := p.loadVersion(ctx, upgradePlan); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
 		if err := p.loadPreviousVersion(ctx, upgradePlan); err != nil {
@@ -393,7 +395,7 @@ func (p *InitPhase) loadVersion(
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
 	var version managementv1beta1.Version
-	if err := p.Client.Get(ctx, types.NamespacedName{Name: upgradePlan.Spec.Version}, &version); err != nil {
+	if err := p.Client.Get(ctx, types.NamespacedName{Name: *upgradePlan.Spec.Version}, &version); err != nil {
 		return err
 	}
 	upgradePlan.Status.Version = &version.Spec

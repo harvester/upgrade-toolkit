@@ -59,12 +59,35 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("spec.version"))
+		})
+
+		It("should skip version validation when spec.image is set", func() {
+			// No Version CR exists, but spec.image is set so version validation is skipped.
+			// Other validations (cluster readiness, etc.) will still fail, but not spec.version.
+			vmImage := &harvesterv1beta1.VirtualMachineImage{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "my-iso"},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(vmImage).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec: managementv1beta1.UpgradePlanSpec{
+					Image: ptr.To("default/my-iso"),
+				},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			// Other validations may fail (cluster not found, etc.), but NOT spec.version
+			if err != nil {
+				Expect(err.Error()).NotTo(ContainSubstring("spec.version"))
+			}
 		})
 
 		It("should allow when spec.version references an existing Version", func() {
@@ -100,7 +123,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -110,7 +133,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		It("should reject when another UpgradePlan has Progressing=True", func() {
 			existing := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					Conditions: []metav1.Condition{
 						{
@@ -129,7 +152,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -140,7 +163,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		It("should reject concurrent upgrade even with force=true", func() {
 			existing := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					Conditions: []metav1.Condition{
 						{
@@ -160,7 +183,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Force:   ptr.To(true),
 				},
 			}
@@ -173,7 +196,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		It("should allow when existing UpgradePlan has Progressing=False", func() {
 			existing := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					Conditions: []metav1.Condition{
 						{
@@ -215,7 +238,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -225,7 +248,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		It("should allow when existing UpgradePlan has no Progressing condition", func() {
 			existing := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 			}
 			version := &managementv1beta1.Version{
 				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
@@ -259,7 +282,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -280,7 +303,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 						upgradeplan.AnnotationSkipWebhook: "true",
 					},
 				},
-				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -311,7 +334,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -342,7 +365,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -402,7 +425,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -421,7 +444,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -443,7 +466,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -484,7 +507,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -526,7 +549,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -567,7 +590,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -603,7 +626,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -645,7 +668,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -685,7 +708,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -726,7 +749,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -767,7 +790,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -808,7 +831,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -849,7 +872,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -892,7 +915,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			validator := UpgradePlanCustomValidator{Client: builder.Build()}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -923,7 +946,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -958,7 +981,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -995,7 +1018,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1037,7 +1060,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 						upgradeplan.AnnotationSkipSingleReplicaDetachedVol: "true",
 					},
 				},
-				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1068,7 +1091,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1106,7 +1129,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1148,7 +1171,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1184,7 +1207,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1227,7 +1250,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1271,7 +1294,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1305,7 +1328,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1337,7 +1360,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1367,7 +1390,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1409,7 +1432,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1449,7 +1472,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1483,7 +1506,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1516,7 +1539,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1558,7 +1581,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1578,7 +1601,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			cleaningUp := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseCleaningUp,
 				},
@@ -1588,7 +1611,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1607,7 +1630,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			succeeded := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.3.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseSucceeded,
 				},
@@ -1636,7 +1659,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-new"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1679,7 +1702,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Image:   ptr.To("default/nonexistent-iso"),
 				},
 			}
@@ -1723,7 +1746,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Image:   ptr.To("no-slash-here"),
 				},
 			}
@@ -1773,7 +1796,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Image:   ptr.To("default/my-iso"),
 				},
 			}
@@ -1815,7 +1838,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)
@@ -1835,13 +1858,13 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			oldObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 				},
 			}
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
 						PauseNodes: []string{"node-1"},
 					},
@@ -1858,12 +1881,12 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			oldObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					Force:   ptr.To(true),
 				},
 			}
@@ -1878,11 +1901,11 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			oldObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
@@ -1897,7 +1920,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					Conditions: []metav1.Condition{
 						{
@@ -1918,7 +1941,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateDelete(ctx, obj)
@@ -1931,7 +1954,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseSucceeded,
 				},
@@ -1947,7 +1970,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseISODownloading,
 					Conditions: []metav1.Condition{
@@ -1975,7 +1998,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 						upgradeplan.AnnotationAllowDeletion: "true",
 					},
 				},
-				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseISODownloading,
 					Conditions: []metav1.Condition{
@@ -2002,7 +2025,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 						upgradeplan.AnnotationAllowDeletion: "true",
 					},
 				},
-				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseClusterUpgrading,
 					Conditions: []metav1.Condition{
@@ -2030,7 +2053,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 						upgradeplan.AnnotationAllowDeletion: "true",
 					},
 				},
-				Spec: managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 				Status: managementv1beta1.UpgradePlanStatus{
 					CurrentPhase: managementv1beta1.UpgradePlanPhaseNodeUpgrading,
 					Conditions: []metav1.Condition{
@@ -2059,7 +2082,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
 						PauseNodes: []string{"nonexistent-node"},
 					},
@@ -2082,12 +2105,12 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			oldObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version: "v1.4.0",
+					Version: ptr.To("v1.4.0"),
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{
 						PauseNodes: []string{"node-1", "node-2"},
 					},
@@ -2104,12 +2127,12 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			oldObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
-				Spec:       managementv1beta1.UpgradePlanSpec{Version: "v1.4.0"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 			newObj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
-					Version:           "v1.4.0",
+					Version:           ptr.To("v1.4.0"),
 					NodeUpgradeOption: &managementv1beta1.NodeUpgradeOption{},
 				},
 			}

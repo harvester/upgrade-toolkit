@@ -102,7 +102,12 @@ func (p *ISODownloadPhase) getOrCreateVirtualMachineImageForRepo(
 }
 
 func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *harvesterv1beta1.VirtualMachineImage {
+	displayName := upgradePlan.Name
+	if upgradePlan.Spec.Version != nil {
+		displayName = fmt.Sprintf("%s-%s", upgradePlan.Name, *upgradePlan.Spec.Version)
+	}
 	imageName := name.SafeConcatName(upgradePlan.Name, imageComponent)
+
 	vmImage := &harvesterv1beta1.VirtualMachineImage{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: map[string]string{
@@ -117,7 +122,7 @@ func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *h
 		},
 		Spec: harvesterv1beta1.VirtualMachineImageSpec{
 			Backend:                harvesterv1beta1.VMIBackendCDI,
-			DisplayName:            fmt.Sprintf("%s-%s", upgradePlan.Name, upgradePlan.Spec.Version),
+			DisplayName:            displayName,
 			SourceType:             harvesterv1beta1.VirtualMachineImageSourceTypeDownload,
 			URL:                    upgradePlan.Status.Version.ISODownloadURL,
 			Checksum:               ptr.Deref(upgradePlan.Status.Version.ISOChecksum, ""),

@@ -12,12 +12,13 @@ import (
 	"k8s.io/utils/ptr"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	buildversion "github.com/harvester/upgrade-toolkit/pkg/version"
 )
 
 func newTestUpgradePlan() *managementv1beta1.UpgradePlan {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	return up
 }
 
@@ -52,7 +53,7 @@ func TestConstructDeployment(t *testing.T) {
 	require.Len(t, deploy.Spec.Template.Spec.Containers, 1)
 	c := deploy.Spec.Template.Spec.Containers[0]
 	assert.Equal(t, "nginx-iso-server", c.Name)
-	assert.Equal(t, fmt.Sprintf("%s:%s", upgradeToolkitImage, testVersion), c.Image)
+	assert.Equal(t, fmt.Sprintf("%s:%s", upgradeToolkitImage, buildversion.Version), c.Image)
 	assert.Equal(t, corev1.PullIfNotPresent, c.ImagePullPolicy)
 	assert.True(t, *c.SecurityContext.Privileged)
 

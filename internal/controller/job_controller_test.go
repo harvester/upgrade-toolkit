@@ -90,7 +90,7 @@ var _ = Describe("Job Controller", func() {
 				Name: upgradePlanName,
 			},
 			Spec: managementv1beta1.UpgradePlanSpec{
-				Version: testVersion,
+				Version: ptr.To(string(testVersion)),
 			},
 		}
 		Expect(k8sClient.Create(ctx, up)).To(Succeed())

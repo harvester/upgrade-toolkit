@@ -29,7 +29,7 @@ const (
 func TestConstructVirtualMachineImage(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Status.Version = &managementv1beta1.VersionSpec{
 		ISODownloadURL: testISOURL,
 		ISOChecksum:    ptr.To(testISOChecksum),
@@ -45,7 +45,7 @@ func TestConstructVirtualMachineImage(t *testing.T) {
 	assert.Equal(t, testISOURL, vmImage.Spec.URL)
 	assert.Equal(t, testISOChecksum, vmImage.Spec.Checksum)
 	assert.Equal(t, 3, vmImage.Spec.Retry)
-	assert.Equal(t, testUpgradePlanName+"-"+testVersion, vmImage.Spec.DisplayName)
+	assert.Equal(t, testUpgradePlanName+"-"+*up.Spec.Version, vmImage.Spec.DisplayName)
 	assert.Equal(t, "True", vmImage.Annotations[HarvesterUpgradeImageAnnotation])
 	assert.Equal(t, testUpgradePlanName, vmImage.Labels[HarvesterUpgradePlanLabel])
 	assert.Equal(t, imageComponent, vmImage.Labels[HarvesterUpgradeComponentLabel])
@@ -54,7 +54,7 @@ func TestConstructVirtualMachineImage(t *testing.T) {
 func TestConstructVirtualMachineImage_NoChecksum(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Status.Version = &managementv1beta1.VersionSpec{
 		ISODownloadURL: testISOURL,
 		ISOChecksum:    ptr.To(""),
@@ -108,7 +108,7 @@ func TestISODownloadPhase_Run_ExistingVMI_Imported(t *testing.T) {
 
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Spec.Image = ptr.To("default/my-iso")
 
 	_, err := phase.Run(context.Background(), up)
@@ -135,7 +135,7 @@ func TestISODownloadPhase_Run_ExistingVMI_NotImported(t *testing.T) {
 
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Spec.Image = ptr.To("default/my-iso")
 
 	_, err := phase.Run(context.Background(), up)
@@ -162,7 +162,7 @@ func TestISODownloadPhase_Run_ExistingVMI_ImportFailed(t *testing.T) {
 
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Spec.Image = ptr.To("default/my-iso")
 
 	_, err := phase.Run(context.Background(), up)
@@ -186,7 +186,7 @@ func TestISODownloadPhase_Run_ExistingVMI_NotFound(t *testing.T) {
 
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Spec.Image = ptr.To("default/nonexistent")
 
 	_, err := phase.Run(context.Background(), up)
@@ -210,7 +210,7 @@ func TestISODownloadPhase_Run_ExistingVMI_DifferentNamespace(t *testing.T) {
 
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Spec.Image = ptr.To("my-namespace/custom-iso")
 
 	_, err := phase.Run(context.Background(), up)
@@ -237,7 +237,7 @@ func TestISODownloadPhase_Run_ExistingVMI_NoOwnershipOrLabels(t *testing.T) {
 
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
-	up.Spec.Version = testVersion
+	up.Spec.Version = ptr.To("test-version")
 	up.Spec.Image = ptr.To("default/my-iso")
 
 	_, err := phase.Run(context.Background(), up)

@@ -69,7 +69,7 @@ func newTestUpgradePlanWithMetadata(k8sVersion string) *managementv1beta1.Upgrad
 			Name: testUpgradePlanName,
 		},
 		Spec: managementv1beta1.UpgradePlanSpec{
-			Version: testVersion,
+			Version: ptr.To("test-version"),
 		},
 		Status: managementv1beta1.UpgradePlanStatus{
 			ReleaseMetadata: &managementv1beta1.ReleaseMetadata{
