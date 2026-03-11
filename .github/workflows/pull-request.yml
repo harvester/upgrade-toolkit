@@ -63,6 +63,6 @@ jobs:
     with:
       push: false
       tags: rancher/harvester-upgrade-toolkit:ci-${{ github.event.pull_request.number }}
-      version: pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+      version: ci-${{ github.event.pull_request.number }}
       git_commit: ${{ github.sha }}
     secrets: inherit

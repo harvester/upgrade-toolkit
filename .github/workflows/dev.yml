@@ -27,7 +27,7 @@ jobs:
           TAG="${BRANCH_NAME//\//-}-head"
           SHORT_SHA="${GITHUB_SHA::7}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
           echo "commit=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
   build:

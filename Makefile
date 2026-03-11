@@ -1,13 +1,21 @@
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
-
 # Version information injected at build time via ldflags
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+# Priority: explicit VERSION= override > git tag on HEAD > <branch>-head
+GIT_TAG := $(shell git tag --points-at HEAD 2>/dev/null | head -1)
+GIT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's|/|-|g')
+ifdef GIT_TAG
+  VERSION ?= $(GIT_TAG)
+else
+  VERSION ?= $(GIT_BRANCH)-head
+endif
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_TREE_STATE ?= $(shell if git diff --quiet 2>/dev/null; then echo "clean"; else echo "dirty"; fi)
 LDFLAGS := -X github.com/harvester/upgrade-toolkit/pkg/version.Version=$(VERSION) \
            -X github.com/harvester/upgrade-toolkit/pkg/version.GitCommit=$(GIT_COMMIT) \
            -X github.com/harvester/upgrade-toolkit/pkg/version.GitTreeState=$(GIT_TREE_STATE)
+
+# Container image
+REPO ?= rancher
+IMG ?= $(REPO)/harvester-upgrade-toolkit:$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
