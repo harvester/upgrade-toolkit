@@ -39,3 +39,4 @@ jobs:
       tags: rancher/harvester-upgrade-toolkit:${{ needs.prepare.outputs.tag }}
       version: ${{ needs.prepare.outputs.version }}
       git_commit: ${{ needs.prepare.outputs.commit }}
+    secrets: inherit
