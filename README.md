@@ -1,5 +1,8 @@
 # Harvester Upgrade Toolkit
 
+[![Build Status](https://github.com/harvester/upgrade-toolkit/actions/workflows/dev.yml/badge.svg)](https://github.com/harvester/upgrade-toolkit/actions/workflows/dev.yml)
+[![Releases](https://img.shields.io/github/release/harvester/upgrade-toolkit.svg)](https://github.com/harvester/upgrade-toolkit/releases)
+
 Upgrade Toolkit is the primary component of Harvester Upgrade V2.
 
 ## User Guide
@@ -58,9 +61,32 @@ metadata:
   generateName: hvst-upgrade-
 spec:
   version: master-head
-  upgrade: dev
+  upgrade: main-head
 EOF
 ```
+
+Or optionally, specify a few options to customize the upgrade process:
+
+```bash
+cat <<EOF | kubectl create -f -
+apiVersion: management.harvesterhci.io/v1beta1
+kind: UpgradePlan
+metadata:
+  generateName: hvst-upgrade-
+spec:
+  version: master-head
+  upgrade: main-head
+  imagePreloadOption:
+    concurrency: -1
+  nodeUpgradeOption:
+    pauseNodes:
+    - charlie-1-tink-system
+    - charlie-3-tink-system
+  restoreVM: true
+EOF
+```
+
+For all the available options, see the output of `kubectl explain upgradeplans.spec`.
 
 A successfully executed UpgradePlan looks like the following:
 
@@ -274,14 +300,14 @@ To do so, make sure you have a Harvester cluster running and can be accessed via
 Install the UpgradePlan and Version CRDs:
 
 ```bash
+# Make sure you have a valid KUBECONFIG env var, pointing to your cluster
 make install
 ```
 
-Run the controller manager locally:
+Run the controller manager locally (without starting the webhook server):
 
 ```bash
-export KUBECONFIG=/path/to/kubeconfig
-make run
+ENABLE_WEBHOOKS=false make run
 ```
 
 [Create the Version and UpgradePlan CRs](#customized-upgrades) to kickstart the upgrade process.
