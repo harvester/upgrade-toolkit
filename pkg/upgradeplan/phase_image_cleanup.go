@@ -55,6 +55,18 @@ func (p *ImageCleanupPhase) Run(
 
 	plan, err := p.getOrCreatePlanForImageCleanup(ctx, upgradePlan)
 	if err != nil {
+		if IsImageListNotFound(err) {
+			p.Log.V(0).Info("image list not found, skipping image cleanup", "error", err.Error())
+			if p.EventRecorder != nil {
+				p.EventRecorder.Event(
+					upgradePlan.ObjectReference(harvesterSystemNamespace),
+					corev1.EventTypeWarning, "ImageCleanupSkipped",
+					"Image list not available in upgrade repository; skipping stale image cleanup",
+				)
+			}
+			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseCleanedUp, "")
+			return ctrl.Result{}, nil
+		}
 		p.Log.Error(err, "unable to get or create image-cleanup plan")
 		return ctrl.Result{}, err
 	}

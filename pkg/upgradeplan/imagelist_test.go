@@ -210,9 +210,9 @@ func TestFetchImageList(t *testing.T) {
 		assert.Empty(t, images)
 	})
 
-	t.Run("version not found returns error", func(t *testing.T) {
+	t.Run("version not found returns ImageListNotFoundError", func(t *testing.T) {
 		_, err := fetchImageList(ctx, httpClient, baseURL, "v999.0.0")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "HTTP 404")
+		assert.True(t, IsImageListNotFound(err), "expected ImageListNotFoundError, got: %v", err)
 	})
 }

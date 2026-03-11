@@ -3,6 +3,7 @@ package upgradeplan
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -10,6 +11,23 @@ import (
 
 	"k8s.io/client-go/rest"
 )
+
+// ImageListNotFoundError is returned when the image list file does not exist
+// in the upgrade repository (HTTP 404). This typically happens with non-GA
+// (informally-released) ISO images that do not package image list files.
+type ImageListNotFoundError struct {
+	URL string
+}
+
+func (e *ImageListNotFoundError) Error() string {
+	return fmt.Sprintf("image list not found at %s", e.URL)
+}
+
+// IsImageListNotFound reports whether err is an ImageListNotFoundError.
+func IsImageListNotFound(err error) bool {
+	var target *ImageListNotFoundError
+	return errors.As(err, &target)
+}
 
 // imageRetainList contains image name components that must NOT be purged during
 // cleanup, even if they are absent from the new version's image list. Each
@@ -63,6 +81,9 @@ func fetchImageList(
 		_ = resp.Body.Close()
 	}()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, &ImageListNotFoundError{URL: imageListURL}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch image list from %s: HTTP %d", imageListURL, resp.StatusCode)
 	}
