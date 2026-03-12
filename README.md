@@ -132,38 +132,41 @@ A successfully executed UpgradePlan looks like the following:
 apiVersion: management.harvesterhci.io/v1beta1
 kind: UpgradePlan
 metadata:
-  creationTimestamp: "2026-03-02T08:01:18Z"
+  creationTimestamp: "2026-03-12T13:36:56Z"
   generateName: hvst-upgrade-
-  generation: 1
-  name: hvst-upgrade-gj8rf
-  resourceVersion: "130247"
-  uid: 59d59440-9bf9-4064-a664-4630a2940529
+  generation: 2
+  name: hvst-upgrade-s8brd
+  resourceVersion: "145383"
+  uid: cb4af7eb-07e3-40ab-9fd6-96f3cd7b3039
 spec:
-  mode: automatic
-  upgrade: dev
+  imagePreloadOption:
+    concurrency: 100
+  nodeUpgradeOption: {}
+  restoreVM: true
+  upgrade: main-head
   version: master-head
 status:
   conditions:
-  - lastTransitionTime: "2026-03-02T09:31:16Z"
+  - lastTransitionTime: "2026-03-12T14:57:58Z"
     message: UpgradePlan has completed
-    observedGeneration: 1
+    observedGeneration: 2
     reason: Succeeded
     status: "False"
     type: Progressing
-  - lastTransitionTime: "2026-03-02T09:31:16Z"
+  - lastTransitionTime: "2026-03-12T14:57:58Z"
     message: ""
-    observedGeneration: 1
+    observedGeneration: 2
     reason: ReconcileSuccess
     status: "False"
     type: Degraded
-  - lastTransitionTime: "2026-03-02T09:31:16Z"
+  - lastTransitionTime: "2026-03-12T14:57:58Z"
     message: Entered one of the terminal phases
-    observedGeneration: 1
+    observedGeneration: 2
     reason: Executed
     status: "False"
     type: Available
   currentPhase: Succeeded
-  isoImageID: harvester-system/hvst-upgrade-gj8rf-iso
+  isoImageID: hvst-upgrade-s8brd-iso
   nodeUpgradeStatuses:
     charlie-1-tink-system:
       state: ImageCleaned
@@ -173,39 +176,39 @@ status:
       state: ImageCleaned
   phaseTransitionTimestamps:
   - phase: Initializing
-    phaseTransitionTimestamp: "2026-03-02T08:01:18Z"
+    phaseTransitionTimestamp: "2026-03-12T13:36:57Z"
   - phase: Initialized
-    phaseTransitionTimestamp: "2026-03-02T08:01:18Z"
+    phaseTransitionTimestamp: "2026-03-12T13:36:57Z"
   - phase: ISODownloading
-    phaseTransitionTimestamp: "2026-03-02T08:01:18Z"
+    phaseTransitionTimestamp: "2026-03-12T13:36:57Z"
   - phase: ISODownloaded
-    phaseTransitionTimestamp: "2026-03-02T08:05:37Z"
+    phaseTransitionTimestamp: "2026-03-12T13:42:35Z"
   - phase: RepoCreating
-    phaseTransitionTimestamp: "2026-03-02T08:05:37Z"
+    phaseTransitionTimestamp: "2026-03-12T13:42:35Z"
   - phase: RepoCreated
-    phaseTransitionTimestamp: "2026-03-02T08:05:54Z"
+    phaseTransitionTimestamp: "2026-03-12T13:42:57Z"
   - phase: MetadataPopulating
-    phaseTransitionTimestamp: "2026-03-02T08:05:54Z"
+    phaseTransitionTimestamp: "2026-03-12T13:42:57Z"
   - phase: MetadataPopulated
-    phaseTransitionTimestamp: "2026-03-02T08:06:04Z"
+    phaseTransitionTimestamp: "2026-03-12T13:42:58Z"
   - phase: ImagePreloading
-    phaseTransitionTimestamp: "2026-03-02T08:06:04Z"
+    phaseTransitionTimestamp: "2026-03-12T13:42:58Z"
   - phase: ImagePreloaded
-    phaseTransitionTimestamp: "2026-03-02T08:32:20Z"
+    phaseTransitionTimestamp: "2026-03-12T13:54:59Z"
   - phase: ClusterUpgrading
-    phaseTransitionTimestamp: "2026-03-02T08:32:20Z"
+    phaseTransitionTimestamp: "2026-03-12T13:54:59Z"
   - phase: ClusterUpgraded
-    phaseTransitionTimestamp: "2026-03-02T08:46:14Z"
+    phaseTransitionTimestamp: "2026-03-12T14:09:14Z"
   - phase: NodeUpgrading
-    phaseTransitionTimestamp: "2026-03-02T08:46:14Z"
+    phaseTransitionTimestamp: "2026-03-12T14:09:14Z"
   - phase: NodeUpgraded
-    phaseTransitionTimestamp: "2026-03-02T09:29:34Z"
+    phaseTransitionTimestamp: "2026-03-12T14:55:38Z"
   - phase: CleaningUp
-    phaseTransitionTimestamp: "2026-03-02T09:29:35Z"
+    phaseTransitionTimestamp: "2026-03-12T14:55:40Z"
   - phase: CleanedUp
-    phaseTransitionTimestamp: "2026-03-02T09:31:16Z"
+    phaseTransitionTimestamp: "2026-03-12T14:57:58Z"
   - phase: Succeeded
-    phaseTransitionTimestamp: "2026-03-02T09:31:16Z"
+    phaseTransitionTimestamp: "2026-03-12T14:57:58Z"
   previousVersion: v1.7.1
   provisionGeneration: 1
   releaseMetadata:
