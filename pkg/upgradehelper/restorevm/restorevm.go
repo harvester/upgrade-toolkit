@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	eventNamespace           = "default"
 	harvesterSystemNamespace = "harvester-system"
 
 	RestoreVMCompleted = "RestoreVMCompleted"
@@ -82,7 +83,7 @@ func NewRestoreVMHandler(kubeConfig, kubeContext, nodeName, upgrade string) (*Re
 
 	broadcaster := record.NewBroadcaster()
 	eventSink := &typedcorev1.EventSinkImpl{
-		Interface: k8sClient.CoreV1().Events(harvesterSystemNamespace),
+		Interface: k8sClient.CoreV1().Events(eventNamespace),
 	}
 	broadcaster.StartRecordingToSink(eventSink)
 	recorder := broadcaster.NewRecorder(
@@ -219,5 +220,5 @@ func (h *RestoreVMHandler) recordUpgradeEvent(eventType, reason, message string)
 	}
 
 	logrus.Info("Recording event for upgrade ", h.upgradeName, ": ", eventType, " ", reason, " ", message)
-	h.recorder.Event(upgradePlan.ObjectReference(harvesterSystemNamespace), eventType, reason, message)
+	h.recorder.Event(upgradePlan.ObjectReference(eventNamespace), eventType, reason, message)
 }

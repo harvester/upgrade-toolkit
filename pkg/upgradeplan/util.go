@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	eventNamespace                 = "default"
 	harvesterSystemNamespace       = "harvester-system"
 	cattleSystemNamespace          = "cattle-system"
 	kubeSystemNamespace            = "kube-system"

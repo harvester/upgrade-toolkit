@@ -196,7 +196,5 @@ func (p *Pipeline) recordEvent(
 	upgradePlan *managementv1beta1.UpgradePlan,
 	eventType, reason, message string,
 ) {
-	if p.deps != nil && p.deps.EventRecorder != nil {
-		p.deps.EventRecorder.Event(upgradePlan.ObjectReference(harvesterSystemNamespace), eventType, reason, message)
-	}
+	p.deps.RecordEvent(upgradePlan, eventType, reason, message)
 }

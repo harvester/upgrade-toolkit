@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	eventNamespace           = "default"
 	harvesterSystemNamespace = "harvester-system"
 	restoreVMConfigMapPrefix = "restore-vm"
 	upgradeLabel             = "harvesterhci.io/upgrade"
@@ -109,7 +110,7 @@ func (d *VMLiveMigrateDetector) Init() error {
 
 	broadcaster := record.NewBroadcaster()
 	eventSink := &typedcorev1.EventSinkImpl{
-		Interface: d.k8sClient.CoreV1().Events(harvesterSystemNamespace),
+		Interface: d.k8sClient.CoreV1().Events(eventNamespace),
 	}
 	broadcaster.StartRecordingToSink(eventSink)
 	d.recorder = broadcaster.NewRecorder(
@@ -318,7 +319,7 @@ func (d *VMLiveMigrateDetector) recordUpgradeEvent(eventType, reason, message st
 	}
 
 	logrus.Info("Recording event for upgrade ", d.upgradeName, ": ", eventType, " ", reason, " ", message)
-	d.recorder.Event(upgradePlan.ObjectReference(harvesterSystemNamespace), eventType, reason, message)
+	d.recorder.Event(upgradePlan.ObjectReference(eventNamespace), eventType, reason, message)
 }
 
 // GetRestoreVMConfigMapName returns the ConfigMap name used to store VM names for restoration.
