@@ -274,7 +274,17 @@ type UpgradePlanStatus struct {
 
 	// version is the snapshot of the associated Version resource.
 	// +optional
-	Version *VersionSpec `json:"version,omitempty"`
+	Version *VersionSnapshot `json:"version,omitempty"`
+}
+
+// VersionSnapshot captures the fields from an upstream harvesterhci.io Version
+// resource that are needed during the upgrade lifecycle.
+type VersionSnapshot struct {
+	// isoURL is the URL to download the ISO from.
+	ISOURL string `json:"isoURL"`
+	// isoChecksum is the checksum of the ISO.
+	// +optional
+	ISOChecksum string `json:"isoChecksum,omitempty"`
 }
 
 // +kubebuilder:object:root=true

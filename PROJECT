@@ -26,15 +26,6 @@ resources:
     defaulting: true
     validation: true
     webhookVersion: v1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: harvesterhci.io
-  group: management
-  kind: Version
-  path: github.com/harvester/upgrade-toolkit/api/v1beta1
-  version: v1beta1
 - controller: true
   core: true
   group: batch

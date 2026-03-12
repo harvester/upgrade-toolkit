@@ -112,6 +112,7 @@ rules:
   resources:
   - schedulevmbackups
   - settings
+  - versions
   - virtualmachinebackups
   verbs:
   - get
@@ -168,7 +169,6 @@ rules:
   - management.harvesterhci.io
   resources:
   - upgradeplans
-  - versions
   verbs:
   - create
   - delete
@@ -181,14 +181,12 @@ rules:
   - management.harvesterhci.io
   resources:
   - upgradeplans/finalizers
-  - versions/finalizers
   verbs:
   - update
 - apiGroups:
   - management.harvesterhci.io
   resources:
   - upgradeplans/status
-  - versions/status
   verbs:
   - get
   - patch

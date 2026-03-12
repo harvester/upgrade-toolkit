@@ -278,15 +278,11 @@ spec:
                 description: version is the snapshot of the associated Version resource.
                 properties:
                   isoChecksum:
+                    description: isoChecksum is the checksum of the ISO.
                     type: string
                   isoURL:
+                    description: isoURL is the URL to download the ISO from.
                     type: string
-                  releaseDate:
-                    type: string
-                  tags:
-                    items:
-                      type: string
-                    type: array
                 required:
                 - isoURL
                 type: object

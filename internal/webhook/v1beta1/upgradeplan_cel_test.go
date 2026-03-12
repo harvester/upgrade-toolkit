@@ -31,21 +31,6 @@ import (
 // schema. They go through the real API server (envtest) to verify that the rules
 // are correctly generated and enforced.
 var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
-	var version *managementv1beta1.Version
-
-	BeforeAll(func() {
-		version = &managementv1beta1.Version{
-			ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-			Spec: managementv1beta1.VersionSpec{
-				ISODownloadURL: "https://example.com/harvester-v1.4.0.iso",
-			},
-		}
-		Expect(k8sClient.Create(ctx, version)).To(Succeed())
-	})
-
-	AfterAll(func() {
-		Expect(k8sClient.Delete(ctx, version)).To(Succeed())
-	})
 
 	Context("spec.version immutability", func() {
 		It("should reject updates that change spec.version", func() {

@@ -21,14 +21,15 @@ helm upgrade --install upgrade-toolkit upgrade-toolkit \
 
 ### Kickstart an upgrade
 
-Create a Version CR. This is almost the same as [before](https://docs.harvesterhci.io/v1.7/upgrade/index#customize-the-version).
+Create a Version CR in the `harvester-system` namespace. This is almost the same as [before](https://docs.harvesterhci.io/v1.7/upgrade/index#customize-the-version).
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: management.harvesterhci.io/v1beta1
+apiVersion: harvesterhci.io/v1beta1
 kind: Version
 metadata:
   name: master-head
+  namespace: harvester-system
 spec:
   isoURL: https://releases.rancher.com/harvester/master/harvester-master-amd64.iso
 EOF
@@ -297,7 +298,7 @@ Every time you make changes to the code, especially in the control loop, you may
 
 To do so, make sure you have a Harvester cluster running and can be accessed via `kubectl`.
 
-Install the UpgradePlan and Version CRDs:
+Install the UpgradePlan CRD:
 
 ```bash
 # Make sure you have a valid KUBECONFIG env var, pointing to your cluster
@@ -310,7 +311,7 @@ Run the controller manager locally (without starting the webhook server):
 ENABLE_WEBHOOKS=false make run
 ```
 
-[Create the Version and UpgradePlan CRs](#customized-upgrades) to kickstart the upgrade process.
+[Create the Version and UpgradePlan CRs](#kickstart-an-upgrade) to kickstart the upgrade process.
 
 After the UpgradePlan CR passes the `RepoCreated` phase, set up a port-forward to allow the local controller manager to access the remote Upgrade Repo.
 
@@ -335,7 +336,7 @@ Make sure you have the container image built and pushed to a registry.
 make helm-deploy IMG=starbops/harvester-upgrade-toolkit:dev
 ```
 
-[Create the Version and UpgradePlan CRs](#customized-upgrades) to kickstart the upgrade process.
+[Create the Version and UpgradePlan CRs](#kickstart-an-upgrade) to kickstart the upgrade process.
 
 ### Introduce new phases
 

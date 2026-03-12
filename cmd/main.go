@@ -291,14 +291,6 @@ func (c *ManagerCommand) Run() error {
 		setupLog.Error(err, "unable to create controller", "controller", "UpgradePlan")
 		return err
 	}
-	if err := (&controller.VersionReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Log:    logf.FromContext(ctx).WithName("version-controller"),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Version")
-		return err
-	}
 	if err := (&controller.JobReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

@@ -206,8 +206,8 @@ func validateVersionExists(ctx context.Context, c client.Reader, upgradePlan *ma
 		return allErrs
 	}
 
-	var version managementv1beta1.Version
-	if err := c.Get(ctx, client.ObjectKey{Name: *upgradePlan.Spec.Version}, &version); err != nil {
+	var version harvesterv1beta1.Version
+	if err := c.Get(ctx, client.ObjectKey{Namespace: "harvester-system", Name: *upgradePlan.Spec.Version}, &version); err != nil {
 		if apierrors.IsNotFound(err) {
 			allErrs = append(allErrs, field.NotFound(
 				field.NewPath("spec", "version"), *upgradePlan.Spec.Version))

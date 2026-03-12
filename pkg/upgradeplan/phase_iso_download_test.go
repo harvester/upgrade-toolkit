@@ -30,9 +30,9 @@ func TestConstructVirtualMachineImage(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Status.Version = &managementv1beta1.VersionSpec{
-		ISODownloadURL: testISOURL,
-		ISOChecksum:    ptr.To(testISOChecksum),
+	up.Status.Version = &managementv1beta1.VersionSnapshot{
+		ISOURL:      testISOURL,
+		ISOChecksum: testISOChecksum,
 	}
 
 	vmImage := constructVirtualMachineImage(up)
@@ -55,9 +55,9 @@ func TestConstructVirtualMachineImage_NoChecksum(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Status.Version = &managementv1beta1.VersionSpec{
-		ISODownloadURL: testISOURL,
-		ISOChecksum:    ptr.To(""),
+	up.Status.Version = &managementv1beta1.VersionSnapshot{
+		ISOURL:      testISOURL,
+		ISOChecksum: "",
 	}
 
 	vmImage := constructVirtualMachineImage(up)

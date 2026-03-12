@@ -394,11 +394,17 @@ func (p *InitPhase) loadVersion(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
-	var version managementv1beta1.Version
-	if err := p.Client.Get(ctx, types.NamespacedName{Name: *upgradePlan.Spec.Version}, &version); err != nil {
+	var version harvesterv1beta1.Version
+	if err := p.Client.Get(ctx, types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      *upgradePlan.Spec.Version,
+	}, &version); err != nil {
 		return err
 	}
-	upgradePlan.Status.Version = &version.Spec
+	upgradePlan.Status.Version = &managementv1beta1.VersionSnapshot{
+		ISOURL:      version.Spec.ISOURL,
+		ISOChecksum: version.Spec.ISOChecksum,
+	}
 	return nil
 }
 

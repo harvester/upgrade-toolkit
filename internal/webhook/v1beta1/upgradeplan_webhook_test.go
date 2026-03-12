@@ -91,9 +91,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when spec.version references an existing Version", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -143,9 +143,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 					},
 				},
 			}
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing, version).Build(),
@@ -173,9 +173,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 					},
 				},
 			}
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing, version).Build(),
@@ -206,9 +206,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 					},
 				},
 			}
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -250,9 +250,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-old"},
 				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.3.0")},
 			}
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -313,9 +313,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateNodeReadiness", func() {
 		It("should reject when a node is not Ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -343,9 +343,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when a node is unschedulable", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -374,9 +374,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all nodes are healthy", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -435,9 +435,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateClusterReady", func() {
 		It("should reject when cluster is not found", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version).Build(),
@@ -453,9 +453,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when cluster is not ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -475,9 +475,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when cluster is ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -517,9 +517,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateMachinesRunning", func() {
 		It("should reject when a machine is not running", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -558,9 +558,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all machines are running", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -600,9 +600,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateNodeMachineConsistency", func() {
 		It("should reject when node count does not match machine count", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -636,9 +636,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when machine has no node reference", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -677,9 +677,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when node is missing managed label", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -717,9 +717,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when node is missing machine annotation", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -758,9 +758,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when referenced machine does not exist", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -799,9 +799,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when machine NodeRef does not match node", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -840,9 +840,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when nodes and machines are consistent", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -882,9 +882,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateLonghornVolumes", func() {
 		It("should reject when a volume is degraded on 3+ node clusters", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -924,9 +924,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow degraded volumes on 2-node clusters", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -954,9 +954,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject active single-replica volumes", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -991,9 +991,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject detached single-replica volumes by default", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1028,9 +1028,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow detached single-replica volumes when skip annotation is set", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1068,9 +1068,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all volumes are healthy multi-replica", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1101,9 +1101,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateVMBackups", func() {
 		It("should reject when a VM backup is in progress", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1139,9 +1139,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when VM backup has error even if not ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1179,9 +1179,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all VM backups are ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1217,9 +1217,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateScheduleVMBackups", func() {
 		It("should reject when a schedule is not suspended", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1260,9 +1260,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all schedules are suspended", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1304,9 +1304,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateNonLiveMigratableVMs", func() {
 		It("should reject when non-migratable VMI exists on multi-node cluster", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1338,9 +1338,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should skip check on single-node cluster", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1368,9 +1368,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all VMIs are migratable on multi-node cluster", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1400,9 +1400,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateManagedCharts", func() {
 		It("should reject when a managed chart is not ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1441,9 +1441,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all managed charts are ready", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1482,9 +1482,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateAddons", func() {
 		It("should reject when an addon is enabling", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1515,9 +1515,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when an addon is disabling", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1548,9 +1548,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when all addons are in terminal state", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1591,9 +1591,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateNoCleanupInProgress", func() {
 		It("should reject when another upgrade is cleaning up", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1620,9 +1620,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when no other upgrade is cleaning up", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1669,9 +1669,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateImageRef", func() {
 		It("should reject when spec.image references a non-existent VMImage", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1713,9 +1713,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should reject when spec.image contains namespace prefix", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1757,9 +1757,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when spec.image references an existing VMImage", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -1806,9 +1806,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 
 		It("should allow when spec.image is nil", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
-				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
 			}
 			cluster := &provisioningv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
@@ -2073,8 +2073,8 @@ var _ = Describe("UpgradePlan Webhook", func() {
 
 	Context("validateNodeUpgradeOption", func() {
 		It("should reject pauseNodes with non-existent node names on create", func() {
-			version := &managementv1beta1.Version{
-				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
 			}
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version).Build(),

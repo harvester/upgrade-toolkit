@@ -3,7 +3,6 @@
 # It should be run by config/default
 resources:
 - bases/management.harvesterhci.io_upgradeplans.yaml
-- bases/management.harvesterhci.io_versions.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

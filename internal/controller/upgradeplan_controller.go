@@ -60,6 +60,7 @@ type UpgradePlanReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=nodes/proxy;nodes/stats,verbs=get
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
+// +kubebuilder:rbac:groups=harvesterhci.io,resources=versions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=settings,verbs=get;list;watch
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=virtualmachineimages,verbs=get;list;watch;create;update;patch;delete;deletecollection
 // +kubebuilder:rbac:groups=upgrade.cattle.io,resources=plans,verbs=get;list;watch;create;update;deletecollection
