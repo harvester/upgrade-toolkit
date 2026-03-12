@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -123,6 +125,29 @@ func newCertDialer(expiresIn time.Duration) func(string) (*x509.Certificate, err
 			NotAfter: time.Now().Add(expiresIn),
 		}, nil
 	}
+}
+
+// --- Run tests ---
+
+func TestInitRun_AddsFinalizer(t *testing.T) {
+	scheme := newTestScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	_ = harvesterv1beta1.AddToScheme(scheme)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	phase := &InitPhase{
+		PhaseDeps: &PhaseDeps{Client: fakeClient, Log: logr.Discard()},
+	}
+
+	up := &managementv1beta1.UpgradePlan{}
+	assert.False(t, controllerutil.ContainsFinalizer(up, UpgradePlanFinalizer),
+		"finalizer should not be present before Run")
+
+	_, err := phase.Run(context.Background(), up)
+	require.NoError(t, err)
+
+	assert.True(t, controllerutil.ContainsFinalizer(up, UpgradePlanFinalizer),
+		"finalizer should be added by Run")
 }
 
 // --- checkNodeDiskSpace tests ---

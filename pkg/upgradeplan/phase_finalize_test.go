@@ -21,6 +21,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -363,6 +364,7 @@ func TestPreRun_NoopForCleanNodes(t *testing.T) {
 func TestRun_SetsSucceeded(t *testing.T) {
 	up := newTestUpgradePlan()
 	up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseNodeUpgraded
+	controllerutil.AddFinalizer(up, UpgradePlanFinalizer)
 
 	phase := newFinalizePhase()
 
@@ -370,11 +372,14 @@ func TestRun_SetsSucceeded(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseSucceeded, up.Status.CurrentPhase)
+	assert.False(t, controllerutil.ContainsFinalizer(up, UpgradePlanFinalizer),
+		"finalizer should be removed on success")
 }
 
 func TestRun_PreservesFailed(t *testing.T) {
 	up := newTestUpgradePlan()
 	up.Status.CurrentPhase = managementv1beta1.UpgradePlanPhaseFailed
+	controllerutil.AddFinalizer(up, UpgradePlanFinalizer)
 
 	phase := newFinalizePhase()
 
@@ -382,4 +387,6 @@ func TestRun_PreservesFailed(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseFailed, up.Status.CurrentPhase)
+	assert.False(t, controllerutil.ContainsFinalizer(up, UpgradePlanFinalizer),
+		"finalizer should be removed on failure")
 }

@@ -142,17 +142,16 @@ var _ = Describe("UpgradePlan Controller", func() {
 			deleteUpgradePlan(ctx, deletePlanName)
 		})
 
-		It("should add finalizer on first reconcile", func() {
+		It("should add finalizer on first reconcile via InitPhase", func() {
 			By("creating an UpgradePlan without a finalizer")
 			createUpgradePlan(ctx, deletePlanName)
 
-			By("reconciling to add the finalizer")
+			By("reconciling to trigger InitPhase which adds the finalizer")
 			controllerReconciler := newReconciler()
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: deletePlanName},
 			})
-			// Pipeline may error (e.g., Version CR missing), but finalizer should still be added
-			_ = err
+			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying the finalizer is present")
 			var updated managementv1beta1.UpgradePlan

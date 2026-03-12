@@ -102,14 +102,6 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	// Ensure finalizer is present
-	if !controllerutil.ContainsFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer) {
-		controllerutil.AddFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer)
-		if err := r.Update(ctx, &upgradePlan); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
 	upgradePlanCopy := upgradePlan.DeepCopy()
 
 	// Unavailable UpgradePlans are ignored
@@ -166,7 +158,17 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.EventRecorder.Event(upgradePlan.ObjectReference(upgradeplan.HarvesterSystemNamespace), corev1.EventTypeWarning, "UpgradeFailed", msg)
 	}
 
+	if !reflect.DeepEqual(upgradePlan.Finalizers, upgradePlanCopy.Finalizers) {
+		upgradePlan.Finalizers = upgradePlanCopy.Finalizers
+		if updateErr := r.Update(ctx, &upgradePlan); updateErr != nil {
+			return ctrl.Result{}, updateErr
+		}
+	}
+
 	if !reflect.DeepEqual(upgradePlan.Status, upgradePlanCopy.Status) {
+		// Re-apply status changes to a fresh copy with the latest resourceVersion
+		// in case the metadata update above bumped it.
+		upgradePlanCopy.SetResourceVersion(upgradePlan.GetResourceVersion())
 		if statusUpdateErr := r.Status().Update(ctx, upgradePlanCopy); statusUpdateErr != nil {
 			if apierrors.IsConflict(statusUpdateErr) {
 				return ctrl.Result{RequeueAfter: upgradeplan.RequeueAfterDuration}, nil

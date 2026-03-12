@@ -5,6 +5,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -60,16 +61,17 @@ func (p *FinalizePhase) Run(
 			string(phase),
 			cond.Message,
 		)
-		return ctrl.Result{}, nil
+	} else {
+		// Succeeded case
+		upgradePlan.SetCondition(
+			managementv1beta1.UpgradePlanProgressing,
+			metav1.ConditionFalse,
+			string(phase),
+			"UpgradePlan has completed",
+		)
 	}
 
-	// Succeeded case
-	upgradePlan.SetCondition(
-		managementv1beta1.UpgradePlanProgressing,
-		metav1.ConditionFalse,
-		string(phase),
-		"UpgradePlan has completed",
-	)
+	controllerutil.RemoveFinalizer(upgradePlan, UpgradePlanFinalizer)
 
 	return ctrl.Result{}, nil
 }

@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -106,6 +107,8 @@ func (p *InitPhase) Run(
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
 	p.Log.V(1).Info("handle initialize status")
+
+	controllerutil.AddFinalizer(upgradePlan, UpgradePlanFinalizer)
 
 	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhaseInitializing {
 		upgradePlan.SetCondition(managementv1beta1.UpgradePlanAvailable, metav1.ConditionTrue, "Executable", "")
