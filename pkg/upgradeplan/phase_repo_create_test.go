@@ -107,18 +107,13 @@ func TestPVCNameFromISOImageID(t *testing.T) {
 	}{
 		{
 			name:       "operator-created VMImage",
-			isoImageID: "harvester-system/test-upgradeplan-iso",
+			isoImageID: "test-upgradeplan-iso",
 			expected:   "test-upgradeplan-iso",
 		},
 		{
-			name:       "user-provided VMImage in default namespace",
-			isoImageID: "default/my-uploaded-iso",
+			name:       "user-provided VMImage",
+			isoImageID: "my-uploaded-iso",
 			expected:   "my-uploaded-iso",
-		},
-		{
-			name:       "user-provided VMImage in custom namespace",
-			isoImageID: "my-namespace/custom-image",
-			expected:   "custom-image",
 		},
 	}
 
@@ -131,7 +126,7 @@ func TestPVCNameFromISOImageID(t *testing.T) {
 
 func TestConstructDeployment_UserProvidedVMImage(t *testing.T) {
 	up := newTestUpgradePlan()
-	up.Status.ISOImageID = ptr.To("default/my-uploaded-iso")
+	up.Status.ISOImageID = ptr.To("my-uploaded-iso")
 	replicas := ptr.To[int32](2)
 
 	deploy := constructDeployment(up, replicas)

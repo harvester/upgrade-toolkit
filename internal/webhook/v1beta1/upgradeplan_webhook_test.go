@@ -1703,7 +1703,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: ptr.To("v1.4.0"),
-					Image:   ptr.To("default/nonexistent-iso"),
+					Image:   ptr.To("nonexistent-iso"),
 				},
 			}
 
@@ -1712,7 +1712,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("spec.image"))
 		})
 
-		It("should reject when spec.image has malformed value", func() {
+		It("should reject when spec.image contains namespace prefix", func() {
 			version := &managementv1beta1.Version{
 				ObjectMeta: metav1.ObjectMeta{Name: "v1.4.0"},
 				Spec:       managementv1beta1.VersionSpec{ISODownloadURL: "https://example.com/iso"},
@@ -1747,7 +1747,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: ptr.To("v1.4.0"),
-					Image:   ptr.To("no-slash-here"),
+					Image:   ptr.To("default/my-iso"),
 				},
 			}
 
@@ -1786,7 +1786,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			}
 			vmImage := &harvesterv1beta1.VirtualMachineImage{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "default",
+					Namespace: "harvester-system",
 					Name:      "my-iso",
 				},
 			}
@@ -1797,7 +1797,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
 				Spec: managementv1beta1.UpgradePlanSpec{
 					Version: ptr.To("v1.4.0"),
-					Image:   ptr.To("default/my-iso"),
+					Image:   ptr.To("my-iso"),
 				},
 			}
 

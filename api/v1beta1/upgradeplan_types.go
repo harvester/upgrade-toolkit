@@ -189,9 +189,9 @@ type UpgradePlanSpec struct {
 	// +optional
 	Upgrade *string `json:"upgrade,omitempty"`
 
-	// image references a pre-uploaded VirtualMachineImage (in "namespace/name" format)
-	// to use as the upgrade ISO. When set, the ISODownloading phase uses this existing
-	// VMImage instead of downloading a new one. The VMImage can be in any namespace.
+	// image references the name of a pre-uploaded VirtualMachineImage in the
+	// harvester-system namespace to use as the upgrade ISO. When set, the
+	// ISODownloading phase uses this existing VMImage instead of downloading a new one.
 	// +optional
 	Image *string `json:"image,omitempty"`
 
@@ -235,7 +235,8 @@ type UpgradePlanStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// isoImageID refers to the namespaced name of the VM image that will be used for the upgrade.
+	// isoImageID refers to the name of the VM image in the harvester-system
+	// namespace that will be used for the upgrade.
 	// +optional
 	ISOImageID *string `json:"isoImageID,omitempty"`
 

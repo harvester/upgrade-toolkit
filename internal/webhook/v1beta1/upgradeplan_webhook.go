@@ -676,7 +676,8 @@ func validateNonLiveMigratableVMs(ctx context.Context, c client.Reader) field.Er
 	return allErrs
 }
 
-// validateImageRef checks that spec.image, if provided, references an existing VirtualMachineImage.
+// validateImageRef checks that spec.image, if provided, references an existing
+// VirtualMachineImage in the harvester-system namespace.
 func validateImageRef(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -687,15 +688,14 @@ func validateImageRef(ctx context.Context, c client.Reader, upgradePlan *managem
 	imageRef := *upgradePlan.Spec.Image
 	imagePath := field.NewPath("spec", "image")
 
-	ns, name, ok := strings.Cut(imageRef, "/")
-	if !ok || ns == "" || name == "" {
+	if strings.Contains(imageRef, "/") {
 		allErrs = append(allErrs, field.Invalid(
-			imagePath, imageRef, "must be in namespace/name format"))
+			imagePath, imageRef, "must be a plain VMImage name without namespace prefix"))
 		return allErrs
 	}
 
 	var vmImage harvesterv1beta1.VirtualMachineImage
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &vmImage); err != nil {
+	if err := c.Get(ctx, client.ObjectKey{Namespace: upgradeplan.HarvesterSystemNamespace, Name: imageRef}, &vmImage); err != nil {
 		if apierrors.IsNotFound(err) {
 			allErrs = append(allErrs, field.NotFound(imagePath, imageRef))
 		} else {

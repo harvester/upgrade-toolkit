@@ -72,9 +72,9 @@ spec:
                 type: boolean
               image:
                 description: |-
-                  image references a pre-uploaded VirtualMachineImage (in "namespace/name" format)
-                  to use as the upgrade ISO. When set, the ISODownloading phase uses this existing
-                  VMImage instead of downloading a new one. The VMImage can be in any namespace.
+                  image references the name of a pre-uploaded VirtualMachineImage in the
+                  harvester-system namespace to use as the upgrade ISO. When set, the
+                  ISODownloading phase uses this existing VMImage instead of downloading a new one.
                 type: string
               imagePreloadOption:
                 description: imagePreloadOption configures image preload behavior
@@ -211,8 +211,9 @@ spec:
                   resource is in.
                 type: string
               isoImageID:
-                description: isoImageID refers to the namespaced name of the VM image
-                  that will be used for the upgrade.
+                description: |-
+                  isoImageID refers to the name of the VM image in the harvester-system
+                  namespace that will be used for the upgrade.
                 type: string
               nodeUpgradeStatuses:
                 additionalProperties:
@@ -999,7 +1000,7 @@ spec:
           value: harvester
         - name: UPGRADE_PLAN_SERVICE_ACCOUNT
           value: system-upgrade-controller
-        image: controller:latest
+        image: rancher/harvester-upgrade-toolkit:main-head
         livenessProbe:
           httpGet:
             path: /healthz

@@ -73,11 +73,11 @@ func newISODownloadTestScheme() *runtime.Scheme {
 	return scheme
 }
 
-func newTestVMImage(namespace, vmName string, imported *corev1.ConditionStatus) *harvesterv1beta1.VirtualMachineImage {
+func newTestVMImage(imported *corev1.ConditionStatus) *harvesterv1beta1.VirtualMachineImage {
 	vmImage := &harvesterv1beta1.VirtualMachineImage{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      vmName,
-			Namespace: namespace,
+			Name:      "my-iso",
+			Namespace: "harvester-system",
 		},
 	}
 	if imported != nil {
@@ -93,7 +93,7 @@ func newTestVMImage(namespace, vmName string, imported *corev1.ConditionStatus) 
 
 func TestISODownloadPhase_Run_ExistingVMI_Imported(t *testing.T) {
 	scheme := newISODownloadTestScheme()
-	vmImage := newTestVMImage("default", "my-iso", ptr.To(corev1.ConditionTrue))
+	vmImage := newTestVMImage(ptr.To(corev1.ConditionTrue))
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -109,18 +109,18 @@ func TestISODownloadPhase_Run_ExistingVMI_Imported(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Spec.Image = ptr.To("default/my-iso")
+	up.Spec.Image = ptr.To("my-iso")
 
 	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
 
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseISODownloaded, up.Status.CurrentPhase)
-	assert.Equal(t, ptr.To("default/my-iso"), up.Status.ISOImageID)
+	assert.Equal(t, ptr.To("my-iso"), up.Status.ISOImageID)
 }
 
 func TestISODownloadPhase_Run_ExistingVMI_NotImported(t *testing.T) {
 	scheme := newISODownloadTestScheme()
-	vmImage := newTestVMImage("default", "my-iso", nil)
+	vmImage := newTestVMImage(nil)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -136,18 +136,18 @@ func TestISODownloadPhase_Run_ExistingVMI_NotImported(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Spec.Image = ptr.To("default/my-iso")
+	up.Spec.Image = ptr.To("my-iso")
 
 	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
 
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseISODownloading, up.Status.CurrentPhase)
-	assert.Equal(t, ptr.To("default/my-iso"), up.Status.ISOImageID)
+	assert.Equal(t, ptr.To("my-iso"), up.Status.ISOImageID)
 }
 
 func TestISODownloadPhase_Run_ExistingVMI_ImportFailed(t *testing.T) {
 	scheme := newISODownloadTestScheme()
-	vmImage := newTestVMImage("default", "my-iso", ptr.To(corev1.ConditionFalse))
+	vmImage := newTestVMImage(ptr.To(corev1.ConditionFalse))
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -163,7 +163,7 @@ func TestISODownloadPhase_Run_ExistingVMI_ImportFailed(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Spec.Image = ptr.To("default/my-iso")
+	up.Spec.Image = ptr.To("my-iso")
 
 	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
@@ -187,42 +187,15 @@ func TestISODownloadPhase_Run_ExistingVMI_NotFound(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Spec.Image = ptr.To("default/nonexistent")
+	up.Spec.Image = ptr.To("nonexistent")
 
 	_, err := phase.Run(context.Background(), up)
 	require.Error(t, err)
 }
 
-func TestISODownloadPhase_Run_ExistingVMI_DifferentNamespace(t *testing.T) {
-	scheme := newISODownloadTestScheme()
-	vmImage := newTestVMImage("my-namespace", "custom-iso", ptr.To(corev1.ConditionTrue))
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(vmImage).
-		Build()
-
-	phase := NewISODownloadPhase(&PhaseDeps{
-		Client: fakeClient,
-		Scheme: scheme,
-		Log:    logr.Discard(),
-	})
-
-	up := &managementv1beta1.UpgradePlan{}
-	up.Name = testUpgradePlanName
-	up.Spec.Version = ptr.To("test-version")
-	up.Spec.Image = ptr.To("my-namespace/custom-iso")
-
-	_, err := phase.Run(context.Background(), up)
-	require.NoError(t, err)
-
-	assert.Equal(t, managementv1beta1.UpgradePlanPhaseISODownloaded, up.Status.CurrentPhase)
-	assert.Equal(t, ptr.To("my-namespace/custom-iso"), up.Status.ISOImageID)
-}
-
 func TestISODownloadPhase_Run_ExistingVMI_NoOwnershipOrLabels(t *testing.T) {
 	scheme := newISODownloadTestScheme()
-	vmImage := newTestVMImage("default", "my-iso", ptr.To(corev1.ConditionTrue))
+	vmImage := newTestVMImage(ptr.To(corev1.ConditionTrue))
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -238,7 +211,7 @@ func TestISODownloadPhase_Run_ExistingVMI_NoOwnershipOrLabels(t *testing.T) {
 	up := &managementv1beta1.UpgradePlan{}
 	up.Name = testUpgradePlanName
 	up.Spec.Version = ptr.To("test-version")
-	up.Spec.Image = ptr.To("default/my-iso")
+	up.Spec.Image = ptr.To("my-iso")
 
 	_, err := phase.Run(context.Background(), up)
 	require.NoError(t, err)
@@ -246,7 +219,7 @@ func TestISODownloadPhase_Run_ExistingVMI_NoOwnershipOrLabels(t *testing.T) {
 	// Verify the VMI was NOT modified with controller references or labels
 	var fetched harvesterv1beta1.VirtualMachineImage
 	err = fakeClient.Get(context.Background(), types.NamespacedName{
-		Namespace: "default",
+		Namespace: "harvester-system",
 		Name:      "my-iso",
 	}, &fetched)
 	require.NoError(t, err)
