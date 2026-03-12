@@ -48,6 +48,43 @@ spec:
 EOF
 ```
 
+Additionally, upgrade can be triggered by creating an UpgradePlan CR with an existing ISO image on the cluster. The ISO image can be downloaded from a URL or uploaded to the cluster using the Harvester UI or CLI, and then referenced in the UpgradePlan CR.
+
+For instance, to download the latest Harvester ISO from the releases page and use it for an upgrade, you can create a VirtualMachineImage CR as shown below:
+
+```bash
+cat <<EOF | kubectl create -f -
+apiVersion: harvesterhci.io/v1beta1
+kind: VirtualMachineImage
+metadata:
+  annotations:
+    harvesterhci.io/os-upgrade-image: "True"
+  name: harvester-master-amd64
+  namespace: harvester-system
+spec:
+  backend: cdi
+  displayName: harvester-master-amd64.iso
+  sourceType: download
+  url: https://releases.rancher.com/harvester/master/harvester-master-amd64.iso
+  checksum: ""
+  retry: 3
+  targetStorageClassName: longhorn-static
+EOF
+```
+
+Later, when the image is ready (actually, you don’t need to wait; the controller will automatically pick it up as soon as it becomes ready), you can create an UpgradePlan CR that references it (no need for referencing a Version CR):
+
+```bash
+cat <<EOF | kubectl create -f -
+apiVersion: management.harvesterhci.io/v1beta1
+kind: UpgradePlan
+metadata:
+  generateName: hvst-upgrade-
+spec:
+  image: harvester-master-amd64
+EOF
+```
+
 ### Customized upgrades
 
 Upgrade Toolkit supports upgrading a Harvester cluster using other container images that are not packaged in the ISO image for Upgrade Repo and also node-specific upgrade jobs. To do so, please see below.
