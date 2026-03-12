@@ -247,6 +247,7 @@ func (c *ManagerCommand) Run() error {
 				&harvesterv1beta1.VirtualMachineBackup{}: {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&harvesterv1beta1.ScheduleVMBackup{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&harvesterv1beta1.Addon{}:                {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
+				&harvesterv1beta1.VirtualMachineImage{}:  {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&kubevirtv1.VirtualMachineInstance{}:     {Namespaces: map[string]cache.Config{cache.AllNamespaces: {}}},
 				&discoveryv1.EndpointSlice{}: {
 					Namespaces: map[string]cache.Config{"default": {}, "harvester-system": {}},
