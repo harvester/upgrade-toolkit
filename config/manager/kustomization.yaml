@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: rancher/harvester-upgrade-toolkit
-  newTag: dev
+  newTag: main-head

@@ -9,10 +9,10 @@ Upgrade Toolkit is the primary component of Harvester Upgrade V2.
 
 ### Installation
 
-The official way to install Upgrade Toolkit is via Helm:
+The official way to install Upgrade Toolkit is via Helm ([source](https://github.com/harvester/charts/tree/master/charts/harvester-upgrade)):
 
 ```bash
-helm upgrade --install upgrade-toolkit upgrade-toolkit \
+helm upgrade --install harvester-upgrade harvester-upgrade \
     --repo=https://charts.harvesterhci.io \
     --namespace=harvester-system \
     --create-namespace \
@@ -225,15 +225,15 @@ make test
 make build
 
 # Build the container image
-# Adapt the `IMG` value below to your own image name and tag
-make docker-build IMG=starbops/harvester-upgrade-toolkit:dev
+# The built image will be tagged with `rancher/harvester-upgrade-toolkit:<branch>-head`
+make docker-build
 ```
 
 To build and push the container image, run:
 
 ```bash
-# Adapt the `IMG` value below to your own image name and tag
-make docker-buildx IMG=starbops/harvester-upgrade-toolkit:dev
+# Adapt the `REPO` value below to your own Docker Hub repository
+REPO=starbops make docker-buildx
 ```
 
 ### Kustomize manifests
