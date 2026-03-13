@@ -2,6 +2,9 @@ package upgradeplan
 
 import (
 	"context"
+
+	"github.com/go-logr/logr"
+
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -106,7 +109,8 @@ func (p *InitPhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle initialize status")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle initialize status")
 
 	controllerutil.AddFinalizer(upgradePlan, UpgradePlanFinalizer)
 
@@ -143,13 +147,14 @@ func (p *InitPhase) PostRun(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
+	log := logr.FromContextOrDiscard(ctx)
 	if err := p.checkDiskSpace(ctx, upgradePlan); err != nil {
-		p.Log.Error(err, "disk space pre-flight check failed")
+		log.Error(err, "disk space pre-flight check failed")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, err.Error())
 		return nil
 	}
 	if err := p.checkCerts(ctx, upgradePlan); err != nil {
-		p.Log.Error(err, "certificate pre-flight check failed")
+		log.Error(err, "certificate pre-flight check failed")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, err.Error())
 		return nil
 	}
@@ -162,13 +167,14 @@ func (p *InitPhase) checkDiskSpace(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
+	log := logr.FromContextOrDiscard(ctx)
 	if v, ok := upgradePlan.Annotations[AnnotationSkipGCThresholdCheck]; ok {
 		skip, err := strconv.ParseBool(v)
 		if err != nil {
 			return fmt.Errorf("invalid value %q for annotation %s", v, AnnotationSkipGCThresholdCheck)
 		}
 		if skip {
-			p.Log.Info("skipping disk space check per annotation")
+			log.Info("skipping disk space check per annotation")
 			return nil
 		}
 	}

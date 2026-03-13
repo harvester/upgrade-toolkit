@@ -2,6 +2,9 @@ package upgradeplan
 
 import (
 	"context"
+
+	"github.com/go-logr/logr"
+
 	"fmt"
 	"sort"
 	"strconv"
@@ -83,12 +86,13 @@ func (p *NodeUpgradePhase) extendLonghornReplicaReplenishmentInterval(
 	}
 
 	var setting lhv1beta2.Setting
+	log := logr.FromContextOrDiscard(ctx)
 	if err := p.Client.Get(ctx, types.NamespacedName{
 		Namespace: LonghornSystemNamespace,
 		Name:      LonghornSettingReplicaReplenishment,
 	}, &setting); err != nil {
 		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
-			p.Log.V(1).Info("Longhorn replica-replenishment-wait-interval setting not found, skipping")
+			log.V(1).Info("Longhorn replica-replenishment-wait-interval setting not found, skipping")
 			return nil
 		}
 		return fmt.Errorf("failed to get Longhorn setting %s: %w", LonghornSettingReplicaReplenishment, err)
@@ -107,7 +111,7 @@ func (p *NodeUpgradePhase) extendLonghornReplicaReplenishmentInterval(
 		return fmt.Errorf("failed to patch Longhorn setting %s: %w", LonghornSettingReplicaReplenishment, err)
 	}
 
-	p.Log.Info("extended Longhorn replica replenishment wait interval",
+	log.Info("extended Longhorn replica replenishment wait interval",
 		"original", upgradePlan.Annotations[AnnotationReplicaReplenishmentOriginal],
 		"new", ExtendedReplicaReplenishmentWaitInterval)
 	return nil
@@ -123,13 +127,14 @@ func (p *NodeUpgradePhase) disableDeschedulerAddon(
 		return nil
 	}
 
+	log := logr.FromContextOrDiscard(ctx)
 	var addon harvesterv1beta1.Addon
 	if err := p.Client.Get(ctx, types.NamespacedName{
 		Namespace: DeschedulerAddonNamespace,
 		Name:      DeschedulerAddonName,
 	}, &addon); err != nil {
 		if apierrors.IsNotFound(err) || apimeta.IsNoMatchError(err) {
-			p.Log.V(1).Info("descheduler addon not found, skipping")
+			log.V(1).Info("descheduler addon not found, skipping")
 			return nil
 		}
 		return fmt.Errorf("failed to get descheduler addon: %w", err)
@@ -151,7 +156,7 @@ func (p *NodeUpgradePhase) disableDeschedulerAddon(
 		return fmt.Errorf("failed to disable descheduler addon: %w", err)
 	}
 
-	p.Log.Info("disabled descheduler addon for node upgrade")
+	log.Info("disabled descheduler addon for node upgrade")
 	return nil
 }
 
@@ -171,10 +176,11 @@ func (p *NodeUpgradePhase) runMultiNode(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle node upgrade via Rancher V2 Provisioning")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle node upgrade via Rancher V2 Provisioning")
 
 	if err := p.ensureClusterPatched(ctx, upgradePlan); err != nil {
-		p.Log.Error(err, "unable to patch Cluster resource for Kubernetes upgrade")
+		log.Error(err, "unable to patch Cluster resource for Kubernetes upgrade")
 		return ctrl.Result{}, err
 	}
 
@@ -187,12 +193,13 @@ func (p *NodeUpgradePhase) runSingleNode(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx)
 	nodeName := *upgradePlan.Status.SingleNode
-	p.Log.V(1).Info("handle single-node upgrade", "node", nodeName)
+	log.V(1).Info("handle single-node upgrade", "node", nodeName)
 
 	shouldPause := ShouldPauseNode(upgradePlan, nodeName)
 	if err := p.ensureSingleNodeUpgradeJob(ctx, upgradePlan, nodeName, shouldPause); err != nil {
-		p.Log.Error(err, "unable to ensure single-node upgrade job")
+		log.Error(err, "unable to ensure single-node upgrade job")
 		return ctrl.Result{}, err
 	}
 
@@ -272,6 +279,7 @@ func (p *NodeUpgradePhase) PostRun(
 		return nil
 	}
 
+	log := logr.FromContextOrDiscard(ctx)
 	var secretList corev1.SecretList
 	if err := p.Client.List(ctx, &secretList, client.InNamespace(FleetLocalNamespace)); err != nil {
 		return fmt.Errorf("failed to list secrets in %s: %w", FleetLocalNamespace, err)
@@ -284,7 +292,8 @@ func (p *NodeUpgradePhase) PostRun(
 		}
 
 		if secret.Annotations[RKE2PostDrainAnnotation] != "" {
-			p.Log.V(1).Info("machine-plan secret still has post-drain annotation, waiting for Rancher to complete",
+			log.V(1).Info(
+				"machine-plan secret still has post-drain annotation, waiting for Rancher to complete",
 				"secret", secret.Name)
 			return fmt.Errorf("waiting for Rancher to complete node upgrades: secret %s still has %s annotation",
 				secret.Name, RKE2PostDrainAnnotation)

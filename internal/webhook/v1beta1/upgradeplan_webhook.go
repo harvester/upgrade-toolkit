@@ -659,7 +659,7 @@ func validateNonLiveMigratableVMs(ctx context.Context, c client.Reader) field.Er
 		vmis[i] = &vmiList.Items[i]
 	}
 
-	nonMigratable, err := vmihelper.GetAllNonLiveMigratableVMINames(vmis, nodes)
+	nonMigratable, err := vmihelper.GetAllNonLiveMigratableVMINames(logf.FromContext(ctx), vmis, nodes)
 	if err != nil {
 		allErrs = append(allErrs, field.InternalError(
 			field.NewPath(""), fmt.Errorf("failed to check non-live migratable VMs: %w", err)))

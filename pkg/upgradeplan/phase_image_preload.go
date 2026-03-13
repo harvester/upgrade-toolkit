@@ -3,6 +3,8 @@ package upgradeplan
 import (
 	"context"
 
+	"github.com/go-logr/logr"
+
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	"github.com/rancher/wrangler/v3/pkg/name"
 	corev1 "k8s.io/api/core/v1"
@@ -33,15 +35,16 @@ func (p *ImagePreloadPhase) PreRun(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
-	p.Log.V(1).Info("running upgrade eligibility check")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("running upgrade eligibility check")
 
 	if upgradePlan.Spec.Force != nil && *upgradePlan.Spec.Force {
-		p.Log.V(0).Info("force mode enabled, skipping upgrade eligibility check")
+		log.V(0).Info("force mode enabled, skipping upgrade eligibility check")
 		return nil
 	}
 
-	if err := versionguard.Check(upgradePlan, true, ""); err != nil {
-		p.Log.Error(err, "upgrade eligibility check failed")
+	if err := versionguard.Check(log, upgradePlan, true, ""); err != nil {
+		log.Error(err, "upgrade eligibility check failed")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, err.Error())
 		return nil
 	}
@@ -53,11 +56,12 @@ func (p *ImagePreloadPhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle image preload")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle image preload")
 
 	nodeCount, err := countManagedNodes(ctx, p.Client)
 	if err != nil {
-		p.Log.Error(err, "unable to count managed nodes")
+		log.Error(err, "unable to count managed nodes")
 		return ctrl.Result{}, err
 	}
 
@@ -65,25 +69,25 @@ func (p *ImagePreloadPhase) Run(
 		upgradePlan.Spec.ImagePreloadOption, nodeCount,
 	)
 	if skip {
-		p.Log.V(0).Info("image preloading skipped (negative concurrency)")
+		log.V(0).Info("image preloading skipped (negative concurrency)")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseImagePreloaded, "")
 		return ctrl.Result{}, nil
 	}
 
 	plan, err := p.getOrCreatePlanForImagePreload(ctx, upgradePlan, concurrency)
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve image-preload plan from upgradeplan")
+		log.Error(err, "unable to retrieve image-preload plan from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
 	if !isPlanFinished(plan) {
 		if isAnyPlanJobFailed(plan) {
-			p.Log.V(0).Info("image-preload job failed")
+			log.V(0).Info("image-preload job failed")
 			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "image-preload plan job(s) failed")
 			return ctrl.Result{}, nil
 		}
 
-		p.Log.V(1).Info("image-preload plan running")
+		log.V(1).Info("image-preload plan running")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseImagePreloading, "")
 		return ctrl.Result{}, nil
 	}

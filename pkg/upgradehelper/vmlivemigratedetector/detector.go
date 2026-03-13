@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	wranglername "github.com/rancher/wrangler/v3/pkg/name"
-	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +50,8 @@ type DetectorOptions struct {
 
 // VMLiveMigrateDetector detects non-live-migratable VMs on a node and optionally shuts them down.
 type VMLiveMigrateDetector struct {
+	log logr.Logger
+
 	kubeConfig  string
 	kubeContext string
 
@@ -63,8 +65,9 @@ type VMLiveMigrateDetector struct {
 }
 
 // NewVMLiveMigrateDetector creates a new VMLiveMigrateDetector.
-func NewVMLiveMigrateDetector(options DetectorOptions) *VMLiveMigrateDetector {
+func NewVMLiveMigrateDetector(log logr.Logger, options DetectorOptions) *VMLiveMigrateDetector {
 	return &VMLiveMigrateDetector{
+		log:         log,
 		kubeConfig:  options.KubeConfigPath,
 		kubeContext: options.KubeContext,
 		nodeName:    options.NodeName,
@@ -142,16 +145,16 @@ func (d *VMLiveMigrateDetector) Run(ctx context.Context) error {
 		nodePointers = append(nodePointers, &nodes.Items[i])
 	}
 
-	nonLiveMigratableVMNames, err := vmi.GetAllNonLiveMigratableVMINames(vmis, nodePointers)
+	nonLiveMigratableVMNames, err := vmi.GetAllNonLiveMigratableVMINames(d.log, vmis, nodePointers)
 	if err != nil {
 		return err
 	}
 
-	logrus.Infof("Non-migratable VM(s): %v", nonLiveMigratableVMNames)
+	d.log.Info("non-migratable VMs detected", "vms", nonLiveMigratableVMNames)
 
 	if d.upgradeName != "" {
 		vmNames := getRestoreVMNames(vmis, nonLiveMigratableVMNames)
-		logrus.Infof("Store vm info to configmap: %v", vmNames)
+		d.log.Info("storing VM info to configmap", "vms", vmNames)
 		err = d.createOrUpdateConfigMap(ctx, vmNames)
 		if err != nil {
 			d.recordUpgradeEvent(corev1.EventTypeWarning, RestoreVMConfigMapFailed, err.Error())
@@ -167,10 +170,10 @@ func (d *VMLiveMigrateDetector) Run(ctx context.Context) error {
 			if err := d.virtClient.VirtualMachine(namespace).Stop(ctx, name, &kubevirtv1.StopOptions{}); err != nil {
 				d.recordUpgradeEvent(corev1.EventTypeNormal, VMShutdownFailed,
 					fmt.Sprintf("Shutdown failed for VM %s on node %s, error: %v", namespacedName, d.nodeName, err))
-				logrus.Errorf("failed to stop VM %s: %v", namespacedName, err)
+				d.log.Error(err, "failed to stop VM", "vm", namespacedName)
 				vmFailedCnt++
 			} else {
-				logrus.Infof("vm %s was administratively stopped", namespacedName)
+				d.log.Info("VM was administratively stopped", "vm", namespacedName)
 				vmSuccessCnt++
 			}
 		}
@@ -314,11 +317,13 @@ func (d *VMLiveMigrateDetector) recordUpgradeEvent(eventType, reason, message st
 
 	upgradePlan, err := d.getUpgradePlan(context.Background(), d.upgradeName)
 	if err != nil {
-		logrus.Warnf("record event failed to get UpgradePlan %s: %v", d.upgradeName, err)
+		d.log.Error(err, "record event failed to get UpgradePlan", "upgradePlan", d.upgradeName)
 		return
 	}
 
-	logrus.Info("Recording event for upgrade ", d.upgradeName, ": ", eventType, " ", reason, " ", message)
+	d.log.V(1).Info("recording upgrade event",
+		"upgradePlan", d.upgradeName, "eventType", eventType,
+		"reason", reason, "message", message)
 	d.recorder.Event(upgradePlan.ObjectReference(), eventType, reason, message)
 }
 

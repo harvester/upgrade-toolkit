@@ -2,6 +2,9 @@ package upgradeplan
 
 import (
 	"context"
+
+	"github.com/go-logr/logr"
+
 	"fmt"
 
 	"github.com/rancher/wrangler/v3/pkg/name"
@@ -44,24 +47,25 @@ func (p *RepoCreatePhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle repo create")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle repo create")
 
 	replicas, err := p.getDeploymentReplicaCount(ctx)
 	if err != nil {
-		p.Log.Error(err, "unable to determine deployment replica count")
+		log.Error(err, "unable to determine deployment replica count")
 		return ctrl.Result{}, err
 	}
 
 	deploy, err := p.getOrCreateDeploymentForRepo(ctx, upgradePlan, replicas)
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve repo deployment from upgradeplan")
+		log.Error(err, "unable to retrieve repo deployment from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
 	ready := isDeploymentReady(deploy)
 
 	if !ready {
-		p.Log.V(1).Info("upgrade-repo deployment not ready")
+		log.V(1).Info("upgrade-repo deployment not ready")
 		updateProgressingPhase(
 			upgradePlan,
 			managementv1beta1.UpgradePlanPhaseRepoCreating,
@@ -72,14 +76,14 @@ func (p *RepoCreatePhase) Run(
 
 	svc, err := p.getOrCreateServiceForRepo(ctx, upgradePlan)
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve repo service from upgradeplan")
+		log.Error(err, "unable to retrieve repo service from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
 	ready = isServiceReady(ctx, p.Client, svc)
 
 	if !ready {
-		p.Log.V(1).Info("upgrade-repo service/endpoints not ready")
+		log.V(1).Info("upgrade-repo service/endpoints not ready")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseRepoCreating, "upgrade-repo svc/ep not ready")
 		return ctrl.Result{}, nil
 	}

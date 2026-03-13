@@ -3,6 +3,7 @@ package vmi
 import (
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -154,7 +155,7 @@ func TestGetAllNonLiveMigratableVMINames(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := GetAllNonLiveMigratableVMINames(tc.vmis, tc.nodes)
+			result, err := GetAllNonLiveMigratableVMINames(logr.Discard(), tc.vmis, tc.nodes)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})
