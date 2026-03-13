@@ -132,41 +132,41 @@ A successfully executed UpgradePlan looks like the following:
 apiVersion: management.harvesterhci.io/v1beta1
 kind: UpgradePlan
 metadata:
-  creationTimestamp: "2026-03-12T13:36:56Z"
+  creationTimestamp: "2026-03-13T03:57:09Z"
   generateName: hvst-upgrade-
-  generation: 2
-  name: hvst-upgrade-s8brd
-  resourceVersion: "145383"
-  uid: cb4af7eb-07e3-40ab-9fd6-96f3cd7b3039
+  generation: 3
+  name: hvst-upgrade-864fh
+  resourceVersion: "219468"
+  uid: 24fde87d-491b-4af8-bafd-001fceb20a62
 spec:
   imagePreloadOption:
     concurrency: 100
   nodeUpgradeOption: {}
   restoreVM: true
   upgrade: main-head
-  version: master-head
+  version: v1.8.0-rc1
 status:
   conditions:
-  - lastTransitionTime: "2026-03-12T14:57:58Z"
+  - lastTransitionTime: "2026-03-13T05:32:57Z"
     message: UpgradePlan has completed
-    observedGeneration: 2
+    observedGeneration: 3
     reason: Succeeded
     status: "False"
     type: Progressing
-  - lastTransitionTime: "2026-03-12T14:57:58Z"
+  - lastTransitionTime: "2026-03-13T05:32:57Z"
     message: ""
-    observedGeneration: 2
+    observedGeneration: 3
     reason: ReconcileSuccess
     status: "False"
     type: Degraded
-  - lastTransitionTime: "2026-03-12T14:57:58Z"
+  - lastTransitionTime: "2026-03-13T05:32:57Z"
     message: Entered one of the terminal phases
-    observedGeneration: 2
+    observedGeneration: 3
     reason: Executed
     status: "False"
     type: Available
   currentPhase: Succeeded
-  isoImageID: hvst-upgrade-s8brd-iso
+  isoImageID: hvst-upgrade-864fh-iso
   nodeUpgradeStatuses:
     charlie-1-tink-system:
       state: ImageCleaned
@@ -176,50 +176,89 @@ status:
       state: ImageCleaned
   phaseTransitionTimestamps:
   - phase: Initializing
-    phaseTransitionTimestamp: "2026-03-12T13:36:57Z"
+    phaseTransitionTimestamp: "2026-03-13T03:57:09Z"
   - phase: Initialized
-    phaseTransitionTimestamp: "2026-03-12T13:36:57Z"
+    phaseTransitionTimestamp: "2026-03-13T03:57:09Z"
   - phase: ISODownloading
-    phaseTransitionTimestamp: "2026-03-12T13:36:57Z"
+    phaseTransitionTimestamp: "2026-03-13T03:57:09Z"
   - phase: ISODownloaded
-    phaseTransitionTimestamp: "2026-03-12T13:42:35Z"
+    phaseTransitionTimestamp: "2026-03-13T04:01:53Z"
   - phase: RepoCreating
-    phaseTransitionTimestamp: "2026-03-12T13:42:35Z"
+    phaseTransitionTimestamp: "2026-03-13T04:01:53Z"
   - phase: RepoCreated
-    phaseTransitionTimestamp: "2026-03-12T13:42:57Z"
+    phaseTransitionTimestamp: "2026-03-13T04:01:58Z"
   - phase: MetadataPopulating
-    phaseTransitionTimestamp: "2026-03-12T13:42:57Z"
+    phaseTransitionTimestamp: "2026-03-13T04:01:58Z"
   - phase: MetadataPopulated
-    phaseTransitionTimestamp: "2026-03-12T13:42:58Z"
+    phaseTransitionTimestamp: "2026-03-13T04:01:59Z"
   - phase: ImagePreloading
-    phaseTransitionTimestamp: "2026-03-12T13:42:58Z"
+    phaseTransitionTimestamp: "2026-03-13T04:01:59Z"
   - phase: ImagePreloaded
-    phaseTransitionTimestamp: "2026-03-12T13:54:59Z"
+    phaseTransitionTimestamp: "2026-03-13T04:12:00Z"
   - phase: ClusterUpgrading
-    phaseTransitionTimestamp: "2026-03-12T13:54:59Z"
+    phaseTransitionTimestamp: "2026-03-13T04:12:00Z"
   - phase: ClusterUpgraded
-    phaseTransitionTimestamp: "2026-03-12T14:09:14Z"
+    phaseTransitionTimestamp: "2026-03-13T04:27:15Z"
   - phase: NodeUpgrading
-    phaseTransitionTimestamp: "2026-03-12T14:09:14Z"
+    phaseTransitionTimestamp: "2026-03-13T04:27:15Z"
   - phase: NodeUpgraded
-    phaseTransitionTimestamp: "2026-03-12T14:55:38Z"
+    phaseTransitionTimestamp: "2026-03-13T05:30:42Z"
   - phase: CleaningUp
-    phaseTransitionTimestamp: "2026-03-12T14:55:40Z"
+    phaseTransitionTimestamp: "2026-03-13T05:30:43Z"
   - phase: CleanedUp
-    phaseTransitionTimestamp: "2026-03-12T14:57:58Z"
+    phaseTransitionTimestamp: "2026-03-13T05:32:56Z"
   - phase: Succeeded
-    phaseTransitionTimestamp: "2026-03-12T14:57:58Z"
+    phaseTransitionTimestamp: "2026-03-13T05:32:57Z"
   previousVersion: v1.7.1
   provisionGeneration: 1
   releaseMetadata:
-    harvester: 014fbeae
-    harvesterChart: 0.0.0-master-014fbeae
-    kubernetes: v1.35.1+rke2r1
+    harvester: v1.8.0-rc1
+    harvesterChart: 1.8.0-rc1
+    kubernetes: v1.35.2+rke2r1
+    minUpgradableVersion: v1.7.0
     monitoringChart: 108.0.2+up77.9.1-rancher.11
-    os: Harvester master
-    rancher: v2.14.0-alpha5
+    os: Harvester v1.8.0-rc1
+    rancher: v2.14.0-alpha9
   version:
-    isoURL: https://releases.rancher.com/harvester/master/harvester-master-amd64.iso
+    isoChecksum: 3c6f98efc02959da524828b0c44273c8375b7815ce5fcf1c11581479d979daa6e184f3d20535041137282c3d2b4a12d9ba3ce847b051e9aecb5310b73f19523c
+    isoURL: https://releases.rancher.com/harvester/v1.8.0-rc1/harvester-v1.8.0-rc1-amd64.iso
+```
+
+### Upgrade-related events
+
+During the upgrade, events are emitted at phase transitions and key points. View the events for an UpgradePlan with `kubectl describe upgradeplans <upgradeplan-name>`:
+
+```
+Events:
+  Type     Reason                     Age                    From                      Message
+  ----     ------                     ----                   ----                      -------
+  Normal   PhaseTransition            105m                   upgradeplan-controller    Entering phase ISODownload
+  Warning  ReconcileError             105m                   upgradeplan-controller    Pipeline error: VirtualMachineImage.harvesterhci.io "hvst-upgrade-864fh-iso" not found
+  Normal   PhaseCompleted             100m                   upgradeplan-controller    Completed phase ISODownload
+  Normal   PhaseTransition            100m                   upgradeplan-controller    Entering phase RepoCreate
+  Warning  ReconcileError             100m                   upgradeplan-controller    Pipeline error: Deployment.apps "hvst-upgrade-864fh-repo" not found
+  Warning  ReconcileError             100m                   upgradeplan-controller    Pipeline error: Service "hvst-upgrade-864fh-repo" not found
+  Normal   PhaseCompleted             100m                   upgradeplan-controller    Completed phase RepoCreate
+  Normal   PhaseTransition            100m                   upgradeplan-controller    Entering phase MetadataPopulate
+  Normal   PhaseCompleted             100m                   upgradeplan-controller    Completed phase MetadataPopulate
+  Normal   PhaseTransition            100m                   upgradeplan-controller    Entering phase ImagePreload
+  Warning  ReconcileError             100m                   upgradeplan-controller    Pipeline error: Plan.upgrade.cattle.io "hvst-upgrade-864fh-image-preload" not found
+  Normal   PhaseCompleted             90m                    upgradeplan-controller    Completed phase ImagePreload
+  Normal   PhaseTransition            90m                    upgradeplan-controller    Entering phase ClusterUpgrade
+  Normal   PhaseCompleted             75m                    upgradeplan-controller    Completed phase ClusterUpgrade
+  Normal   PhaseTransition            75m                    upgradeplan-controller    Entering phase NodeUpgrade
+  Normal   RestoreVMConfigMapCreated  63m                    vm-live-migrate-detector  ConfigMap harvester-system/hvst-upgrade-864fh-restore-vm created
+  Normal   VMShutdownCompleted        63m                    vm-live-migrate-detector  Shutdown completed for 0 VM(s) on node charlie-1-tink-system, success: 0, failed: 0
+  Normal   VMShutdownCompleted        39m                    vm-live-migrate-detector  Shutdown completed for 1 VM(s) on node charlie-2-tink-system, success: 1, failed: 0
+  Normal   RestoreVMCompleted         26m                    restore-vm                Restored 1 VMs for node charlie-2-tink-system during upgrade hvst-upgrade-864fh, success: 1, failed: 0
+  Normal   VMShutdownCompleted        25m                    vm-live-migrate-detector  Shutdown completed for 1 VM(s) on node charlie-3-tink-system, success: 1, failed: 0
+  Warning  ReconcileError             12m                    upgradeplan-controller    Pipeline error: waiting for Rancher to complete node upgrades: secret custom-58afebea1719-machine-plan still has rke.cattle.io/post-drain annotation
+  Normal   PhaseCompleted             12m                    upgradeplan-controller    Completed phase NodeUpgrade
+  Normal   PhaseTransition            12m                    upgradeplan-controller    Entering phase ImageCleanup
+  Warning  ReconcileError             12m                    upgradeplan-controller    Pipeline error: Plan.upgrade.cattle.io "hvst-upgrade-864fh-image-cleanup" not found
+  Normal   RestoreVMCompleted         11m                    restore-vm                Restored 1 VMs for node charlie-3-tink-system during upgrade hvst-upgrade-864fh, success: 1, failed: 0
+  Normal   PhaseCompleted             9m50s (x2 over 9m51s)  upgradeplan-controller    Completed phase ImageCleanup
+  Normal   UpgradeSucceeded           9m50s (x2 over 9m50s)  upgradeplan-controller    Upgrade completed successfully
 ```
 
 ### User-facing annotations
