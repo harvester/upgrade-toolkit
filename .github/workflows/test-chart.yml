@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test-e2e:
     name: Run on Ubuntu
@@ -42,13 +45,12 @@ jobs:
         run: |
           helm lint ./dist/chart
 
-
-# TODO: Uncomment if Prometheus is enabled
-#      - name: Install Prometheus Operator CRDs
-#        run: |
-#          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-#          helm repo update
-#          helm install prometheus-crds prometheus-community/prometheus-operator-crds
+      # TODO: Uncomment if Prometheus is enabled
+      #      - name: Install Prometheus Operator CRDs
+      #        run: |
+      #          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+      #          helm repo update
+      #          helm install prometheus-crds prometheus-community/prometheus-operator-crds
 
       - name: Install external CRDs
         run: make install-external-crds
