@@ -1,8 +1,12 @@
 name: Test Chart
 
 on:
-  push:
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -34,7 +38,7 @@ jobs:
 
       - name: Prepare upgrade-toolkit
         run: |
-          go mod tidy
+          go mod tidy && git diff --exit-code go.mod go.sum
           make docker-build IMG=controller:latest
           kind load docker-image controller:latest
 

@@ -34,4 +34,3 @@ jobs:
       tags: ${{ needs.metadata.outputs.tags }}
       version: ${{ github.event.release.tag_name }}
       git_commit: ${{ github.sha }}
-    secrets: inherit

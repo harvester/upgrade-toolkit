@@ -3,9 +3,12 @@ name: Pull Request Build
 on:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   lint:
@@ -39,7 +42,7 @@ jobs:
 
       - name: Run tests
         run: |
-          go mod tidy
+          go mod tidy && git diff --exit-code go.mod go.sum
           make test
 
   build:
@@ -65,4 +68,3 @@ jobs:
       tags: rancher/harvester-upgrade-toolkit:ci-${{ github.event.pull_request.number }}
       version: ci-${{ github.event.pull_request.number }}
       git_commit: ${{ github.sha }}
-    secrets: inherit
