@@ -319,7 +319,7 @@ func (d *VMLiveMigrateDetector) recordUpgradeEvent(eventType, reason, message st
 	}
 
 	logrus.Info("Recording event for upgrade ", d.upgradeName, ": ", eventType, " ", reason, " ", message)
-	d.recorder.Event(upgradePlan.ObjectReference(eventNamespace), eventType, reason, message)
+	d.recorder.Event(upgradePlan.ObjectReference(), eventType, reason, message)
 }
 
 // GetRestoreVMConfigMapName returns the ConfigMap name used to store VM names for restoration.

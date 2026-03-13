@@ -381,15 +381,16 @@ func (u *UpgradePlan) ConditionUnknown(conditionType string) bool {
 }
 
 // ObjectReference returns a corev1.ObjectReference for this UpgradePlan
-// placed in the given namespace. UpgradePlan is cluster-scoped, but Events
-// are namespaced, so callers must specify which namespace the event should
-// be created in.
-func (u *UpgradePlan) ObjectReference(namespace string) *corev1.ObjectReference {
+// suitable for use with an EventRecorder. Because UpgradePlan is
+// cluster-scoped, the returned reference has an empty Namespace. The
+// client-go event recorder automatically places such events in the
+// "default" namespace while preserving the empty involvedObject.namespace,
+// which allows kubectl describe to associate them with the CR.
+func (u *UpgradePlan) ObjectReference() *corev1.ObjectReference {
 	return &corev1.ObjectReference{
 		Kind:            "UpgradePlan",
 		APIVersion:      GroupVersion.String(),
 		Name:            u.Name,
-		Namespace:       namespace,
 		UID:             u.UID,
 		ResourceVersion: u.ResourceVersion,
 	}

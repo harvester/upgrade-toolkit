@@ -33,6 +33,6 @@ func (d *PhaseDeps) RecordEvent(
 	eventType, reason, message string,
 ) {
 	if d != nil && d.EventRecorder != nil {
-		d.EventRecorder.Event(upgradePlan.ObjectReference(eventNamespace), eventType, reason, message)
+		d.EventRecorder.Event(upgradePlan.ObjectReference(), eventType, reason, message)
 	}
 }

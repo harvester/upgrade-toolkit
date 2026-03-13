@@ -220,5 +220,5 @@ func (h *RestoreVMHandler) recordUpgradeEvent(eventType, reason, message string)
 	}
 
 	logrus.Info("Recording event for upgrade ", h.upgradeName, ": ", eventType, " ", reason, " ", message)
-	h.recorder.Event(upgradePlan.ObjectReference(eventNamespace), eventType, reason, message)
+	h.recorder.Event(upgradePlan.ObjectReference(), eventType, reason, message)
 }

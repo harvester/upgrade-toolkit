@@ -6,7 +6,6 @@ const (
 	RequeueAfterDuration = 1 * time.Second
 	HttpGetRetryInterval = 10 * time.Second
 
-	EventNamespace           = eventNamespace
 	HarvesterSystemNamespace = harvesterSystemNamespace
 	LonghornSystemNamespace  = "longhorn-system"
 
