@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -94,7 +95,8 @@ type SecretReconciler struct {
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines,verbs=get;list;watch
 
 func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.Log.V(2).Info("reconciling secret", "name", req.Name, "namespace", req.Namespace)
+	log := logf.FromContext(ctx)
+	log.V(2).Info("reconciling secret", "name", req.Name, "namespace", req.Namespace)
 
 	var secret corev1.Secret
 	if err := r.Get(ctx, req.NamespacedName, &secret); err != nil {
@@ -130,7 +132,7 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Resolve node name from machine-plan Secret
 	nodeName, err := r.NodeNameResolver.ResolveNodeName(ctx, r.Client, &secret)
 	if err != nil {
-		r.Log.Error(err, "unable to resolve node name from machine-plan secret")
+		log.Error(err, "unable to resolve node name from machine-plan secret")
 		return ctrl.Result{}, err
 	}
 	if nodeName == "" {

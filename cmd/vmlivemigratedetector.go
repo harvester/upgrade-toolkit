@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
-
+	upgradelog "github.com/harvester/upgrade-toolkit/pkg/log"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradehelper/vmlivemigratedetector"
 )
 
@@ -16,7 +15,8 @@ type VMLiveMigrateDetectorCommand struct {
 	shutdown   bool
 	upgrade    string
 	kubeconfig string
-	debug      bool
+	logLevel   int
+	logFormat  string
 	fs         *flag.FlagSet
 }
 
@@ -30,16 +30,18 @@ func (c *VMLiveMigrateDetectorCommand) FlagSet() *flag.FlagSet {
 		c.fs.BoolVar(&c.shutdown, "shutdown", false, "Shutdown non-migratable VMs")
 		c.fs.StringVar(&c.upgrade, "upgrade", "", "UpgradePlan name; if set, stores non-migratable VM names in a ConfigMap")
 		c.fs.StringVar(&c.kubeconfig, "kubeconfig", os.Getenv("KUBECONFIG"), "Path to kubeconfig file")
-		c.fs.BoolVar(&c.debug, "debug", false, "Enable debug logging")
+		c.fs.IntVar(&c.logLevel, "log-level", 0, "Log verbosity level (0=info, 1=debug, 2=trace)")
+		c.fs.StringVar(&c.logFormat, "log-format", "json", "Log format (json or console)")
 	}
 	return c.fs
 }
 
 func (c *VMLiveMigrateDetectorCommand) Run() error {
-	if c.debug {
-		logrus.SetLevel(logrus.DebugLevel)
+	log, err := upgradelog.NewLogger(c.logFormat == upgradelog.FormatConsole, c.logLevel)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	logrus.SetOutput(os.Stdout)
+	log = log.WithName(c.Name())
 
 	args := c.fs.Args()
 	if len(args) < 1 {
@@ -47,7 +49,7 @@ func (c *VMLiveMigrateDetectorCommand) Run() error {
 	}
 	nodeName := args[0]
 
-	detector := vmlivemigratedetector.NewVMLiveMigrateDetector(vmlivemigratedetector.DetectorOptions{
+	detector := vmlivemigratedetector.NewVMLiveMigrateDetector(log, vmlivemigratedetector.DetectorOptions{
 		KubeConfigPath: c.kubeconfig,
 		Shutdown:       c.shutdown,
 		NodeName:       nodeName,

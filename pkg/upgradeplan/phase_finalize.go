@@ -3,6 +3,8 @@ package upgradeplan
 import (
 	"context"
 
+	"github.com/go-logr/logr"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,7 +37,8 @@ func (p *FinalizePhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle finalize")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle finalize")
 
 	// Determine terminal phase
 	if upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseFailed {

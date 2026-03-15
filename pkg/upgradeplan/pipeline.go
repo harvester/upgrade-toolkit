@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -82,6 +83,19 @@ func (p *Pipeline) buildIndex() {
 	}
 }
 
+// contextWithLog returns a context enriched with a logger that includes
+// upgradePlan and phase as structured fields.
+func (p *Pipeline) contextWithLog(ctx context.Context, upgradePlan string, phase string) context.Context {
+	var log logr.Logger
+	if p.deps != nil {
+		log = p.deps.Log
+	} else {
+		log = logr.Discard()
+	}
+	log = log.WithValues("upgradePlan", upgradePlan, "phase", phase)
+	return logr.NewContext(ctx, log)
+}
+
 // Execute dispatches to the correct phase based on the UpgradePlan's current phase.
 func (p *Pipeline) Execute(
 	ctx context.Context,
@@ -106,6 +120,7 @@ func (p *Pipeline) Execute(
 	}
 
 	entry := p.phases[idx]
+	ctx = p.contextWithLog(ctx, upgradePlan.Name, entry.Phase.Name())
 
 	// Completed phase: run PostRun if implemented, then advance
 	if currentPhase == entry.CompletedPhase {
@@ -138,6 +153,8 @@ func (p *Pipeline) runInit(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	ctx = p.contextWithLog(ctx, upgradePlan.Name, p.init.Name())
+
 	if upgradePlan.Status.CurrentPhase != managementv1beta1.UpgradePlanPhaseInitialized {
 		return p.init.Run(ctx, upgradePlan)
 	}
@@ -159,6 +176,8 @@ func (p *Pipeline) runFinalize(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	ctx = p.contextWithLog(ctx, upgradePlan.Name, p.finalize.Name())
+
 	if preRunnable, ok := p.finalize.(PreRunnable); ok {
 		if err := preRunnable.PreRun(ctx, upgradePlan); err != nil {
 			return ctrl.Result{}, err
@@ -173,6 +192,7 @@ func (p *Pipeline) enterPhase(
 	idx int,
 ) (ctrl.Result, error) {
 	entry := p.phases[idx]
+	ctx = p.contextWithLog(ctx, upgradePlan.Name, entry.Phase.Name())
 
 	if preRunnable, ok := entry.Phase.(PreRunnable); ok {
 		if err := preRunnable.PreRun(ctx, upgradePlan); err != nil {

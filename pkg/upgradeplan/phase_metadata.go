@@ -3,6 +3,8 @@ package upgradeplan
 import (
 	"context"
 
+	"github.com/go-logr/logr"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -23,7 +25,8 @@ func (p *MetadataPopulatePhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle metadata populate")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle metadata populate")
 
 	harvesterRelease := newHarvesterRelease(upgradePlan)
 	if err := harvesterRelease.loadReleaseMetadata(); err != nil {

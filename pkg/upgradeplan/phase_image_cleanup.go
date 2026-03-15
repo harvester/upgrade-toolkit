@@ -2,6 +2,9 @@ package upgradeplan
 
 import (
 	"context"
+
+	"github.com/go-logr/logr"
+
 	"net/http"
 	"strings"
 	"time"
@@ -51,37 +54,38 @@ func (p *ImageCleanupPhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle image cleanup")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle image cleanup")
 
 	plan, err := p.getOrCreatePlanForImageCleanup(ctx, upgradePlan)
 	if err != nil {
 		if IsImageListNotFound(err) {
-			p.Log.V(0).Info("image list not found, skipping image cleanup", "error", err.Error())
+			log.V(1).Info("image list not found, skipping image cleanup", "error", err.Error())
 			p.RecordEvent(upgradePlan, corev1.EventTypeWarning, "ImageCleanupSkipped",
 				"Image list not available in upgrade repository; skipping stale image cleanup",
 			)
 			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseCleanedUp, "")
 			return ctrl.Result{}, nil
 		}
-		p.Log.Error(err, "unable to get or create image-cleanup plan")
+		log.Error(err, "unable to get or create image-cleanup plan")
 		return ctrl.Result{}, err
 	}
 
 	// Plan may be nil when there are no images to clean up.
 	if plan == nil {
-		p.Log.V(1).Info("no stale images to clean up, skipping")
+		log.V(1).Info("no stale images to clean up, skipping")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseCleanedUp, "")
 		return ctrl.Result{}, nil
 	}
 
 	if !isPlanFinished(plan) {
 		if isAnyPlanJobFailed(plan) {
-			p.Log.V(0).Info("image-cleanup plan job failed")
+			log.V(0).Info("image-cleanup plan job failed")
 			updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "image-cleanup plan job(s) failed")
 			return ctrl.Result{}, nil
 		}
 
-		p.Log.V(1).Info("image-cleanup plan running")
+		log.V(1).Info("image-cleanup plan running")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseCleaningUp, "")
 		return ctrl.Result{}, nil
 	}
@@ -94,6 +98,7 @@ func (p *ImageCleanupPhase) getOrCreatePlanForImageCleanup(
 	ctx context.Context,
 	up *managementv1beta1.UpgradePlan,
 ) (*upgradev1.Plan, error) {
+	log := logr.FromContextOrDiscard(ctx)
 	nn := types.NamespacedName{
 		Namespace: cattleSystemNamespace,
 		Name:      name.SafeConcatName(up.Name, ImageCleanupComponent),
@@ -115,7 +120,7 @@ func (p *ImageCleanupPhase) getOrCreatePlanForImageCleanup(
 		return nil, nil
 	}
 
-	p.Log.V(1).Info("creating image-cleanup plan", "imageCount", len(imagesToPurge))
+	log.V(1).Info("creating image-cleanup plan", "imageCount", len(imagesToPurge))
 
 	return GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,

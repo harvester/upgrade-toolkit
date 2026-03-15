@@ -158,7 +158,7 @@ func (c *ManagerCommand) FlagSet() *flag.FlagSet {
 		c.fs.BoolVar(&c.enableHTTP2, "enable-http2", false,
 			"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
-		c.zapOpts = zap.Options{Development: true}
+		c.zapOpts = zap.Options{}
 		c.zapOpts.BindFlags(c.fs)
 	}
 	return c.fs

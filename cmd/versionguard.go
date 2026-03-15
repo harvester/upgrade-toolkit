@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	upgradelog "github.com/harvester/upgrade-toolkit/pkg/log"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradehelper/versionguard"
 )
 
@@ -21,7 +21,8 @@ type VersionGuardCommand struct {
 	strict           bool
 	minUpgradableVer string
 	kubeconfig       string
-	debug            bool
+	logLevel         int
+	logFormat        string
 	fs               *flag.FlagSet
 }
 
@@ -38,16 +39,18 @@ func (c *VersionGuardCommand) FlagSet() *flag.FlagSet {
 			"Override minimum upgradable version from the upgrade object",
 		)
 		c.fs.StringVar(&c.kubeconfig, "kubeconfig", os.Getenv("KUBECONFIG"), "Path to kubeconfig file")
-		c.fs.BoolVar(&c.debug, "debug", false, "Enable debug logging")
+		c.fs.IntVar(&c.logLevel, "log-level", 0, "Log verbosity level (0=info, 1=debug, 2=trace)")
+		c.fs.StringVar(&c.logFormat, "log-format", "json", "Log format (json or console)")
 	}
 	return c.fs
 }
 
 func (c *VersionGuardCommand) Run() error {
-	if c.debug {
-		logrus.SetLevel(logrus.DebugLevel)
+	log, err := upgradelog.NewLogger(c.logFormat == upgradelog.FormatConsole, c.logLevel)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	logrus.SetOutput(os.Stdout)
+	log = log.WithName(c.Name())
 
 	args := c.fs.Args()
 	if len(args) < 1 {
@@ -68,7 +71,7 @@ func (c *VersionGuardCommand) Run() error {
 		return fmt.Errorf("failed to get UpgradePlan %s: %w", upgradePlanName, err)
 	}
 
-	return versionguard.Check(upgradePlan, c.strict, c.minUpgradableVer)
+	return versionguard.Check(log, upgradePlan, c.strict, c.minUpgradableVer)
 }
 
 func getUpgradePlan(restConfig *rest.Config, name string) (*managementv1beta1.UpgradePlan, error) {

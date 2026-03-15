@@ -35,6 +35,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -80,7 +81,8 @@ type UpgradePlanReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.Log.V(2).Info("reconciling upgradeplan")
+	log := logf.FromContext(ctx)
+	log.V(2).Info("reconciling upgradeplan")
 
 	var upgradePlan managementv1beta1.UpgradePlan
 	if err := r.Get(ctx, req.NamespacedName, &upgradePlan); err != nil {
@@ -90,8 +92,8 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Handle deletion
 	if !upgradePlan.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer) {
-			r.Log.V(1).Info("upgradeplan under deletion, running cleanup")
-			if err := upgradeplan.CleanupUpgradeResources(ctx, r.Client, r.Log, &upgradePlan); err != nil {
+			log.V(1).Info("upgradeplan under deletion, running cleanup")
+			if err := upgradeplan.CleanupUpgradeResources(ctx, r.Client, log, &upgradePlan); err != nil {
 				return ctrl.Result{}, err
 			}
 			controllerutil.RemoveFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer)
@@ -115,7 +117,7 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 	if conflicting != "" {
-		r.Log.Info("blocking concurrent upgrade",
+		log.Info("blocking concurrent upgrade",
 			"upgradePlan", upgradePlan.Name,
 			"conflicting", conflicting)
 		r.EventRecorder.Eventf(upgradePlan.ObjectReference(), corev1.EventTypeWarning, "ConcurrentUpgradeBlocked",

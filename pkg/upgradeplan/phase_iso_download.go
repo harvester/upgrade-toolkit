@@ -2,6 +2,9 @@ package upgradeplan
 
 import (
 	"context"
+
+	"github.com/go-logr/logr"
+
 	"fmt"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
@@ -29,7 +32,8 @@ func (p *ISODownloadPhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle iso download")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle iso download")
 
 	var vmImage *harvesterv1beta1.VirtualMachineImage
 	var err error
@@ -40,7 +44,7 @@ func (p *ISODownloadPhase) Run(
 		vmImage, err = p.getOrCreateVirtualMachineImageForRepo(ctx, upgradePlan)
 	}
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve iso vmimage from upgradeplan")
+		log.Error(err, "unable to retrieve iso vmimage from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
@@ -51,13 +55,13 @@ func (p *ISODownloadPhase) Run(
 	imported, success := isVirtualMachineImageImported(vmImage)
 
 	if !imported {
-		p.Log.V(1).Info("iso image downloading")
+		log.V(1).Info("iso image downloading")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseISODownloading, "")
 		return ctrl.Result{}, nil
 	}
 
 	if !success {
-		p.Log.V(0).Info("iso image download failed")
+		log.V(0).Info("iso image download failed")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "ISO image download failed")
 		return ctrl.Result{}, nil
 	}

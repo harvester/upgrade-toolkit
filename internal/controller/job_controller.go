@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -49,7 +50,8 @@ type reconcileFuncs func(context.Context, *batchv1.Job) error
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradeplans/status,verbs=get;update;patch
 
 func (r *JobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.Log.V(2).Info("reconciling job")
+	log := logf.FromContext(ctx)
+	log.V(2).Info("reconciling job")
 
 	var job batchv1.Job
 	if err := r.Get(ctx, req.NamespacedName, &job); err != nil {
@@ -92,7 +94,8 @@ func (r *JobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv1.Job) error {
-	r.Log.V(1).Info("node upgrade status update")
+	log := logf.FromContext(ctx)
+	log.V(1).Info("node upgrade status update")
 
 	upgradePlanName, ok := job.Labels[upgradeplan.HarvesterUpgradePlanLabel]
 	if !ok {
@@ -123,7 +126,7 @@ func (r *JobReconciler) nodeUpgradeStatusUpdate(ctx context.Context, job *batchv
 			return fmt.Errorf("label %s not found", upgradeplan.SUCNodeLabel)
 		}
 	default:
-		r.Log.V(0).Info("cannot identify upgrade component due to missing node label, skip it", "jobNamespace", job.Namespace, "jobName", job.Name)
+		log.Info("cannot identify upgrade component due to missing node label", "jobNamespace", job.Namespace, "jobName", job.Name)
 		return nil
 	}
 

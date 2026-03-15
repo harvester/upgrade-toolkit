@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,24 +31,25 @@ func (p *ClusterUpgradePhase) Run(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
-	p.Log.V(1).Info("handle cluster upgrade")
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle cluster upgrade")
 
 	job, err := p.getOrCreateJobForClusterUpgrade(ctx, upgradePlan)
 	if err != nil {
-		p.Log.Error(err, "unable to retrieve cluster-upgrade job from upgradeplan")
+		log.Error(err, "unable to retrieve cluster-upgrade job from upgradeplan")
 		return ctrl.Result{}, err
 	}
 
 	finished, success := isJobFinished(job)
 
 	if !finished {
-		p.Log.V(1).Info("cluster-upgrade job running")
+		log.V(1).Info("cluster-upgrade job running")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseClusterUpgrading, "")
 		return ctrl.Result{}, nil
 	}
 
 	if !success {
-		p.Log.V(0).Info("cluster-upgrade job failed")
+		log.V(0).Info("cluster-upgrade job failed")
 		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "cluster-upgrade job failed")
 		return ctrl.Result{}, nil
 	}

@@ -3,14 +3,17 @@ package versionguard
 import (
 	"errors"
 
+	"github.com/go-logr/logr"
 	"github.com/harvester/go-common/version"
-	"github.com/sirupsen/logrus"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
 // Check validates that the upgrade described by the UpgradePlan is eligible.
-func Check(upgradePlan *managementv1beta1.UpgradePlan, strictMode bool, minUpgradableVersionStr string) error {
+func Check(
+	log logr.Logger, upgradePlan *managementv1beta1.UpgradePlan,
+	strictMode bool, minUpgradableVersionStr string,
+) error {
 	if upgradePlan.Status.ReleaseMetadata == nil {
 		return errors.New("release metadata is not available in UpgradePlan status")
 	}
@@ -49,12 +52,12 @@ func Check(upgradePlan *managementv1beta1.UpgradePlan, strictMode bool, minUpgra
 		minUpgradableVersionLog = minUpgradableVersion.String()
 	}
 
-	logrus.WithFields(logrus.Fields{
-		"name":                 upgradePlan.Name,
-		"currentVersion":       currentVersion.String(),
-		"upgradeVersion":       upgradeVersion.String(),
-		"minUpgradableVersion": minUpgradableVersionLog,
-	}).Info("upgrade eligibility check")
+	log.Info("upgrade eligibility check",
+		"name", upgradePlan.Name,
+		"currentVersion", currentVersion.String(),
+		"upgradeVersion", upgradeVersion.String(),
+		"minUpgradableVersion", minUpgradableVersionLog,
+	)
 
 	harvesterUpgradeVersion := version.NewHarvesterUpgradeVersion(currentVersion, upgradeVersion, minUpgradableVersion)
 

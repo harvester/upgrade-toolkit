@@ -6,8 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +18,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/record"
-
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/kubecli"
 
@@ -39,6 +37,8 @@ var healthzPath = "/apis/" + kubevirtv1.SubresourceGroupName + "/" + kubevirtv1.
 
 // RestoreVMHandler restores VMs that were shut down during upgrade.
 type RestoreVMHandler struct {
+	log logr.Logger
+
 	kubeConfig  string
 	kubeContext string
 
@@ -52,7 +52,9 @@ type RestoreVMHandler struct {
 }
 
 // NewRestoreVMHandler creates a new RestoreVMHandler.
-func NewRestoreVMHandler(kubeConfig, kubeContext, nodeName, upgrade string) (*RestoreVMHandler, error) {
+func NewRestoreVMHandler(
+	log logr.Logger, kubeConfig, kubeContext, nodeName, upgrade string,
+) (*RestoreVMHandler, error) {
 	clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{
 			ExplicitPath: kubeConfig,
@@ -92,6 +94,7 @@ func NewRestoreVMHandler(kubeConfig, kubeContext, nodeName, upgrade string) (*Re
 	)
 
 	return &RestoreVMHandler{
+		log:          log,
 		kubeConfig:   kubeConfig,
 		kubeContext:  kubeContext,
 		nodeName:     nodeName,
@@ -113,14 +116,14 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 	vmNames, err := h.getVMNamesFromConfigMap(ctx)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logrus.Warn("ConfigMap not found")
+			h.log.Info("ConfigMap not found")
 			h.recordUpgradeEvent(corev1.EventTypeWarning, RestoreVMFailed, "ConfigMap not found")
 			return nil
 		}
 		return err
 	}
 	if len(vmNames) == 0 {
-		logrus.Info("No VMs to restore")
+		h.log.Info("no VMs to restore")
 		h.recordUpgradeEvent(corev1.EventTypeNormal, RestoreVMCompleted,
 			fmt.Sprintf("Restored 0 VM for node %s during upgrade %s", h.nodeName, h.upgradeName))
 		return nil
@@ -135,13 +138,13 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 	for _, vmFullName := range vmNames {
 		parts := strings.SplitN(vmFullName, "/", 2)
 		if len(parts) != 2 {
-			logrus.Errorf("Invalid VM name: %s, should be namespace/name", vmFullName)
+			h.log.Info("invalid VM name, should be namespace/name", "vmFullName", vmFullName)
 			continue
 		}
 		ns, name := parts[0], parts[1]
-		logrus.Infof("Starting VM %s/%s...", ns, name)
+		h.log.Info("starting VM", "namespace", ns, "name", name)
 		if err := h.startVM(ctx, ns, name); err != nil {
-			logrus.Errorf("Failed to start VM %s/%s: %v", ns, name, err)
+			h.log.Error(err, "failed to start VM", "namespace", ns, "name", name)
 			msg := fmt.Sprintf(
 				"Failed to restore VM %s/%s for node %s during upgrade %s: %v",
 				ns, name, h.nodeName, h.upgradeName, err,
@@ -162,11 +165,11 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 }
 
 func (h *RestoreVMHandler) checkKubeVirtHealth(ctx context.Context) error {
-	logrus.Infof("Waiting for KubeVirt to be ready...")
+	h.log.Info("waiting for KubeVirt to be ready")
 	return wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Minute, true, func(ctx context.Context) (bool, error) {
 		res := h.vmRestClient.Get().AbsPath(healthzPath).Do(ctx)
 		if res.Error() != nil {
-			logrus.Errorf("KubeVirt health check failed: %v, retry...", res.Error())
+			h.log.V(1).Info("KubeVirt health check failed, retrying", "error", res.Error())
 			return false, nil
 		}
 		return true, nil
@@ -215,10 +218,12 @@ func (h *RestoreVMHandler) getUpgradePlan(ctx context.Context, name string) (*ma
 func (h *RestoreVMHandler) recordUpgradeEvent(eventType, reason, message string) {
 	upgradePlan, err := h.getUpgradePlan(context.Background(), h.upgradeName)
 	if err != nil {
-		logrus.Warnf("Record upgrade events failed: %v", err)
+		h.log.Error(err, "record upgrade events failed")
 		return
 	}
 
-	logrus.Info("Recording event for upgrade ", h.upgradeName, ": ", eventType, " ", reason, " ", message)
+	h.log.V(1).Info("recording upgrade event",
+		"upgradePlan", h.upgradeName, "eventType", eventType,
+		"reason", reason, "message", message)
 	h.recorder.Event(upgradePlan.ObjectReference(), eventType, reason, message)
 }

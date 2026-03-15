@@ -19,6 +19,7 @@ replace (
 
 require (
 	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/zapr v1.3.0
 	github.com/goccy/go-yaml v1.18.0
 	github.com/harvester/go-common v0.0.0-20260119194217-0f17176ce67e
 	github.com/harvester/harvester v1.8.0-rc1
@@ -28,8 +29,8 @@ require (
 	github.com/rancher/rancher/pkg/apis v0.0.0
 	github.com/rancher/system-upgrade-controller/pkg/apis v0.0.0-20250903002123-a8d5a372d82c
 	github.com/rancher/wrangler/v3 v3.2.3-rc.3
-	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
+	go.uber.org/zap v1.27.0
 	k8s.io/api v0.34.0
 	k8s.io/apimachinery v0.34.0
 	k8s.io/client-go v12.0.0+incompatible
@@ -60,7 +61,6 @@ require (
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
@@ -98,6 +98,7 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/rancher/lasso v0.2.3 // indirect
 	github.com/rancher/wrangler v1.1.2 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
@@ -114,7 +115,6 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
 	golang.org/x/net v0.47.0 // indirect

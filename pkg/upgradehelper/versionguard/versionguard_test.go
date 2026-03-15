@@ -3,6 +3,7 @@ package versionguard
 import (
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/harvester/go-common/version"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/utils/ptr"
@@ -170,7 +171,7 @@ func TestCheck(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actualErr := Check(tc.upgradePlan, tc.strictMode, tc.minUpgradableVersion)
+			actualErr := Check(logr.Discard(), tc.upgradePlan, tc.strictMode, tc.minUpgradableVersion)
 			if tc.expectedErr != nil {
 				assert.Equal(t, tc.expectedErr, actualErr, tc.name)
 			} else {
