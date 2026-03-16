@@ -1396,6 +1396,38 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("should skip check when restoreVM is enabled on multi-node cluster", func() {
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m2"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine1 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			machine2 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m2"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n2"}}}
+			// VMI with node selector is non-migratable, but restoreVM is enabled
+			vmi := &kubevirtv1.VirtualMachineInstance{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "vm-1"},
+				Spec: kubevirtv1.VirtualMachineInstanceSpec{
+					NodeSelector: map[string]string{"kubernetes.io/hostname": "n1"},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2, machine1, machine2, vmi).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0"), RestoreVM: ptr.To(true)},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
 	})
 
 	Context("validateManagedCharts", func() {

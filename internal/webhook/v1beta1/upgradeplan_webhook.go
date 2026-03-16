@@ -113,7 +113,7 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	allErrs = append(allErrs, validateLonghornVolumes(ctx, v.Client, upgradePlan)...)
 	allErrs = append(allErrs, validateVMBackups(ctx, v.Client)...)
 	allErrs = append(allErrs, validateScheduleVMBackups(ctx, v.Client)...)
-	allErrs = append(allErrs, validateNonLiveMigratableVMs(ctx, v.Client)...)
+	allErrs = append(allErrs, validateNonLiveMigratableVMs(ctx, v.Client, upgradePlan)...)
 	allErrs = append(allErrs, validateManagedCharts(ctx, v.Client)...)
 	allErrs = append(allErrs, validateAddons(ctx, v.Client)...)
 	allErrs = append(allErrs, validateNoCleanupInProgress(ctx, v.Client, upgradePlan.Name)...)
@@ -620,7 +620,13 @@ func validateScheduleVMBackups(ctx context.Context, c client.Reader) field.Error
 }
 
 // validateNonLiveMigratableVMs checks that there are no non-live-migratable VMIs on multi-node clusters.
-func validateNonLiveMigratableVMs(ctx context.Context, c client.Reader) field.ErrorList {
+// When restoreVM is enabled, the check is skipped because non-migratable VMs will be
+// automatically shut down and restored during the upgrade process.
+func validateNonLiveMigratableVMs(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) field.ErrorList {
+	if upgradeplan.IsRestoreVMEnabled(upgradePlan) {
+		return nil
+	}
+
 	var allErrs field.ErrorList
 
 	var nodeList corev1.NodeList
