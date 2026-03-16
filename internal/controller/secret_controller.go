@@ -25,10 +25,9 @@ import (
 	"github.com/rancher/wrangler/v3/pkg/name"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,13 +55,7 @@ func (r *MachineNodeNameResolver) ResolveNodeName(ctx context.Context, c client.
 		return "", nil
 	}
 
-	machine := &unstructured.Unstructured{}
-	machine.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "cluster.x-k8s.io",
-		Version: "v1beta1",
-		Kind:    "Machine",
-	})
-
+	machine := &clusterv1.Machine{}
 	if err := c.Get(ctx, types.NamespacedName{
 		Namespace: secret.Namespace,
 		Name:      machineName,
@@ -70,12 +63,11 @@ func (r *MachineNodeNameResolver) ResolveNodeName(ctx context.Context, c client.
 		return "", fmt.Errorf("failed to get machine %s: %w", machineName, err)
 	}
 
-	nodeName, found, err := unstructured.NestedString(machine.Object, "status", "nodeRef", "name")
-	if err != nil || !found {
-		return "", fmt.Errorf("machine %s has no status.nodeRef.name", machineName)
+	if machine.Status.NodeRef == nil {
+		return "", fmt.Errorf("machine %s has no status.nodeRef", machineName)
 	}
 
-	return nodeName, nil
+	return machine.Status.NodeRef.Name, nil
 }
 
 // SecretReconciler reconciles machine-plan Secrets to orchestrate
