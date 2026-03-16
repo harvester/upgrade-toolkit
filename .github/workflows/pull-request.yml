@@ -63,6 +63,9 @@ jobs:
   build-image:
     name: Build image
     uses: ./.github/workflows/build-image.yml
+    permissions:
+      contents: read
+      id-token: write
     with:
       push: false
       tags: rancher/harvester-upgrade-toolkit:ci-${{ github.event.pull_request.number }}
