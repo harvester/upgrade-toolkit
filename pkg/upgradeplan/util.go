@@ -175,7 +175,7 @@ func FindConflictingUpgrade(ctx context.Context, c client.Reader, currentName st
 
 // Resource readiness checks
 
-func isVirtualMachineImageImported(vmImage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {
+func IsVirtualMachineImageImported(vmImage *harvesterv1beta1.VirtualMachineImage) (finished, success bool) {
 	for _, condition := range vmImage.Status.Conditions {
 		if condition.Type == harvesterv1beta1.ImageImported && condition.Status == corev1.ConditionTrue {
 			finished, success = true, true

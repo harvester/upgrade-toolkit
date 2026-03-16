@@ -31,11 +31,17 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
@@ -204,8 +210,86 @@ func (r *UpgradePlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&harvesterv1beta1.VirtualMachineImage{}).
 		Owns(&upgradev1.Plan{}).
+		Watches(
+			&harvesterv1beta1.VirtualMachineImage{},
+			handler.EnqueueRequestsFromMapFunc(r.mapVMImageToUpgradePlan),
+			builder.WithPredicates(vmImageStatusChangedPredicate{}),
+		).
 		Named("upgradeplan").
 		Complete(r)
+}
+
+// mapVMImageToUpgradePlan maps a VirtualMachineImage change to the UpgradePlan(s)
+// that reference it via status.isoImageID. This handles externally-created VMImages
+// (the spec.image path) that are not owned by the UpgradePlan.
+func (r *UpgradePlanReconciler) mapVMImageToUpgradePlan(ctx context.Context, obj client.Object) []reconcile.Request {
+	vmImage, ok := obj.(*harvesterv1beta1.VirtualMachineImage)
+	if !ok {
+		return nil
+	}
+
+	if vmImage.Namespace != upgradeplan.HarvesterSystemNamespace {
+		return nil
+	}
+
+	// Skip VMImages that already have an UpgradePlan owner reference;
+	// those are handled by Owns().
+	for _, ref := range vmImage.OwnerReferences {
+		if ref.Kind == "UpgradePlan" {
+			return nil
+		}
+	}
+
+	var upList managementv1beta1.UpgradePlanList
+	if err := r.List(ctx, &upList); err != nil {
+		r.Log.Error(err, "failed to list UpgradePlans for VMImage watch")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for i := range upList.Items {
+		up := &upList.Items[i]
+		if up.Status.ISOImageID != nil && *up.Status.ISOImageID == vmImage.Name {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: up.Name},
+			})
+		}
+	}
+
+	return requests
+}
+
+// vmImageStatusChangedPredicate filters VirtualMachineImage events to only
+// those where the ImageImported condition changes.
+type vmImageStatusChangedPredicate struct {
+	predicate.Funcs
+}
+
+func (vmImageStatusChangedPredicate) Create(_ event.CreateEvent) bool {
+	return false
+}
+
+func (vmImageStatusChangedPredicate) Update(e event.UpdateEvent) bool {
+	oldVMI, ok := e.ObjectOld.(*harvesterv1beta1.VirtualMachineImage)
+	if !ok {
+		return false
+	}
+	newVMI, ok := e.ObjectNew.(*harvesterv1beta1.VirtualMachineImage)
+	if !ok {
+		return false
+	}
+
+	oldFinished, oldSuccess := upgradeplan.IsVirtualMachineImageImported(oldVMI)
+	newFinished, newSuccess := upgradeplan.IsVirtualMachineImageImported(newVMI)
+	return oldFinished != newFinished || oldSuccess != newSuccess
+}
+
+func (vmImageStatusChangedPredicate) Delete(_ event.DeleteEvent) bool {
+	return false
+}
+
+func (vmImageStatusChangedPredicate) Generic(_ event.GenericEvent) bool {
+	return false
 }
 
 func setUpgradePlanPhaseTransitionTimestamp(oldUpgradePlan *managementv1beta1.UpgradePlan, newUpgradePlan *managementv1beta1.UpgradePlan) {

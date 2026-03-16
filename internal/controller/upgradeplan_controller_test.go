@@ -20,13 +20,16 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -285,6 +288,189 @@ var _ = Describe("UpgradePlan Controller", func() {
 			Expect(updated.ConditionFalse(managementv1beta1.UpgradePlanAvailable)).To(BeTrue())
 			cond := updated.LookupCondition(managementv1beta1.UpgradePlanAvailable)
 			Expect(cond.Reason).To(Equal("ConcurrentUpgradeBlocked"))
+		})
+	})
+
+	Context("mapVMImageToUpgradePlan", func() {
+		const (
+			vmImageName     = "external-iso"
+			upgradePlanName = "map-test-upgrade"
+		)
+		ctx := context.Background()
+
+		BeforeEach(func() {
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: "harvester-system"},
+			}
+			_ = k8sClient.Create(ctx, ns)
+		})
+
+		AfterEach(func() {
+			deleteUpgradePlan(ctx, upgradePlanName)
+		})
+
+		It("should enqueue UpgradePlan when status.isoImageID matches VMImage name", func() {
+			By("creating an UpgradePlan with isoImageID set")
+			createUpgradePlan(ctx, upgradePlanName)
+			var up managementv1beta1.UpgradePlan
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, &up)).To(Succeed())
+			up.Status.ISOImageID = ptr.To(vmImageName)
+			Expect(k8sClient.Status().Update(ctx, &up)).To(Succeed())
+
+			By("calling mapVMImageToUpgradePlan with a matching VMImage")
+			reconciler := newReconciler()
+			vmImage := &harvesterv1beta1.VirtualMachineImage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      vmImageName,
+					Namespace: "harvester-system",
+				},
+			}
+			requests := reconciler.mapVMImageToUpgradePlan(ctx, vmImage)
+			Expect(requests).To(HaveLen(1))
+			Expect(requests[0].NamespacedName).To(Equal(types.NamespacedName{Name: upgradePlanName}))
+		})
+
+		It("should return nil for VMImages with an UpgradePlan owner reference", func() {
+			reconciler := newReconciler()
+			vmImage := &harvesterv1beta1.VirtualMachineImage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      vmImageName,
+					Namespace: "harvester-system",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							Kind: "UpgradePlan",
+							Name: "some-upgrade",
+						},
+					},
+				},
+			}
+			requests := reconciler.mapVMImageToUpgradePlan(ctx, vmImage)
+			Expect(requests).To(BeNil())
+		})
+
+		It("should return nil for VMImages in a different namespace", func() {
+			reconciler := newReconciler()
+			vmImage := &harvesterv1beta1.VirtualMachineImage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      vmImageName,
+					Namespace: "other-namespace",
+				},
+			}
+			requests := reconciler.mapVMImageToUpgradePlan(ctx, vmImage)
+			Expect(requests).To(BeNil())
+		})
+
+		It("should return nil when no UpgradePlan references the VMImage", func() {
+			By("creating an UpgradePlan with a different isoImageID")
+			createUpgradePlan(ctx, upgradePlanName)
+			var up managementv1beta1.UpgradePlan
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: upgradePlanName}, &up)).To(Succeed())
+			up.Status.ISOImageID = ptr.To("different-image")
+			Expect(k8sClient.Status().Update(ctx, &up)).To(Succeed())
+
+			reconciler := newReconciler()
+			vmImage := &harvesterv1beta1.VirtualMachineImage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      vmImageName,
+					Namespace: "harvester-system",
+				},
+			}
+			requests := reconciler.mapVMImageToUpgradePlan(ctx, vmImage)
+			Expect(requests).To(BeEmpty())
+		})
+	})
+
+	Context("vmImageStatusChangedPredicate", func() {
+		var pred vmImageStatusChangedPredicate
+
+		BeforeEach(func() {
+			pred = vmImageStatusChangedPredicate{}
+		})
+
+		It("should reject Create events", func() {
+			Expect(pred.Create(event.CreateEvent{
+				Object: &harvesterv1beta1.VirtualMachineImage{},
+			})).To(BeFalse())
+		})
+
+		It("should reject Delete events", func() {
+			Expect(pred.Delete(event.DeleteEvent{
+				Object: &harvesterv1beta1.VirtualMachineImage{},
+			})).To(BeFalse())
+		})
+
+		It("should reject Generic events", func() {
+			Expect(pred.Generic(event.GenericEvent{
+				Object: &harvesterv1beta1.VirtualMachineImage{},
+			})).To(BeFalse())
+		})
+
+		It("should accept Update when ImageImported changes from absent to True", func() {
+			oldVMI := &harvesterv1beta1.VirtualMachineImage{}
+			newVMI := &harvesterv1beta1.VirtualMachineImage{
+				Status: harvesterv1beta1.VirtualMachineImageStatus{
+					Conditions: []harvesterv1beta1.Condition{
+						{
+							Type:   harvesterv1beta1.ImageImported,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldVMI,
+				ObjectNew: newVMI,
+			})).To(BeTrue())
+		})
+
+		It("should accept Update when ImageImported changes from absent to False", func() {
+			oldVMI := &harvesterv1beta1.VirtualMachineImage{}
+			newVMI := &harvesterv1beta1.VirtualMachineImage{
+				Status: harvesterv1beta1.VirtualMachineImageStatus{
+					Conditions: []harvesterv1beta1.Condition{
+						{
+							Type:   harvesterv1beta1.ImageImported,
+							Status: corev1.ConditionFalse,
+						},
+					},
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldVMI,
+				ObjectNew: newVMI,
+			})).To(BeTrue())
+		})
+
+		It("should reject Update when ImageImported condition is unchanged", func() {
+			conditions := []harvesterv1beta1.Condition{
+				{
+					Type:   harvesterv1beta1.ImageImported,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			oldVMI := &harvesterv1beta1.VirtualMachineImage{
+				Status: harvesterv1beta1.VirtualMachineImageStatus{
+					Conditions: conditions,
+				},
+			}
+			newVMI := &harvesterv1beta1.VirtualMachineImage{
+				Status: harvesterv1beta1.VirtualMachineImageStatus{
+					Conditions: conditions,
+				},
+			}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldVMI,
+				ObjectNew: newVMI,
+			})).To(BeFalse())
+		})
+
+		It("should reject Update when neither old nor new has ImageImported condition", func() {
+			oldVMI := &harvesterv1beta1.VirtualMachineImage{}
+			newVMI := &harvesterv1beta1.VirtualMachineImage{}
+			Expect(pred.Update(event.UpdateEvent{
+				ObjectOld: oldVMI,
+				ObjectNew: newVMI,
+			})).To(BeFalse())
 		})
 	})
 })
