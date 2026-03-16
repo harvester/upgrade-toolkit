@@ -25,10 +25,13 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -684,5 +687,113 @@ var _ = Describe("Secret Controller", func() {
 				ObjectNew: newUP,
 			})).To(BeFalse())
 		})
+	})
+})
+
+var _ = Describe("MachineNodeNameResolver", func() {
+	var (
+		resolver *MachineNodeNameResolver
+		scheme   *runtime.Scheme
+	)
+
+	BeforeEach(func() {
+		resolver = &MachineNodeNameResolver{}
+		scheme = runtime.NewScheme()
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(clusterv1.AddToScheme(scheme)).To(Succeed())
+	})
+
+	It("should resolve node name from a CAPI Machine with NodeRef", func() {
+		machine := &clusterv1.Machine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-machine",
+				Namespace: "fleet-local",
+			},
+			Status: clusterv1.MachineStatus{
+				NodeRef: &corev1.ObjectReference{Name: "test-node"},
+			},
+		}
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "fleet-local",
+				Labels: map[string]string{
+					upgradeplan.MachinePlanMachineLabel: "test-machine",
+				},
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(machine).
+			WithStatusSubresource(machine).
+			Build()
+
+		// Populate status after creation since fake client doesn't persist status on WithObjects for subresources
+		Expect(fakeClient.Status().Update(ctx, machine)).To(Succeed())
+
+		nodeName, err := resolver.ResolveNodeName(ctx, fakeClient, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodeName).To(Equal("test-node"))
+	})
+
+	It("should return empty string when machine label is missing", func() {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "fleet-local",
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		nodeName, err := resolver.ResolveNodeName(ctx, fakeClient, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(nodeName).To(BeEmpty())
+	})
+
+	It("should return error when machine does not exist", func() {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "fleet-local",
+				Labels: map[string]string{
+					upgradeplan.MachinePlanMachineLabel: "nonexistent-machine",
+				},
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+		_, err := resolver.ResolveNodeName(ctx, fakeClient, secret)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to get machine nonexistent-machine"))
+	})
+
+	It("should return error when machine has no NodeRef", func() {
+		machine := &clusterv1.Machine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-machine",
+				Namespace: "fleet-local",
+			},
+		}
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "fleet-local",
+				Labels: map[string]string{
+					upgradeplan.MachinePlanMachineLabel: "test-machine",
+				},
+			},
+		}
+
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(machine).
+			Build()
+
+		_, err := resolver.ResolveNodeName(ctx, fakeClient, secret)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("has no status.nodeRef"))
 	})
 })
