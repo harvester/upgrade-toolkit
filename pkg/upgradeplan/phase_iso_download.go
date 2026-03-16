@@ -52,7 +52,7 @@ func (p *ISODownloadPhase) Run(
 		upgradePlan.Status.ISOImageID = ptr.To(vmImage.Name)
 	}
 
-	imported, success := isVirtualMachineImageImported(vmImage)
+	imported, success := IsVirtualMachineImageImported(vmImage)
 
 	if !imported {
 		log.V(1).Info("iso image downloading")
