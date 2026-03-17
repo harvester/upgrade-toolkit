@@ -99,7 +99,7 @@ func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan, s
 					Containers: []corev1.Container{
 						{
 							Name:  "apply",
-							Image: fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							Image: fmt.Sprintf("%s:%s", getUpgradeToolkitImage(upgradePlan), getUpgradeVersion(upgradePlan)),
 							Command: []string{
 								"upgrade_manifests.sh",
 							},

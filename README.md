@@ -272,6 +272,7 @@ The following annotations can be set on an UpgradePlan CR to skip or override sp
 | `management.harvesterhci.io/allow-deletion` | `"true"` | Webhook (delete) | Allows deletion of a progressing UpgradePlan (hard-blocked during `ClusterUpgrading` and `NodeUpgrading` phases regardless) |
 | `management.harvesterhci.io/skip-garbage-collection-threshold-check` | `"true"` | Controller (init phase) | Skips the kubelet disk-space / image GC threshold pre-flight check |
 | `management.harvesterhci.io/min-certs-expiration-in-day` | Integer > 0 | Controller (init phase) | Overrides the minimum certificate expiration window in days (default: 7) |
+| `management.harvesterhci.io/upgrade-toolkit-image` | Image repo+name | Controller (all phases) | Overrides the default upgrade-toolkit container image (`rancher/harvester-upgrade-toolkit`); tag is still controlled by `spec.upgrade` |
 
 Example usage:
 

@@ -75,6 +75,9 @@ const (
 	// Annotation to skip garbage collection threshold check during upgrade
 	AnnotationSkipGCThresholdCheck = AnnotationPrefix + "/" + "skip-garbage-collection-threshold-check"
 
+	// Annotation to override the upgrade-toolkit image (repo+name, not tag)
+	AnnotationUpgradeToolkitImage = AnnotationPrefix + "/" + "upgrade-toolkit-image"
+
 	// Annotation to set minimum certificate expiration days before upgrade
 	AnnotationMinCertsExpirationInDay = AnnotationPrefix + "/" + "min-certs-expiration-in-day"
 
