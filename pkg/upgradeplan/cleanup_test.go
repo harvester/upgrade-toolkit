@@ -466,12 +466,12 @@ func TestCleanupUpgradeResources_PreservesRestoreVMJobs(t *testing.T) {
 	assert.Error(t, err, "pre-drain Job should be deleted")
 }
 
-func TestCleanupUpgradeResources_DeletesRestoreVMConfigMap(t *testing.T) {
+func TestCleanupUpgradeResources_PreservesRestoreVMConfigMap(t *testing.T) {
 	up := newTestUpgradePlan()
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      restoreVMConfigMapName(testUpgradePlanName),
+			Name:      fmt.Sprintf("%s-restore-vm", testUpgradePlanName),
 			Namespace: harvesterSystemNamespace,
 		},
 		Data: map[string]string{
@@ -483,17 +483,11 @@ func TestCleanupUpgradeResources_DeletesRestoreVMConfigMap(t *testing.T) {
 	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
 	require.NoError(t, err)
 
+	// ConfigMap should NOT be deleted. It is preserved for restore-vm Job
+	// and will be garbage collected via OwnerReference when the UpgradePlan is deleted.
 	err = c.Get(context.Background(), types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
 		Name:      cm.Name,
 	}, &corev1.ConfigMap{})
-	assert.Error(t, err, "restore-vm ConfigMap should be deleted")
-}
-
-func TestCleanupUpgradeResources_IdempotentOnMissingRestoreVMConfigMap(t *testing.T) {
-	up := newTestUpgradePlan()
-
-	c := newFakeClient()
-	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
-	require.NoError(t, err)
+	assert.NoError(t, err, "restore-vm ConfigMap should be preserved during cleanup")
 }

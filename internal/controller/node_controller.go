@@ -127,9 +127,11 @@ func (r *NodeReconciler) dispatchRestoreVMJob(ctx context.Context, up *managemen
 	log := logf.FromContext(ctx)
 
 	if !upgradeplan.IsRestoreVMEnabled(up) {
+		log.V(1).Info("restore-vm not enabled, skipping")
 		return
 	}
 	if upgradeplan.IsWitnessNode(node) {
+		log.V(1).Info("witness node, skipping restore-vm", "node", node.Name)
 		return
 	}
 
@@ -140,12 +142,15 @@ func (r *NodeReconciler) dispatchRestoreVMJob(ctx context.Context, up *managemen
 		Namespace: upgradeplan.HarvesterSystemNamespace,
 		Name:      cmName,
 	}, &cm); err != nil {
-		if !apierrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
+			log.V(1).Info("restore-vm ConfigMap not found, skipping", "configmap", cmName)
+		} else {
 			log.Error(err, "failed to get restore-vm ConfigMap", "configmap", cmName)
 		}
 		return
 	}
 	if cm.Data[node.Name] == "" {
+		log.V(1).Info("no VMs to restore for node, skipping", "node", node.Name, "configmap", cmName)
 		return
 	}
 
