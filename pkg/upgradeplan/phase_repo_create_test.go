@@ -56,6 +56,8 @@ func TestConstructDeployment(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("%s:%s", upgradeToolkitImage, buildversion.Version), c.Image)
 	assert.Equal(t, corev1.PullIfNotPresent, c.ImagePullPolicy)
 	assert.True(t, *c.SecurityContext.Privileged)
+	require.NotNil(t, c.SecurityContext.RunAsUser)
+	assert.Equal(t, int64(0), *c.SecurityContext.RunAsUser)
 
 	// Probes
 	require.NotNil(t, c.LivenessProbe)
