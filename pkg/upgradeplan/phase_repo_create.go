@@ -222,6 +222,7 @@ func constructDeployment(
 							},
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: ptr.To(true),
+								RunAsUser:  ptr.To(int64(0)),
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
