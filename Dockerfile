@@ -64,6 +64,8 @@ RUN zypper rm -y container-suseconnect && \
     curl -sfL https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${TARGETARCH} -o /usr/bin/yq && chmod +x /usr/bin/yq && \
     curl -sfL https://github.com/rancher/wharfie/releases/download/${WHARFIE_VERSION}/wharfie-${TARGETARCH} -o /usr/bin/wharfie && chmod +x /usr/bin/wharfie
 
+RUN useradd -r -u 1000 -U -s /sbin/nologin -d /nonexistent upgrade-toolkit
+
 WORKDIR /
 COPY --from=builder /workspace/upgrade-toolkit /usr/local/bin/upgrade-toolkit
 
@@ -77,6 +79,8 @@ COPY package/upgrade_node.sh /usr/local/bin/upgrade_node.sh
 COPY package/extra_manifests /usr/local/share/extra_manifests
 COPY package/migrations /usr/local/share/migrations
 COPY --from=addons_generator /workspace/generated_addons /usr/local/share/addons
+
+USER 1000:1000
 
 ENTRYPOINT ["/usr/local/bin/upgrade-toolkit"]
 CMD ["manager"]

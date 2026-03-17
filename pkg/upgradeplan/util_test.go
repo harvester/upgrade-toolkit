@@ -345,10 +345,12 @@ func TestConstructNodeJob_SingleNodeUpgrade(t *testing.T) {
 	assert.True(t, podSpec.HostPID)
 	assert.Equal(t, "harvester", podSpec.ServiceAccountName)
 
-	// Verify privileged
+	// Verify privileged and root user
 	require.NotNil(t, container.SecurityContext)
 	require.NotNil(t, container.SecurityContext.Privileged)
 	assert.True(t, *container.SecurityContext.Privileged)
+	require.NotNil(t, container.SecurityContext.RunAsUser)
+	assert.Equal(t, int64(0), *container.SecurityContext.RunAsUser)
 
 	// Verify host-root volume mount
 	require.Len(t, container.VolumeMounts, 1)
