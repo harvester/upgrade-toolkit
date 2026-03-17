@@ -122,7 +122,7 @@ func constructPlanForImagePreload(
 		},
 	}
 	container := &upgradev1.ContainerSpec{
-		Image:   upgradeToolkitImage,
+		Image:   getUpgradeToolkitImage(upgradePlan),
 		Command: []string{"upgrade_node.sh"},
 		Args:    []string{"prepare"},
 		Env: []corev1.EnvVar{
