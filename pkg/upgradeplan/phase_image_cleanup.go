@@ -170,7 +170,7 @@ func constructPlanForImageCleanup(
 		},
 	}
 	container := &upgradev1.ContainerSpec{
-		Image:   upgradeToolkitImage,
+		Image:   getUpgradeToolkitImage(upgradePlan),
 		Command: []string{"sh", "-c", imageCleanupScript},
 		Env: []corev1.EnvVar{
 			{

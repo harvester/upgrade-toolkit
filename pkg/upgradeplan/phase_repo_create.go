@@ -211,7 +211,7 @@ func constructDeployment(
 					Containers: []corev1.Container{
 						{
 							Name:            "nginx-iso-server",
-							Image:           fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							Image:           fmt.Sprintf("%s:%s", getUpgradeToolkitImage(upgradePlan), getUpgradeVersion(upgradePlan)),
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Command:         []string{"sh", "-c", repoScript},
 							Ports: []corev1.ContainerPort{
