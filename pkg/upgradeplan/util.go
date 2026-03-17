@@ -40,7 +40,7 @@ const (
 
 	defaultTTLSecondsAfterFinished = 604800 // 7 days
 
-	upgradeToolkitImage = "starbops/harvester-upgrade-toolkit"
+	upgradeToolkitImage = "rancher/harvester-upgrade-toolkit"
 )
 
 // Version helpers
@@ -59,6 +59,15 @@ func getUpgradeVersion(upgradePlan *managementv1beta1.UpgradePlan) string {
 	}
 
 	return buildversion.Version
+}
+
+func getUpgradeToolkitImage(upgradePlan *managementv1beta1.UpgradePlan) string {
+	if upgradePlan != nil {
+		if image, ok := upgradePlan.Annotations[AnnotationUpgradeToolkitImage]; ok && image != "" {
+			return image
+		}
+	}
+	return upgradeToolkitImage
 }
 
 // pvcNameFromISOImageID returns the PVC name for a given ISOImageID.
@@ -370,7 +379,7 @@ func ConstructNodeJob(
 					Containers: []corev1.Container{
 						{
 							Name:    "apply",
-							Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							Image:   fmt.Sprintf("%s:%s", getUpgradeToolkitImage(upgradePlan), getUpgradeVersion(upgradePlan)),
 							Command: []string{"upgrade_node.sh"},
 							Args:    []string{jobType},
 							Env:     envVars,
@@ -557,7 +566,7 @@ func ConstructRestoreVMJob(
 					Containers: []corev1.Container{
 						{
 							Name:    "restore-vm",
-							Image:   fmt.Sprintf("%s:%s", upgradeToolkitImage, getUpgradeVersion(upgradePlan)),
+							Image:   fmt.Sprintf("%s:%s", getUpgradeToolkitImage(upgradePlan), getUpgradeVersion(upgradePlan)),
 							Command: []string{"upgrade-toolkit"},
 							Args:    []string{"restore-vm", "--node", nodeName, "--upgrade", upgradePlan.Name},
 						},

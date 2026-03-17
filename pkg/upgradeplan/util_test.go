@@ -787,3 +787,40 @@ func TestGetUpgradeVersion(t *testing.T) {
 		assert.Equal(t, buildversion.Version, getUpgradeVersion(up))
 	})
 }
+
+func TestGetUpgradeToolkitImage(t *testing.T) {
+	t.Run("nil upgradePlan returns default", func(t *testing.T) {
+		assert.Equal(t, upgradeToolkitImage, getUpgradeToolkitImage(nil))
+	})
+
+	t.Run("no annotation returns default", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{Name: "test"},
+		}
+		assert.Equal(t, upgradeToolkitImage, getUpgradeToolkitImage(up))
+	})
+
+	t.Run("empty annotation returns default", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+				Annotations: map[string]string{
+					AnnotationUpgradeToolkitImage: "",
+				},
+			},
+		}
+		assert.Equal(t, upgradeToolkitImage, getUpgradeToolkitImage(up))
+	})
+
+	t.Run("annotation overrides default", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+				Annotations: map[string]string{
+					AnnotationUpgradeToolkitImage: "starbops/harvester-upgrade-toolkit",
+				},
+			},
+		}
+		assert.Equal(t, "starbops/harvester-upgrade-toolkit", getUpgradeToolkitImage(up))
+	})
+}
