@@ -9,7 +9,6 @@ import (
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
-	wranglername "github.com/rancher/wrangler/v3/pkg/name"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -76,9 +75,11 @@ func CleanupUpgradeResources(
 		}
 	}
 
-	if err := cleanupRestoreVMConfigMap(ctx, c, upgradePlan); err != nil {
-		return err
-	}
+	// NOTE: The restore-vm ConfigMap is intentionally NOT deleted here.
+	// It has an OwnerReference to the UpgradePlan and will be garbage
+	// collected when the UpgradePlan is deleted. Keeping it around
+	// ensures the restore-vm Job can read it (no race) and aids
+	// post-upgrade troubleshooting.
 
 	if err := cleanupNodePendingOSImageAnnotations(ctx, c); err != nil {
 		return err
@@ -223,30 +224,4 @@ func reEnableDeschedulerAddon(
 	}
 
 	return nil
-}
-
-// cleanupRestoreVMConfigMap deletes the restore-vm ConfigMap if it exists.
-// This is best-effort; the ConfigMap may not exist if restoreVM was not enabled
-// or the ConfigMap was never created.
-func cleanupRestoreVMConfigMap(
-	ctx context.Context,
-	c client.Client,
-	upgradePlan *managementv1beta1.UpgradePlan,
-) error {
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      restoreVMConfigMapName(upgradePlan.Name),
-			Namespace: harvesterSystemNamespace,
-		},
-	}
-	if err := c.Delete(ctx, cm); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	return nil
-}
-
-// restoreVMConfigMapName returns the deterministic name for the restore-vm
-// ConfigMap associated with the given UpgradePlan.
-func restoreVMConfigMapName(upgradePlanName string) string {
-	return wranglername.SafeConcatName(upgradePlanName, "restore-vm")
 }
