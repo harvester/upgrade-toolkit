@@ -2,14 +2,12 @@ package upgradeplan
 
 import (
 	"context"
-
-	"github.com/go-logr/logr"
-
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
@@ -25,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradehelper/vmlivemigratedetector"
 )
 
 // NodeUpgradePhase triggers Rancher V2 Provisioning to upgrade each node's
@@ -184,7 +183,7 @@ func (p *NodeUpgradePhase) runMultiNode(
 		return ctrl.Result{}, err
 	}
 
-	return p.checkNodeStatuses(upgradePlan)
+	return p.checkNodeStatuses(ctx, upgradePlan)
 }
 
 // runSingleNode handles the single-node upgrade path by creating a single Job
@@ -203,7 +202,7 @@ func (p *NodeUpgradePhase) runSingleNode(
 		return ctrl.Result{}, err
 	}
 
-	return p.checkNodeStatuses(upgradePlan)
+	return p.checkNodeStatuses(ctx, upgradePlan)
 }
 
 // checkNodeStatuses checks per-node statuses and transitions the phase accordingly.
@@ -212,9 +211,17 @@ func (p *NodeUpgradePhase) runSingleNode(
 // 2. Paused
 // 3. Still-progressing
 // 4. All-terminal
+//
+// For nodes that have reached terminal state, it also dispatches restore-vm Jobs
+// if enabled. This ensures the Jobs are created by the same reconciler that
+// controls phase advancement, eliminating race conditions between controllers.
 func (p *NodeUpgradePhase) checkNodeStatuses(
+	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	// Pre-fetch the restore-vm ConfigMap once for all nodes to avoid N+1 API calls.
+	restoreVMCM := p.fetchRestoreVMConfigMap(ctx, upgradePlan)
+
 	var failedNode string
 	var failedMsg string
 	var pausedNodes []string
@@ -235,6 +242,10 @@ func (p *NodeUpgradePhase) checkNodeStatuses(
 			continue
 		}
 		p.Log.V(1).Info("node has reached the desired node upgrade state", "nodeName", nodeName)
+
+		if err := p.dispatchRestoreVMJob(ctx, upgradePlan, nodeName, restoreVMCM); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if failedNode != "" {
@@ -264,6 +275,80 @@ func (p *NodeUpgradePhase) checkNodeStatuses(
 
 	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseNodeUpgraded, "")
 	return ctrl.Result{}, nil
+}
+
+// fetchRestoreVMConfigMap returns the restore-vm ConfigMap if restore-vm is
+// enabled and the ConfigMap exists. Returns nil otherwise.
+func (p *NodeUpgradePhase) fetchRestoreVMConfigMap(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) *corev1.ConfigMap {
+	if !IsRestoreVMEnabled(upgradePlan) {
+		return nil
+	}
+
+	log := logr.FromContextOrDiscard(ctx)
+	cmName := vmlivemigratedetector.GetRestoreVMConfigMapName(upgradePlan.Name)
+	var cm corev1.ConfigMap
+	if err := p.Client.Get(ctx, types.NamespacedName{
+		Namespace: HarvesterSystemNamespace,
+		Name:      cmName,
+	}, &cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.V(1).Info("restore-vm ConfigMap not found, skipping", "configmap", cmName)
+		} else {
+			log.Error(err, "failed to get restore-vm ConfigMap", "configmap", cmName)
+		}
+		return nil
+	}
+	return &cm
+}
+
+// dispatchRestoreVMJob ensures the restore-vm Job exists for a node that has
+// reached terminal state. It is idempotent via GetOrCreate. The caller provides
+// the pre-fetched restore-vm ConfigMap; a nil ConfigMap means no dispatch is needed.
+func (p *NodeUpgradePhase) dispatchRestoreVMJob(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+	nodeName string,
+	restoreVMCM *corev1.ConfigMap,
+) error {
+	if restoreVMCM == nil || restoreVMCM.Data[nodeName] == "" {
+		return nil
+	}
+
+	log := logr.FromContextOrDiscard(ctx)
+
+	var node corev1.Node
+	if err := p.Client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.V(1).Info("node no longer exists, skipping restore-vm", "node", nodeName)
+			return nil
+		}
+		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
+	}
+	if IsWitnessNode(&node) {
+		log.V(1).Info("witness node, skipping restore-vm", "node", nodeName)
+		return nil
+	}
+
+	jobName := name.SafeConcatName(upgradePlan.Name, NodeComponent, JobTypeRestoreVM, nodeName)
+	_, err := GetOrCreate(
+		ctx, p.Client, p.Scheme,
+		types.NamespacedName{Namespace: HarvesterSystemNamespace, Name: jobName},
+		func() *batchv1.Job { return &batchv1.Job{} },
+		func() *batchv1.Job {
+			return ConstructRestoreVMJob(upgradePlan, nodeName, jobName, p.JobServiceAccount)
+		},
+		upgradePlan,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create restore-vm Job for node %s: %w", nodeName, err)
+	}
+	log.Info("dispatched restore-vm Job", "node", nodeName, "job", jobName)
+	p.RecordEvent(upgradePlan, corev1.EventTypeNormal, "RestoreVMJobDispatched",
+		fmt.Sprintf("Dispatched restore-vm Job %s for node %s", jobName, nodeName))
+	return nil
 }
 
 // PostRun guards the transition from NodeUpgraded to Finalize for multi-node
