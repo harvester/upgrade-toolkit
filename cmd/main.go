@@ -310,9 +310,8 @@ func (c *ManagerCommand) Run() error {
 		return err
 	}
 	if err := (&controller.NodeReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		JobServiceAccount: jobServiceAccount,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Node")
 		return err
