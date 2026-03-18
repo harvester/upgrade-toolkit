@@ -618,6 +618,46 @@ func TestCheckNodeStatuses_SkipsRestoreVMForEmptyConfigMapEntry(t *testing.T) {
 	assert.Empty(t, jobList.Items)
 }
 
+func TestCheckNodeStatuses_SkipsRestoreVMForWitnessNode(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Spec.RestoreVM = ptr.To(true)
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"witness-node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "witness-node-1",
+			Labels: map[string]string{
+				"node-role.harvesterhci.io/witness": "true",
+			},
+		},
+	}
+
+	cmName := vmlivemigratedetector.GetRestoreVMConfigMapName(up.Name)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: HarvesterSystemNamespace,
+		},
+		Data: map[string]string{
+			"witness-node-1": "default/vm1",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up, node, cm)
+
+	_, err := phase.checkNodeStatuses(context.Background(), up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
+
+	// No Jobs should be created for witness node
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	assert.Empty(t, jobList.Items)
+}
+
 // --- Longhorn Replica Replenishment Tests ---
 
 func newTestLonghornSetting(value string) *lhv1beta2.Setting {

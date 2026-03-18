@@ -219,6 +219,9 @@ func (p *NodeUpgradePhase) checkNodeStatuses(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) (ctrl.Result, error) {
+	// Pre-fetch the restore-vm ConfigMap once for all nodes to avoid N+1 API calls.
+	restoreVMCM := p.fetchRestoreVMConfigMap(ctx, upgradePlan)
+
 	var failedNode string
 	var failedMsg string
 	var pausedNodes []string
@@ -240,7 +243,7 @@ func (p *NodeUpgradePhase) checkNodeStatuses(
 		}
 		p.Log.V(1).Info("node has reached the desired node upgrade state", "nodeName", nodeName)
 
-		if err := p.dispatchRestoreVMJob(ctx, upgradePlan, nodeName); err != nil {
+		if err := p.dispatchRestoreVMJob(ctx, upgradePlan, nodeName, restoreVMCM); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -274,28 +277,17 @@ func (p *NodeUpgradePhase) checkNodeStatuses(
 	return ctrl.Result{}, nil
 }
 
-// dispatchRestoreVMJob ensures the restore-vm Job exists for a node that has
-// reached terminal state. It is idempotent via GetOrCreate and skips dispatch
-// when restore-vm is not enabled or there are no VMs to restore.
-func (p *NodeUpgradePhase) dispatchRestoreVMJob(
+// fetchRestoreVMConfigMap returns the restore-vm ConfigMap if restore-vm is
+// enabled and the ConfigMap exists. Returns nil otherwise.
+func (p *NodeUpgradePhase) fetchRestoreVMConfigMap(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
-	nodeName string,
-) error {
-	log := logr.FromContextOrDiscard(ctx)
-
+) *corev1.ConfigMap {
 	if !IsRestoreVMEnabled(upgradePlan) {
 		return nil
 	}
-	var node corev1.Node
-	if err := p.Client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
-		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
-	}
-	if IsWitnessNode(&node) {
-		log.V(1).Info("witness node, skipping restore-vm", "node", nodeName)
-		return nil
-	}
 
+	log := logr.FromContextOrDiscard(ctx)
 	cmName := vmlivemigratedetector.GetRestoreVMConfigMapName(upgradePlan.Name)
 	var cm corev1.ConfigMap
 	if err := p.Client.Get(ctx, types.NamespacedName{
@@ -304,12 +296,39 @@ func (p *NodeUpgradePhase) dispatchRestoreVMJob(
 	}, &cm); err != nil {
 		if apierrors.IsNotFound(err) {
 			log.V(1).Info("restore-vm ConfigMap not found, skipping", "configmap", cmName)
+		} else {
+			log.Error(err, "failed to get restore-vm ConfigMap", "configmap", cmName)
+		}
+		return nil
+	}
+	return &cm
+}
+
+// dispatchRestoreVMJob ensures the restore-vm Job exists for a node that has
+// reached terminal state. It is idempotent via GetOrCreate. The caller provides
+// the pre-fetched restore-vm ConfigMap; a nil ConfigMap means no dispatch is needed.
+func (p *NodeUpgradePhase) dispatchRestoreVMJob(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+	nodeName string,
+	restoreVMCM *corev1.ConfigMap,
+) error {
+	if restoreVMCM == nil || restoreVMCM.Data[nodeName] == "" {
+		return nil
+	}
+
+	log := logr.FromContextOrDiscard(ctx)
+
+	var node corev1.Node
+	if err := p.Client.Get(ctx, types.NamespacedName{Name: nodeName}, &node); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.V(1).Info("node no longer exists, skipping restore-vm", "node", nodeName)
 			return nil
 		}
-		return fmt.Errorf("failed to get restore-vm ConfigMap %s: %w", cmName, err)
+		return fmt.Errorf("failed to get node %s: %w", nodeName, err)
 	}
-	if cm.Data[nodeName] == "" {
-		log.V(1).Info("no VMs to restore for node, skipping", "node", nodeName, "configmap", cmName)
+	if IsWitnessNode(&node) {
+		log.V(1).Info("witness node, skipping restore-vm", "node", nodeName)
 		return nil
 	}
 
