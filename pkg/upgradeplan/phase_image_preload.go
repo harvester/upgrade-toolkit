@@ -106,12 +106,13 @@ func (p *ImagePreloadPhase) getOrCreatePlanForImagePreload(
 		Namespace: cattleSystemNamespace,
 		Name:      name.SafeConcatName(up.Name, PrepareComponent),
 	}
-	return GetOrCreate(
+	obj, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *upgradev1.Plan { return &upgradev1.Plan{} },
 		func() *upgradev1.Plan { return constructPlanForImagePreload(up, concurrency, p.PlanServiceAccount) },
 		up,
 	)
+	return obj, err
 }
 
 func constructPlanForImagePreload(
