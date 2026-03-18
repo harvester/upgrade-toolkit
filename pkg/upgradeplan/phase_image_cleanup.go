@@ -122,7 +122,7 @@ func (p *ImageCleanupPhase) getOrCreatePlanForImageCleanup(
 
 	log.V(1).Info("creating image-cleanup plan", "imageCount", len(imagesToPurge))
 
-	return GetOrCreate(
+	obj, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *upgradev1.Plan { return &upgradev1.Plan{} },
 		func() *upgradev1.Plan {
@@ -130,6 +130,7 @@ func (p *ImageCleanupPhase) getOrCreatePlanForImageCleanup(
 		},
 		up,
 	)
+	return obj, err
 }
 
 func (p *ImageCleanupPhase) computeImageDiff(
