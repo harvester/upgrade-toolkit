@@ -436,6 +436,9 @@ func createOwnedAndFetch[T client.Object](
 	return obj, nil
 }
 
+// GetOrCreate fetches the object at nn. If it does not exist, it creates it
+// using build(), sets owner as the controller reference, and re-fetches it.
+// The returned bool is true when the object was newly created.
 func GetOrCreate[T client.Object](
 	ctx context.Context,
 	c client.Client,
@@ -444,16 +447,17 @@ func GetOrCreate[T client.Object](
 	newObj func() T,
 	build func() T,
 	owner client.Object,
-) (T, error) {
+) (T, bool, error) {
 	obj := newObj()
 	if err := c.Get(ctx, nn, obj); err != nil {
 		if apierrors.IsNotFound(err) {
-			return createOwnedAndFetch(ctx, c, scheme, owner, build())
+			created, err := createOwnedAndFetch(ctx, c, scheme, owner, build())
+			return created, err == nil, err
 		}
 		var zero T
-		return zero, err
+		return zero, false, err
 	}
-	return obj, nil
+	return obj, false, nil
 }
 
 // constructPlan builds a generic system-upgrade-controller Plan resource.
@@ -549,6 +553,7 @@ func ConstructRestoreVMJob(
 			},
 		},
 		Spec: batchv1.JobSpec{
+			BackoffLimit:            ptr.To[int32](3),
 			TTLSecondsAfterFinished: ptr.To[int32](defaultTTLSecondsAfterFinished),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

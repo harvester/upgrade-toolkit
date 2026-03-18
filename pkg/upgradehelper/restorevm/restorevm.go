@@ -116,20 +116,14 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 	vmNames, err := h.getVMNamesFromConfigMap(ctx)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			h.log.Info("ConfigMap not found")
+			h.log.V(0).Info("ConfigMap not found")
 			h.recordUpgradeEvent(corev1.EventTypeWarning, RestoreVMFailed, "ConfigMap not found")
 			return nil
 		}
 		return err
 	}
-	if len(vmNames) == 0 {
-		h.log.Info("no VMs to restore")
-		h.recordUpgradeEvent(corev1.EventTypeNormal, RestoreVMCompleted,
-			fmt.Sprintf("Restored 0 VM for node %s during upgrade %s", h.nodeName, h.upgradeName))
-		return nil
-	}
 
-	if err := h.checkKubeVirtHealth(ctx); err != nil {
+	if err := h.waitForKubeVirtReady(ctx); err != nil {
 		return fmt.Errorf("KubeVirt not ready: %w", err)
 	}
 
@@ -138,20 +132,16 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 	for _, vmFullName := range vmNames {
 		parts := strings.SplitN(vmFullName, "/", 2)
 		if len(parts) != 2 {
-			h.log.Info("invalid VM name, should be namespace/name", "vmFullName", vmFullName)
+			h.log.V(0).Info("invalid VM name, should be namespace/name", "vmFullName", vmFullName)
 			continue
 		}
-		ns, name := parts[0], parts[1]
-		h.log.Info("starting VM", "namespace", ns, "name", name)
-		if err := h.startVM(ctx, ns, name); err != nil {
-			h.log.Error(err, "failed to start VM", "namespace", ns, "name", name)
-			msg := fmt.Sprintf(
-				"Failed to restore VM %s/%s for node %s during upgrade %s: %v",
-				ns, name, h.nodeName, h.upgradeName, err,
-			)
-			h.recordUpgradeEvent(corev1.EventTypeWarning, RestoreVMFailed, msg)
+		ns, vmName := parts[0], parts[1]
+		h.log.V(0).Info("starting VM", "namespace", ns, "name", vmName)
+		if err := h.startVMWithRetry(ctx, ns, vmName); err != nil {
+			h.log.Error(err, "failed to start VM", "namespace", ns, "name", vmName)
 			vmFailedCnt++
 		} else {
+			h.log.V(1).Info("VM started successfully", "namespace", ns, "name", vmName)
 			vmSuccessCnt++
 		}
 	}
@@ -161,11 +151,12 @@ func (h *RestoreVMHandler) Run(ctx context.Context) error {
 		len(vmNames), h.nodeName, h.upgradeName, vmSuccessCnt, vmFailedCnt,
 	)
 	h.recordUpgradeEvent(corev1.EventTypeNormal, RestoreVMCompleted, msg)
+
 	return nil
 }
 
-func (h *RestoreVMHandler) checkKubeVirtHealth(ctx context.Context) error {
-	h.log.Info("waiting for KubeVirt to be ready")
+func (h *RestoreVMHandler) waitForKubeVirtReady(ctx context.Context) error {
+	h.log.V(0).Info("waiting for KubeVirt to be ready")
 	return wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Minute, true, func(ctx context.Context) (bool, error) {
 		res := h.vmRestClient.Get().AbsPath(healthzPath).Do(ctx)
 		if res.Error() != nil {
@@ -173,6 +164,58 @@ func (h *RestoreVMHandler) checkKubeVirtHealth(ctx context.Context) error {
 			return false, nil
 		}
 		return true, nil
+	})
+}
+
+// startVMBackoff defines the retry parameters for individual VM start attempts.
+var startVMBackoff = wait.Backoff{
+	Steps:    5,
+	Duration: 10 * time.Second,
+	Factor:   2.0,
+	Jitter:   0.1,
+}
+
+// isTransientStartVMError returns true if the error is considered transient and worth retrying.
+// It avoids retrying on common permanent API errors such as NotFound, Forbidden, or validation errors.
+func isTransientStartVMError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Do not retry on clearly permanent client-side errors.
+	if errors.IsNotFound(err) ||
+		errors.IsForbidden(err) ||
+		errors.IsInvalid(err) ||
+		errors.IsBadRequest(err) {
+		return false
+	}
+
+	// Retry on known transient/server-side conditions.
+	if errors.IsTooManyRequests(err) ||
+		errors.IsServerTimeout(err) ||
+		errors.IsTimeout(err) ||
+		errors.IsInternalError(err) ||
+		errors.IsServiceUnavailable(err) {
+		return true
+	}
+
+	// For unknown error types, default to retrying to preserve existing behavior.
+	return true
+}
+
+// startVMWithRetry attempts to start a VM with exponential backoff retries.
+func (h *RestoreVMHandler) startVMWithRetry(ctx context.Context, namespace, vmName string) error {
+	return wait.ExponentialBackoffWithContext(ctx, startVMBackoff, func(ctx context.Context) (bool, error) {
+		err := h.startVM(ctx, namespace, vmName)
+		if err == nil {
+			return true, nil
+		}
+		if !isTransientStartVMError(err) {
+			h.log.Error(err, "VM start failed with with non-retryable error", "namespace", namespace, "name", vmName)
+			return false, err
+		}
+		h.log.V(1).Info("VM start failed, will retry", "namespace", namespace, "name", vmName, "error", err)
+		return false, nil
 	})
 }
 

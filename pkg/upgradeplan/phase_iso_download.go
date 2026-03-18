@@ -94,12 +94,13 @@ func (p *ISODownloadPhase) getOrCreateVirtualMachineImageForRepo(
 		Namespace: harvesterSystemNamespace,
 		Name:      name.SafeConcatName(up.Name, imageComponent),
 	}
-	return GetOrCreate(
+	obj, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *harvesterv1beta1.VirtualMachineImage { return &harvesterv1beta1.VirtualMachineImage{} },
 		func() *harvesterv1beta1.VirtualMachineImage { return constructVirtualMachineImage(up) },
 		up,
 	)
+	return obj, err
 }
 
 func constructVirtualMachineImage(upgradePlan *managementv1beta1.UpgradePlan) *harvesterv1beta1.VirtualMachineImage {

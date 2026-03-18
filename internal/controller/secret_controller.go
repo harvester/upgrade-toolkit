@@ -334,7 +334,7 @@ func (r *SecretReconciler) ensureNodeJob(
 		Namespace: upgradeplan.HarvesterSystemNamespace,
 		Name:      jobName,
 	}
-	existing, err := upgradeplan.GetOrCreate(
+	existing, _, err := upgradeplan.GetOrCreate(
 		ctx, r.Client, r.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
 		func() *batchv1.Job {

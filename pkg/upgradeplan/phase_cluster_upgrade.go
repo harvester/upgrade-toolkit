@@ -66,12 +66,13 @@ func (p *ClusterUpgradePhase) getOrCreateJobForClusterUpgrade(
 		Namespace: harvesterSystemNamespace,
 		Name:      name.SafeConcatName(up.Name, ClusterComponent),
 	}
-	return GetOrCreate(
+	obj, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
 		func() *batchv1.Job { return constructJobForClusterUpgrade(up, p.JobServiceAccount) },
 		up,
 	)
+	return obj, err
 }
 
 func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan, serviceAccountName string) *batchv1.Job {
