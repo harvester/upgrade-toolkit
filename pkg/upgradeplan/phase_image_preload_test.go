@@ -233,6 +233,11 @@ func TestConstructPlanForImagePreload(t *testing.T) {
 	assert.Equal(t, "HARVESTER_UPGRADEPLAN_NAME", plan.Spec.Upgrade.Env[0].Name)
 	assert.Equal(t, testUpgradePlanName, plan.Spec.Upgrade.Env[0].Value)
 
+	// SecurityContext
+	require.NotNil(t, plan.Spec.Upgrade.SecurityContext)
+	assert.Equal(t, ptr.To(true), plan.Spec.Upgrade.SecurityContext.Privileged)
+	assert.Equal(t, ptr.To(int64(0)), plan.Spec.Upgrade.SecurityContext.RunAsUser)
+
 	// Tolerations
 	assert.NotEmpty(t, plan.Spec.Tolerations)
 
