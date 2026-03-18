@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradehelper/vmlivemigratedetector"
 )
 
 func newNodeUpgradePhaseWithAll(objs ...runtime.Object) *NodeUpgradePhase {
@@ -322,7 +323,7 @@ func TestCheckNodeStatuses_MultiNode_AllTerminal(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	_, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(context.Background(), up)
 	require.NoError(t, err)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
 }
@@ -337,7 +338,7 @@ func TestCheckNodeStatuses_MultiNode_OneNotTerminal(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	_, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(context.Background(), up)
 	require.NoError(t, err)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 }
@@ -356,7 +357,7 @@ func TestCheckNodeStatuses_MultiNode_PausedAndNonTerminal(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	_, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(context.Background(), up)
 	require.NoError(t, err)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 
@@ -379,7 +380,7 @@ func TestCheckNodeStatuses_MultiNode_OnlyPaused(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	_, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(context.Background(), up)
 	require.NoError(t, err)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 
@@ -406,7 +407,7 @@ func TestCheckNodeStatuses_MultiNode_MultiplePaused(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	_, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(context.Background(), up)
 	require.NoError(t, err)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgrading, up.Status.CurrentPhase)
 
@@ -430,7 +431,7 @@ func TestCheckNodeStatuses_MultiNode_FailedTakesPriority(t *testing.T) {
 
 	phase := newNodeUpgradePhaseWithBatch(up)
 
-	_, err := phase.checkNodeStatuses(up)
+	_, err := phase.checkNodeStatuses(context.Background(), up)
 	require.NoError(t, err)
 	assert.Equal(t, managementv1beta1.UpgradePlanPhaseFailed, up.Status.CurrentPhase)
 }
@@ -496,6 +497,165 @@ func TestPostRun_SingleNode_Skipped(t *testing.T) {
 
 	err := phase.PostRun(context.Background(), up)
 	assert.NoError(t, err)
+}
+
+// --- Restore-VM Dispatch Tests (in checkNodeStatuses) ---
+
+func TestCheckNodeStatuses_DispatchesRestoreVMJob(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Spec.RestoreVM = ptr.To(true)
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-1",
+		},
+	}
+
+	cmName := vmlivemigratedetector.GetRestoreVMConfigMapName(up.Name)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: HarvesterSystemNamespace,
+		},
+		Data: map[string]string{
+			"node-1": "default/vm1,default/vm2",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up, node, cm)
+
+	_, err := phase.checkNodeStatuses(context.Background(), up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
+
+	// Verify restore-vm Job was created
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	require.Len(t, jobList.Items, 1)
+	assert.Equal(t, JobTypeRestoreVM, jobList.Items[0].Labels[HarvesterJobTypeLabel])
+}
+
+func TestCheckNodeStatuses_SkipsRestoreVMWhenNotEnabled(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	// RestoreVM not set
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up)
+
+	_, err := phase.checkNodeStatuses(context.Background(), up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
+
+	// No Jobs should be created
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	assert.Empty(t, jobList.Items)
+}
+
+func TestCheckNodeStatuses_SkipsRestoreVMWhenNoConfigMap(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Spec.RestoreVM = ptr.To(true)
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-1",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up, node)
+
+	_, err := phase.checkNodeStatuses(context.Background(), up)
+	require.NoError(t, err)
+
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	assert.Empty(t, jobList.Items)
+}
+
+func TestCheckNodeStatuses_SkipsRestoreVMForEmptyConfigMapEntry(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Spec.RestoreVM = ptr.To(true)
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node-1",
+		},
+	}
+
+	cmName := vmlivemigratedetector.GetRestoreVMConfigMapName(up.Name)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: HarvesterSystemNamespace,
+		},
+		Data: map[string]string{
+			"node-1": "",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up, node, cm)
+
+	_, err := phase.checkNodeStatuses(context.Background(), up)
+	require.NoError(t, err)
+
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	assert.Empty(t, jobList.Items)
+}
+
+func TestCheckNodeStatuses_SkipsRestoreVMForWitnessNode(t *testing.T) {
+	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Spec.RestoreVM = ptr.To(true)
+	up.Status.NodeUpgradeStatuses = map[string]managementv1beta1.NodeUpgradeStatus{
+		"witness-node-1": {State: managementv1beta1.NodeStatePostDrained},
+	}
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "witness-node-1",
+			Labels: map[string]string{
+				"node-role.harvesterhci.io/witness": "true",
+			},
+		},
+	}
+
+	cmName := vmlivemigratedetector.GetRestoreVMConfigMapName(up.Name)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: HarvesterSystemNamespace,
+		},
+		Data: map[string]string{
+			"witness-node-1": "default/vm1",
+		},
+	}
+
+	phase := newNodeUpgradePhaseWithBatch(up, node, cm)
+
+	_, err := phase.checkNodeStatuses(context.Background(), up)
+	require.NoError(t, err)
+	assert.Equal(t, managementv1beta1.UpgradePlanPhaseNodeUpgraded, up.Status.CurrentPhase)
+
+	// No Jobs should be created for witness node
+	var jobList batchv1.JobList
+	err = phase.Client.List(context.Background(), &jobList, client.InNamespace(HarvesterSystemNamespace))
+	require.NoError(t, err)
+	assert.Empty(t, jobList.Items)
 }
 
 // --- Longhorn Replica Replenishment Tests ---
