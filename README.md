@@ -3,20 +3,18 @@
 [![Build Status](https://github.com/harvester/upgrade-toolkit/actions/workflows/dev.yml/badge.svg)](https://github.com/harvester/upgrade-toolkit/actions/workflows/dev.yml)
 [![Releases](https://img.shields.io/github/release/harvester/upgrade-toolkit.svg)](https://github.com/harvester/upgrade-toolkit/releases)
 
-Upgrade Toolkit is the primary component of Harvester Upgrade V2.
+Upgrade Toolkit is the primary component of Harvester Upgrade V2. It includes the Upgrade Manager and other auxiliary components that work together to facilitate the Upgrade V2 mechanics.
 
 ## User Guide
 
 ### Installation
 
-The official way to install Upgrade Toolkit is via Helm ([source](https://github.com/harvester/charts/tree/master/charts/harvester-upgrade)):
+Upgrade Toolkit is packaged as a Helm chart, [Harvester Upgrade Manager](https://github.com/harvester/charts/tree/master/charts/harvester-upgrade-manager). You can install it via Helm:
 
 ```bash
-helm upgrade --install harvester-upgrade harvester-upgrade \
+helm upgrade --install harvester-upgrade-manager harvester-upgrade-manager \
     --repo=https://charts.harvesterhci.io \
-    --namespace=harvester-system \
-    --create-namespace \
-    --values=values.yaml
+    --namespace=harvester-system
 ```
 
 ### Kickstart an upgrade
@@ -290,6 +288,120 @@ spec:
 EOF
 ```
 
+## Upgrade Workflow
+
+The upgrade lifecycle is driven by a phase-based state machine. An UpgradePlan CR progresses through a strict sequence of **phases** (tracked in `status.currentPhase`). Each phase has an active (`...ing`) and completed (`...ed`) value. Certain phases can transition directly to `Failed` on unrecoverable errors (see diagram below).
+
+### Overall Phase Progression
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initialize
+    Initialize --> ISODownload
+    ISODownload --> RepoCreate
+    RepoCreate --> MetadataPopulate
+    MetadataPopulate --> ImagePreload
+    ImagePreload --> ClusterUpgrade
+    ClusterUpgrade --> NodeUpgrade
+    NodeUpgrade --> ImageCleanup
+    ImageCleanup --> Succeeded
+
+    Initialize --> Failed
+    ISODownload --> Failed
+    ImagePreload --> Failed
+    ClusterUpgrade --> Failed
+    NodeUpgrade --> Failed
+    ImageCleanup --> Failed
+
+    Succeeded --> [*]
+    Failed --> [*]
+```
+
+The 8 phases are:
+
+- **Initialize** (`Initializing` / `Initialized`): Loads the Version snapshot (when `spec.image` is not set), records the previous Harvester version, detects single-node clusters, and then runs pre-flight checks (disk space projection against the kubelet image GC threshold and API server certificate expiration). Pre-flight failures are terminal.
+- **ISODownload** (`ISODownloading` / `ISODownloaded`): Downloads the upgrade ISO via a VirtualMachineImage, or adopts a pre-uploaded image specified in `spec.image`.
+- **RepoCreate** (`RepoCreating` / `RepoCreated`): Deploys an Nginx Deployment and Service to serve the ISO contents as an upgrade repository.
+- **MetadataPopulate** (`MetadataPopulating` / `MetadataPopulated`): Fetches release metadata from the upgrade repository and populates `status.releaseMetadata` (Harvester, HarvesterChart, OS, Kubernetes, Rancher, MonitoringChart, MinUpgradableVersion).
+- **ImagePreload** (`ImagePreloading` / `ImagePreloaded`): Before entering `ImagePreloading`, runs an upgrade eligibility check (skipped when `spec.force` is true); failure is terminal. Then preloads container images onto all nodes via a system-upgrade-controller Plan. Concurrency is configurable; set to a negative value to skip entirely.
+- **ClusterUpgrade** (`ClusterUpgrading` / `ClusterUpgraded`): Applies cluster-level upgrade manifests via a Kubernetes Job.
+- **NodeUpgrade** (`NodeUpgrading` / `NodeUpgraded`): Upgrades individual nodes. Multi-node clusters use Rancher V2 Provisioning drain hooks; single-node clusters use a direct Job-based upgrade.
+- **ImageCleanup** (`CleaningUp` / `CleanedUp`): Removes stale container images from all nodes via a system-upgrade-controller Plan.
+
+### Per-Node State Transitions
+
+During the ImagePreload, NodeUpgrade, and ImageCleanup phases, each node tracks its own state. The node states are grouped into ordinal tiers; a node can only move forward, never backward.
+
+**Multi-node cluster:**
+
+```mermaid
+stateDiagram-v2
+    [*] --> ImagePreloading
+
+    state "ImagePreload" as ip {
+        ImagePreloading --> ImagePreloaded
+        ImagePreloading --> ImagePreloadFailed
+    }
+
+    ImagePreloaded --> UpgradePaused : if in pauseNodes
+    ImagePreloaded --> PreDraining : otherwise
+
+    state "NodeUpgrade (multi-node)" as nu {
+        UpgradePaused --> PreDraining : removed from pauseNodes
+        PreDraining --> PreDrained
+        PreDraining --> PreDrainFailed
+        PreDrained --> PostDraining
+        PostDraining --> WaitingReboot
+        WaitingReboot --> PostDrained
+        WaitingReboot --> PostDrainFailed
+    }
+
+    PostDrained --> ImageCleaning
+
+    state "ImageCleanup" as ic {
+        ImageCleaning --> ImageCleaned
+        ImageCleaning --> ImageCleanFailed
+    }
+
+    ImageCleaned --> [*]
+```
+
+**Single-node cluster:**
+
+```mermaid
+stateDiagram-v2
+    [*] --> ImagePreloading
+
+    state "ImagePreload" as ip {
+        ImagePreloading --> ImagePreloaded
+        ImagePreloading --> ImagePreloadFailed
+    }
+
+    ImagePreloaded --> UpgradePaused : if in pauseNodes
+    ImagePreloaded --> SingleNodeUpgrading : otherwise
+
+    state "NodeUpgrade (single-node)" as nu {
+        UpgradePaused --> SingleNodeUpgrading : removed from pauseNodes
+        SingleNodeUpgrading --> SingleNodeUpgraded
+        SingleNodeUpgrading --> SingleNodeUpgradeFailed
+    }
+
+    SingleNodeUpgraded --> ImageCleaning
+
+    state "ImageCleanup" as ic {
+        ImageCleaning --> ImageCleaned
+        ImageCleaning --> ImageCleanFailed
+    }
+
+    ImageCleaned --> [*]
+```
+
+Key points about node state transitions:
+
+- **Forward-only**: Node states are organized into ordinal groups (0-9). A node's state can only advance to a higher group, never regress.
+- **Pause control**: Nodes listed in `spec.nodeUpgradeOption.pauseNodes` enter `UpgradePaused` after image preload completes, in both multi-node and single-node clusters. They resume when removed from the list.
+- **Failure states**: During NodeUpgrade, the states `PreDrainFailed`, `PostDrainFailed`, and `SingleNodeUpgradeFailed` cause the overall UpgradePlan to transition to `Failed`. During ImagePreload and ImageCleanup, the overall phase fails when the system-upgrade-controller Plan's job fails, which is detected independently of per-node states.
+
 ## Developer Guide
 
 After making changes, build and test the upgrade-toolkit binary and container image.
@@ -418,7 +530,7 @@ make helm-deploy IMG=starbops/harvester-upgrade-toolkit:dev
 
 [Create the Version and UpgradePlan CRs](#kickstart-an-upgrade) to kickstart the upgrade process.
 
-### Introduce new phases
+### [WIP] Introduce new phases
 
 The phase-based runner design facilitates well-organized phase ordering and allows for the easy integration of new phases.
 
