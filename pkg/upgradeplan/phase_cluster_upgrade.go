@@ -110,6 +110,9 @@ func constructJobForClusterUpgrade(upgradePlan *managementv1beta1.UpgradePlan, s
 									Value: upgradePlan.Name,
 								},
 							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser: ptr.To(int64(0)),
+							},
 						},
 					},
 					ServiceAccountName: serviceAccountName,
