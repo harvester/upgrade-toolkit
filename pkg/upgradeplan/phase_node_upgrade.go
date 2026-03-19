@@ -333,7 +333,7 @@ func (p *NodeUpgradePhase) dispatchRestoreVMJob(
 	}
 
 	jobName := name.SafeConcatName(upgradePlan.Name, NodeComponent, JobTypeRestoreVM, nodeName)
-	_, err := GetOrCreate(
+	_, created, err := GetOrCreate(
 		ctx, p.Client, p.Scheme,
 		types.NamespacedName{Namespace: HarvesterSystemNamespace, Name: jobName},
 		func() *batchv1.Job { return &batchv1.Job{} },
@@ -345,9 +345,11 @@ func (p *NodeUpgradePhase) dispatchRestoreVMJob(
 	if err != nil {
 		return fmt.Errorf("failed to create restore-vm Job for node %s: %w", nodeName, err)
 	}
-	log.Info("dispatched restore-vm Job", "node", nodeName, "job", jobName)
-	p.RecordEvent(upgradePlan, corev1.EventTypeNormal, "RestoreVMJobDispatched",
-		fmt.Sprintf("Dispatched restore-vm Job %s for node %s", jobName, nodeName))
+	if created {
+		log.Info("dispatched restore-vm Job", "node", nodeName, "job", jobName)
+		p.RecordEvent(upgradePlan, corev1.EventTypeNormal, "RestoreVMJobDispatched",
+			fmt.Sprintf("Dispatched restore-vm Job %s for node %s", jobName, nodeName))
+	}
 	return nil
 }
 
@@ -402,7 +404,7 @@ func (p *NodeUpgradePhase) ensureSingleNodeUpgradeJob(
 		Name:      jobName,
 	}
 
-	existing, err := GetOrCreate(
+	existing, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *batchv1.Job { return &batchv1.Job{} },
 		func() *batchv1.Job {

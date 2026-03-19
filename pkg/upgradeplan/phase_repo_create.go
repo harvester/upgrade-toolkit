@@ -101,12 +101,13 @@ func (p *RepoCreatePhase) getOrCreateDeploymentForRepo(
 		Namespace: harvesterSystemNamespace,
 		Name:      name.SafeConcatName(up.Name, repoComponent),
 	}
-	return GetOrCreate(
+	obj, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *appsv1.Deployment { return &appsv1.Deployment{} },
 		func() *appsv1.Deployment { return constructDeployment(up, replicas) },
 		up,
 	)
+	return obj, err
 }
 
 func (p *RepoCreatePhase) getOrCreateServiceForRepo(
@@ -117,12 +118,13 @@ func (p *RepoCreatePhase) getOrCreateServiceForRepo(
 		Namespace: harvesterSystemNamespace,
 		Name:      name.SafeConcatName(up.Name, repoComponent),
 	}
-	return GetOrCreate(
+	obj, _, err := GetOrCreate(
 		ctx, p.Client, p.Scheme, nn,
 		func() *corev1.Service { return &corev1.Service{} },
 		func() *corev1.Service { return constructService(up) },
 		up,
 	)
+	return obj, err
 }
 
 func (p *RepoCreatePhase) getDeploymentReplicaCount(ctx context.Context) (*int32, error) {
