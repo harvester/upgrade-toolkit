@@ -167,8 +167,10 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		r.EventRecorder.Event(upgradePlan.ObjectReference(), corev1.EventTypeWarning, "UpgradeFailed", msg)
 	}
 
-	if !reflect.DeepEqual(upgradePlan.Finalizers, upgradePlanCopy.Finalizers) {
+	if !reflect.DeepEqual(upgradePlan.Finalizers, upgradePlanCopy.Finalizers) ||
+		!reflect.DeepEqual(upgradePlan.Annotations, upgradePlanCopy.Annotations) {
 		upgradePlan.Finalizers = upgradePlanCopy.Finalizers
+		upgradePlan.Annotations = upgradePlanCopy.Annotations
 		if updateErr := r.Update(ctx, &upgradePlan); updateErr != nil {
 			return ctrl.Result{}, updateErr
 		}
