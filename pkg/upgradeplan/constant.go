@@ -16,7 +16,7 @@ const (
 
 	// Longhorn replica replenishment wait interval management
 	LonghornSettingReplicaReplenishment          = "replica-replenishment-wait-interval"
-	AnnotationReplicaReplenishmentOriginal       = AnnotationPrefix + "/replica-replenishment-wait-interval"
+	AnnotationReplicaReplenishmentOriginal       = AnnotationPrefix + "/" + LonghornSettingReplicaReplenishment
 	ExtendedReplicaReplenishmentWaitInterval int = 1800
 
 	// Descheduler addon management during node upgrade
