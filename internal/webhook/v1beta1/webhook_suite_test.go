@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	kubevirtv1 "kubevirt.io/api/core/v1"
@@ -83,11 +84,21 @@ var _ = BeforeSuite(func() {
 
 	// +kubebuilder:scaffold:scheme
 
+	// Use a minimal scheme for CRD installation to prevent
+	// modifyConversionWebhooks from iterating all registered types. Some
+	// third-party types (KubeVirt, Longhorn, Cluster API) have multiple GVK
+	// registrations that trigger an infinite loop in fmt.Errorf("%v") inside
+	// controller-runtime's objectGVKs function.
+	crdScheme := runtime.NewScheme()
+	Expect(managementv1beta1.AddToScheme(crdScheme)).To(Succeed())
+
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: false,
-
+		CRDInstallOptions: envtest.CRDInstallOptions{
+			Scheme: crdScheme,
+		},
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
 			Paths: []string{filepath.Join("..", "..", "..", "config", "webhook")},
 		},
