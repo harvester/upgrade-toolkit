@@ -352,8 +352,8 @@ stateDiagram-v2
         PreDraining --> PreDrainFailed
         PreDrained --> PostDraining
         PostDraining --> WaitingReboot
+        PostDraining --> PostDrainFailed
         WaitingReboot --> PostDrained
-        WaitingReboot --> PostDrainFailed
     }
 
     PostDrained --> ImageCleaning

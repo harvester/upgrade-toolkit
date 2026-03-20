@@ -90,6 +90,14 @@ func deleteUpgradePlan(ctx context.Context, name string) {
 	Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 }
 
+// pipelineFunc adapts a plain function to the pipelineExecutor interface,
+// allowing lightweight test doubles without a full Pipeline.
+type pipelineFunc func(ctx context.Context, up *managementv1beta1.UpgradePlan) (reconcile.Result, error)
+
+func (f pipelineFunc) Execute(ctx context.Context, up *managementv1beta1.UpgradePlan) (reconcile.Result, error) {
+	return f(ctx, up)
+}
+
 var _ = Describe("UpgradePlan Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -377,6 +385,49 @@ var _ = Describe("UpgradePlan Controller", func() {
 			}
 			requests := reconciler.mapVMImageToUpgradePlan(ctx, vmImage)
 			Expect(requests).To(BeEmpty())
+		})
+	})
+
+	Context("annotation persistence", func() {
+		const annotationPlanName = "annotation-test"
+
+		ctx := context.Background()
+
+		AfterEach(func() {
+			deleteUpgradePlan(ctx, annotationPlanName)
+		})
+
+		It("should persist annotations set by the pipeline to the API server", func() {
+			By("creating an UpgradePlan")
+			createUpgradePlan(ctx, annotationPlanName)
+
+			By("building a reconciler with a fake pipeline that sets an annotation")
+			fakeReconciler := &UpgradePlanReconciler{
+				Client:        k8sClient,
+				Scheme:        k8sClient.Scheme(),
+				Log:           logr.Discard(),
+				EventRecorder: record.NewFakeRecorder(100),
+				pipeline: pipelineFunc(func(_ context.Context, up *managementv1beta1.UpgradePlan) (reconcile.Result, error) {
+					if up.Annotations == nil {
+						up.Annotations = make(map[string]string)
+					}
+					up.Annotations["management.harvesterhci.io/test-annotation"] = "original-value"
+					return reconcile.Result{}, nil
+				}),
+			}
+
+			By("reconciling to trigger the pipeline")
+			_, err := fakeReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: annotationPlanName},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the annotation is persisted on the API server")
+			var updated managementv1beta1.UpgradePlan
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: annotationPlanName}, &updated)).To(Succeed())
+			Expect(updated.Annotations).To(HaveKeyWithValue(
+				"management.harvesterhci.io/test-annotation", "original-value",
+			))
 		})
 	})
 
