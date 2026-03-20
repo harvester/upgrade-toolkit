@@ -47,6 +47,13 @@ import (
 	"github.com/harvester/upgrade-toolkit/pkg/upgradeplan"
 )
 
+// pipelineExecutor abstracts the upgrade pipeline so that tests can inject
+// lightweight fakes that set annotations without requiring the full phase
+// machinery.
+type pipelineExecutor interface {
+	Execute(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) (ctrl.Result, error)
+}
+
 // UpgradePlanReconciler reconciles a UpgradePlan object
 type UpgradePlanReconciler struct {
 	client.Client
@@ -55,7 +62,7 @@ type UpgradePlanReconciler struct {
 	EventRecorder      record.EventRecorder
 	JobServiceAccount  string
 	PlanServiceAccount string
-	pipeline           *upgradeplan.Pipeline
+	pipeline           pipelineExecutor
 }
 
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradeplans,verbs=get;list;watch;create;update;patch;delete
@@ -172,6 +179,9 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		upgradePlan.Finalizers = upgradePlanCopy.Finalizers
 		upgradePlan.Annotations = upgradePlanCopy.Annotations
 		if updateErr := r.Update(ctx, &upgradePlan); updateErr != nil {
+			if apierrors.IsConflict(updateErr) {
+				return ctrl.Result{RequeueAfter: upgradeplan.RequeueAfterDuration}, nil
+			}
 			return ctrl.Result{}, updateErr
 		}
 	}
