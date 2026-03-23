@@ -136,6 +136,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg GIT_TREE_STATE=$(GIT_TREE_STATE) \
+		--no-cache-filter=addons_generator \
 		-f ./Dockerfile .
 
 .PHONY: docker-push
@@ -159,6 +160,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 		--build-arg VERSION=$(VERSION) \
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg GIT_TREE_STATE=$(GIT_TREE_STATE) \
+		--no-cache-filter=addons_generator \
 		-f ./Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm upgrade-toolkit-builder
 	rm ./Dockerfile.cross
