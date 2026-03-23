@@ -39,7 +39,7 @@ FROM registry.suse.com/bci/golang:1.25.7 AS addons_generator
 
 WORKDIR /workspace
 
-ENV HARVESTER_ADDONS_VERSION=main
+ARG HARVESTER_ADDONS_VERSION=main
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     git clone --branch ${HARVESTER_ADDONS_VERSION} --single-branch --depth 1 https://github.com/harvester/addons.git && \
