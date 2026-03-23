@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -ldflags "-X github.com/harvester/upgrade-toolkit/pkg/version.Version=${VERSION} -X github.com/harvester/upgrade-toolkit/pkg/version.GitCommit=${GIT_COMMIT} -X github.com/harvester/upgrade-toolkit/pkg/version.GitTreeState=${GIT_TREE_STATE}" \
     -o upgrade-toolkit ./cmd/
 
-FROM registry.opensuse.org/isv/rancher/harvester/os/v1.8/main/baseos:v1.8 AS baseos
+FROM registry.opensuse.org/isv/rancher/harvester/os/dev/main/baseos:latest AS baseos
 
 # Generate addon manifests
 FROM registry.suse.com/bci/golang:1.25.7 AS addons_generator
