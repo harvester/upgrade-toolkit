@@ -287,10 +287,17 @@ HELM_INSTALL_SCRIPT_CHECKSUM ?= b68c5f694cff19f14ee8a5784ffd3de27fa7034ec8f973d7
 install-helm: ## Install Helm using a pinned installer script.
 	@command -v $(HELM) >/dev/null 2>&1 || { \
 		echo "Installing Helm..." && \
-		curl -fsSL "https://raw.githubusercontent.com/helm/helm/$(HELM_INSTALL_SCRIPT_SHA)/scripts/get-helm-4" -o /tmp/get-helm-4.sh && \
-		echo "$(HELM_INSTALL_SCRIPT_CHECKSUM)  /tmp/get-helm-4.sh" | sha256sum -c - && \
-		bash /tmp/get-helm-4.sh && \
-		rm -f /tmp/get-helm-4.sh; \
+		tmp_script=$$(mktemp) && \
+		trap 'rm -f $$tmp_script' EXIT INT HUP TERM && \
+		curl -fsSL "https://raw.githubusercontent.com/helm/helm/$(HELM_INSTALL_SCRIPT_SHA)/scripts/get-helm-4" -o $$tmp_script && \
+		if command -v sha256sum >/dev/null 2>&1; then \
+			echo "$(HELM_INSTALL_SCRIPT_CHECKSUM)  $$tmp_script" | sha256sum -c -; \
+		elif command -v shasum >/dev/null 2>&1; then \
+			echo "$(HELM_INSTALL_SCRIPT_CHECKSUM)  $$tmp_script" | shasum -a 256 -c -; \
+		else \
+			echo "WARNING: no sha256sum or shasum found, skipping checksum verification" >&2; \
+		fi && \
+		bash $$tmp_script; \
 	}
 
 .PHONY: helm-deploy

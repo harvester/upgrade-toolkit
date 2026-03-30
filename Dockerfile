@@ -59,7 +59,7 @@ ENV WHARFIE_VERSION=v0.7.0
 # SHA256 checksums for verifying downloaded binaries (per architecture)
 # To update: download the new binary and run `sha256sum <binary>`.
 # kubectl: checksums available at https://dl.k8s.io/release/<ver>/bin/linux/<arch>/kubectl.sha256
-# virtctl: checksums available athttps://github.com/kubevirt/kubevirt/releases/tag/<ver>
+# virtctl: checksums available at https://github.com/kubevirt/kubevirt/releases/tag/<ver>
 # yq: checksums available at https://github.com/mikefarah/yq/releases/download/<ver>/checksums
 # wharfie: checksums at https://github.com/rancher/wharfie/releases/download/<ver>/sha256sum-<arch>.txt
 ENV KUBECTL_SHA256_AMD64=471d94e208a89be62eb776700fc8206cbef11116a8de2dc06fc0086b0015375b
