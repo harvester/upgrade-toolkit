@@ -217,7 +217,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.18.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.8.0
+GOLANGCI_LINT_VERSION ?= v2.11.4
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -280,11 +280,17 @@ HELM_EXTRA_ARGS ?=
 install-external-crds: ## Install external stub CRDs required by Kind-based CI tests.
 	kubectl apply -f hack/external-stub-crds.yaml
 
+HELM_INSTALL_SCRIPT_SHA ?= 5ae85868d45ca7bb9ac3ef7a10e0db54b8a8695c
+HELM_INSTALL_SCRIPT_CHECKSUM ?= b68c5f694cff19f14ee8a5784ffd3de27fa7034ec8f973d703fc6fb85496ced7
+
 .PHONY: install-helm
-install-helm: ## Install the latest version of Helm.
+install-helm: ## Install Helm using a pinned installer script.
 	@command -v $(HELM) >/dev/null 2>&1 || { \
 		echo "Installing Helm..." && \
-		curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash; \
+		curl -fsSL "https://raw.githubusercontent.com/helm/helm/$(HELM_INSTALL_SCRIPT_SHA)/scripts/get-helm-4" -o /tmp/get-helm-4.sh && \
+		echo "$(HELM_INSTALL_SCRIPT_CHECKSUM)  /tmp/get-helm-4.sh" | sha256sum -c - && \
+		bash /tmp/get-helm-4.sh && \
+		rm -f /tmp/get-helm-4.sh; \
 	}
 
 .PHONY: helm-deploy
