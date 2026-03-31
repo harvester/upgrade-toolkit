@@ -102,7 +102,7 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 		return nil, nil
 	}
 
-	var allErrs field.ErrorList
+	var allErrs field.ErrorList //nolint:prealloc // each validator returns variable-length errors
 
 	allErrs = append(allErrs, validateVersionExists(ctx, v.Client, upgradePlan)...)
 	allErrs = append(allErrs, validateNoConcurrentUpgrade(ctx, v.Client, upgradePlan.Name)...)
@@ -137,7 +137,7 @@ func (v *UpgradePlanCustomValidator) ValidateUpdate(ctx context.Context, _, newO
 	}
 	upgradeplanlog.Info("Validation for UpgradePlan upon update", "name", newUpgradePlan.GetName())
 
-	var allErrs field.ErrorList
+	var allErrs field.ErrorList //nolint:prealloc // each validator returns variable-length errors
 
 	allErrs = append(allErrs, validateNodeUpgradeOption(ctx, v.Client, newUpgradePlan)...)
 
