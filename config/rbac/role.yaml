@@ -178,6 +178,7 @@ rules:
 - apiGroups:
   - management.harvesterhci.io
   resources:
+  - upgradelogs
   - upgradeplans
   verbs:
   - create
@@ -190,12 +191,14 @@ rules:
 - apiGroups:
   - management.harvesterhci.io
   resources:
+  - upgradelogs/finalizers
   - upgradeplans/finalizers
   verbs:
   - update
 - apiGroups:
   - management.harvesterhci.io
   resources:
+  - upgradelogs/status
   - upgradeplans/status
   verbs:
   - get
