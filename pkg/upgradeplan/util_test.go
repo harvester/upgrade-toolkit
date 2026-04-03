@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -788,6 +789,89 @@ func TestGetUpgradeVersion(t *testing.T) {
 		}
 		assert.Equal(t, buildversion.Version, getUpgradeVersion(up))
 	})
+}
+
+func TestIsVirtualMachineImageFinished(t *testing.T) {
+	testCases := []struct {
+		name             string
+		conditions       []harvesterv1beta1.Condition
+		expectedFinished bool
+		expectedSuccess  bool
+	}{
+		{
+			name:             "no conditions",
+			conditions:       nil,
+			expectedFinished: false,
+			expectedSuccess:  false,
+		},
+		{
+			name: "ImageImported=True",
+			conditions: []harvesterv1beta1.Condition{
+				{
+					Type:   harvesterv1beta1.ImageImported,
+					Status: corev1.ConditionTrue,
+				},
+			},
+			expectedFinished: true,
+			expectedSuccess:  true,
+		},
+		{
+			name: "ImageImported=False",
+			conditions: []harvesterv1beta1.Condition{
+				{
+					Type:   harvesterv1beta1.ImageImported,
+					Status: corev1.ConditionFalse,
+				},
+			},
+			expectedFinished: true,
+			expectedSuccess:  false,
+		},
+		{
+			name: "ImageRetryLimitExceeded=True",
+			conditions: []harvesterv1beta1.Condition{
+				{
+					Type:   harvesterv1beta1.ImageRetryLimitExceeded,
+					Status: corev1.ConditionTrue,
+				},
+			},
+			expectedFinished: true,
+			expectedSuccess:  false,
+		},
+		{
+			name: "ImageRetryLimitExceeded=False",
+			conditions: []harvesterv1beta1.Condition{
+				{
+					Type:   harvesterv1beta1.ImageRetryLimitExceeded,
+					Status: corev1.ConditionFalse,
+				},
+			},
+			expectedFinished: false,
+			expectedSuccess:  false,
+		},
+		{
+			name: "unrelated condition only",
+			conditions: []harvesterv1beta1.Condition{
+				{
+					Type:   harvesterv1beta1.ImageInitialized,
+					Status: corev1.ConditionTrue,
+				},
+			},
+			expectedFinished: false,
+			expectedSuccess:  false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vmImage := &harvesterv1beta1.VirtualMachineImage{}
+			vmImage.Status.Conditions = tc.conditions
+
+			finished, success := IsVirtualMachineImageFinished(vmImage)
+
+			assert.Equal(t, tc.expectedFinished, finished)
+			assert.Equal(t, tc.expectedSuccess, success)
+		})
+	}
 }
 
 func TestGetUpgradeToolkitImage(t *testing.T) {
