@@ -292,8 +292,8 @@ func (vmImageStatusChangedPredicate) Update(e event.UpdateEvent) bool {
 		return false
 	}
 
-	oldFinished, oldSuccess := upgradeplan.IsVirtualMachineImageImported(oldVMI)
-	newFinished, newSuccess := upgradeplan.IsVirtualMachineImageImported(newVMI)
+	oldFinished, oldSuccess := upgradeplan.IsVirtualMachineImageFinished(oldVMI)
+	newFinished, newSuccess := upgradeplan.IsVirtualMachineImageFinished(newVMI)
 	return oldFinished != newFinished || oldSuccess != newSuccess
 }
 
