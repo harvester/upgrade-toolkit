@@ -273,7 +273,10 @@ func (r *UpgradePlanReconciler) mapVMImageToUpgradePlan(ctx context.Context, obj
 }
 
 // vmImageStatusChangedPredicate filters VirtualMachineImage events to only
-// those where the ImageImported condition changes.
+// those where the finished/success state changes, as determined by
+// IsVirtualMachineImageFinished. This covers transitions on the ImageImported
+// condition as well as the ImageRetryLimitExceeded condition becoming True
+// (retry-limit exhaustion is treated as a terminal failure).
 type vmImageStatusChangedPredicate struct {
 	predicate.Funcs
 }
