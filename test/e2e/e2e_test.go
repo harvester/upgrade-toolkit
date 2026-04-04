@@ -34,7 +34,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "upgrade-toolkit-system"
+const namespace = "harvester-system"
 
 // serviceAccountName created for the project
 const serviceAccountName = "upgrade-toolkit-controller-manager"
