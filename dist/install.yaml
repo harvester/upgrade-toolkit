@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: upgrade-toolkit
     control-plane: controller-manager
-  name: upgrade-toolkit-system
+  name: harvester-system
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -313,7 +313,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: upgrade-toolkit
   name: upgrade-toolkit-controller-manager
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -322,7 +322,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: upgrade-toolkit
   name: upgrade-toolkit-leader-election-role
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 rules:
 - apiGroups:
   - ""
@@ -676,7 +676,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: upgrade-toolkit
   name: upgrade-toolkit-leader-election-rolebinding
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -684,7 +684,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: upgrade-toolkit-controller-manager
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -700,7 +700,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: upgrade-toolkit-controller-manager
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -713,7 +713,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: upgrade-toolkit-controller-manager
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 ---
 apiVersion: v1
 kind: Service
@@ -723,7 +723,7 @@ metadata:
     app.kubernetes.io/name: upgrade-toolkit
     control-plane: controller-manager
   name: upgrade-toolkit-controller-manager-metrics-service
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 spec:
   ports:
   - name: https
@@ -741,7 +741,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: upgrade-toolkit
   name: upgrade-toolkit-webhook-service
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 spec:
   ports:
   - port: 443
@@ -759,7 +759,7 @@ metadata:
     app.kubernetes.io/name: upgrade-toolkit
     control-plane: controller-manager
   name: upgrade-toolkit-controller-manager
-  namespace: upgrade-toolkit-system
+  namespace: harvester-system
 spec:
   replicas: 1
   selector:
@@ -846,7 +846,7 @@ webhooks:
   clientConfig:
     service:
       name: upgrade-toolkit-webhook-service
-      namespace: upgrade-toolkit-system
+      namespace: harvester-system
       path: /mutate-management-harvesterhci-io-v1beta1-upgradeplan
   failurePolicy: Fail
   name: mupgradeplan-v1beta1.kb.io
@@ -872,7 +872,7 @@ webhooks:
   clientConfig:
     service:
       name: upgrade-toolkit-webhook-service
-      namespace: upgrade-toolkit-system
+      namespace: harvester-system
       path: /validate-management-harvesterhci-io-v1beta1-upgradeplan
   failurePolicy: Fail
   name: vupgradeplan-v1beta1.kb.io
