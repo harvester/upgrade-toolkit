@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-NAMESPACE="${NAMESPACE:-${1:-upgrade-toolkit-system}}"
+NAMESPACE="${NAMESPACE:-${1:-harvester-system}}"
 SERVICE_NAME="${SERVICE_NAME:-${2:-upgrade-toolkit-webhook-service}}"
 SECRET_NAME="${SECRET_NAME:-${3:-webhook-server-cert}}"
 
