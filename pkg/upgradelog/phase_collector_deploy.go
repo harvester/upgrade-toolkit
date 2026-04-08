@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	buildversion "github.com/harvester/upgrade-toolkit/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -264,7 +265,12 @@ func CollectorServiceEndpoint(upgradeLogName string) string {
 }
 
 func getCollectorImage(upgradeLog *managementv1beta1.UpgradeLog) string {
-	// For now, use the default image. In the future, this could be
-	// configurable via an annotation on the UpgradeLog.
-	return CollectorImage + ":latest"
+	repo := CollectorImage
+	if upgradeLog != nil {
+		if image, ok := upgradeLog.Annotations[AnnotationUpgradeToolkitImage]; ok && image != "" {
+			repo = image
+		}
+	}
+
+	return fmt.Sprintf("%s:%s", repo, buildversion.Version)
 }

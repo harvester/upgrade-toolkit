@@ -12,6 +12,9 @@ const (
 	// Label applied to collector resources owned by an UpgradeLog
 	UpgradeLogLabel = LabelPrefix + "/" + "upgrade-log"
 
+	// Annotation to override the upgrade-toolkit image (repo+name, not tag)
+	AnnotationUpgradeToolkitImage = AnnotationPrefix + "/" + "upgrade-toolkit-image"
+
 	// Collector component names
 	CollectorComponent  = "log-collector"
 	CollectorPortName   = "grpc"
