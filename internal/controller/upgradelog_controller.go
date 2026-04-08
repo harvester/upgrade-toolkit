@@ -18,46 +18,98 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+	"github.com/harvester/upgrade-toolkit/pkg/upgradelog"
 )
+
+// upgradeLogPipelineExecutor abstracts the upgrade log pipeline so that tests
+// can inject lightweight fakes.
+type upgradeLogPipelineExecutor interface {
+	Execute(ctx context.Context, upgradeLog *managementv1beta1.UpgradeLog) (ctrl.Result, error)
+}
 
 // UpgradeLogReconciler reconciles a UpgradeLog object
 type UpgradeLogReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	Log           logr.Logger
+	EventRecorder record.EventRecorder
+
+	pipeline upgradeLogPipelineExecutor
 }
 
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradelogs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradelogs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradelogs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the UpgradeLog object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
 func (r *UpgradeLogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := r.Log.WithValues("upgradeLog", req.Name)
+	ctx = logr.NewContext(ctx, log)
 
-	// TODO(user): your logic here
+	var upgradeLog managementv1beta1.UpgradeLog
+	if err := r.Get(ctx, req.NamespacedName, &upgradeLog); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("fetching UpgradeLog: %w", err)
+	}
 
-	return ctrl.Result{}, nil
+	upgradeLogCopy := upgradeLog.DeepCopy()
+
+	if r.pipeline == nil {
+		return ctrl.Result{}, fmt.Errorf("pipeline not initialized; call SetupWithManager first")
+	}
+
+	result, err := r.pipeline.Execute(ctx, upgradeLogCopy)
+
+	// Update status if changed
+	if statusErr := r.Status().Update(ctx, upgradeLogCopy); statusErr != nil {
+		if apierrors.IsConflict(statusErr) {
+			return ctrl.Result{RequeueAfter: upgradelog.RequeueAfterDuration}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("updating UpgradeLog status: %w", statusErr)
+	}
+
+	if err != nil {
+		log.Error(err, "pipeline execution error")
+	}
+
+	return result, err
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *UpgradeLogReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.EventRecorder == nil {
+		r.EventRecorder = mgr.GetEventRecorderFor("upgradelog-controller")
+	}
+
+	deps := &upgradelog.PhaseDeps{
+		Client:        r.Client,
+		Scheme:        r.Scheme,
+		Log:           r.Log,
+		EventRecorder: r.EventRecorder,
+	}
+	r.pipeline = upgradelog.NewPipeline(deps)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&managementv1beta1.UpgradeLog{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Named("upgradelog").
 		Complete(r)
 }

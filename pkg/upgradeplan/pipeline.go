@@ -35,6 +35,11 @@ func NewPipeline(deps *PhaseDeps) *Pipeline {
 		finalize: NewFinalizePhase(deps),
 		phases: []PhaseEntry{
 			{
+				NewLogPreparePhase(deps),
+				managementv1beta1.UpgradePlanPhaseLogPreparing,
+				managementv1beta1.UpgradePlanPhaseLogPrepared,
+			},
+			{
 				NewISODownloadPhase(deps),
 				managementv1beta1.UpgradePlanPhaseISODownloading,
 				managementv1beta1.UpgradePlanPhaseISODownloaded,

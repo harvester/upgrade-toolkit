@@ -84,6 +84,8 @@ var commands = []Command{
 	&VMLiveMigrateDetectorCommand{},
 	&VersionGuardCommand{},
 	&RestoreVMCommand{},
+	&LogCollectorCommand{},
+	&LogShipperCommand{},
 	&VersionCommand{},
 }
 
@@ -327,6 +329,7 @@ func (c *ManagerCommand) Run() error {
 	if err := (&controller.UpgradeLogReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Log:    logf.FromContext(ctx).WithName("upgrade-log-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "UpgradeLog")
 		os.Exit(1)

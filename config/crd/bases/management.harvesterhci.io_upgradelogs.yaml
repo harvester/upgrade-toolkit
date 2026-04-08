@@ -11,13 +11,26 @@ spec:
     kind: UpgradeLog
     listKind: UpgradeLogList
     plural: upgradelogs
+    shortNames:
+    - ul
+    - uls
     singular: upgradelog
-  scope: Namespaced
+  scope: Cluster
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.upgradePlanName
+      name: UPGRADE_PLAN
+      type: string
+    - jsonPath: .status.currentPhase
+      name: PHASE
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1beta1
     schema:
       openAPIV3Schema:
-        description: UpgradeLog is the Schema for the upgradelogs API
+        description: UpgradeLog is the Schema for the upgradelogs API.
         properties:
           apiVersion:
             description: |-
@@ -39,25 +52,20 @@ spec:
           spec:
             description: spec defines the desired state of UpgradeLog
             properties:
-              foo:
-                description: foo is an example field of UpgradeLog. Edit upgradelog_types.go
-                  to remove/update
+              upgradePlanName:
+                description: upgradePlanName references the UpgradePlan this log collection
+                  belongs to.
+                minLength: 1
                 type: string
+            required:
+            - upgradePlanName
             type: object
           status:
             description: status defines the observed state of UpgradeLog
             properties:
               conditions:
-                description: |-
-                  conditions represent the current state of the UpgradeLog resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                description: conditions represent the current state of the UpgradeLog
+                  resource.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -116,6 +124,45 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              currentPhase:
+                description: currentPhase tracks the UpgradeLog phase state machine.
+                type: string
+              storageUsage:
+                description: storageUsage is the current PVC usage in bytes.
+                format: int64
+                type: integer
+              trackedPods:
+                additionalProperties:
+                  description: PodLogStatus tracks log collection state for a single
+                    pod.
+                  properties:
+                    bytesCollected:
+                      description: bytesCollected is the total bytes written for this
+                        pod.
+                      format: int64
+                      type: integer
+                    component:
+                      description: component identifies the upgrade component (e.g.,
+                        cluster-upgrade, node-upgrade, image-preload).
+                      type: string
+                    logPath:
+                      description: logPath is the path within the PVC where logs are
+                        stored.
+                      type: string
+                    node:
+                      description: node is the node this pod ran on.
+                      type: string
+                    state:
+                      description: state is the current log collection state for this
+                        pod.
+                      type: string
+                  required:
+                  - component
+                  - state
+                  type: object
+                description: trackedPods maps pod names to their log collection state.
+                type: object
+                x-kubernetes-map-type: atomic
             type: object
         required:
         - spec

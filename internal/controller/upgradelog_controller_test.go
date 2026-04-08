@@ -19,10 +19,12 @@ package controller
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,35 +32,41 @@ import (
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
 
+// fakeUpgradeLogPipeline is a no-op pipeline for testing.
+type fakeUpgradeLogPipeline struct{}
+
+func (f *fakeUpgradeLogPipeline) Execute(_ context.Context, _ *managementv1beta1.UpgradeLog) (ctrl.Result, error) {
+	return ctrl.Result{}, nil
+}
+
 var _ = Describe("UpgradeLog Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "test-upgrade-log"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
-		upgradelog := &managementv1beta1.UpgradeLog{}
+		upgradelogObj := &managementv1beta1.UpgradeLog{}
 
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind UpgradeLog")
-			err := k8sClient.Get(ctx, typeNamespacedName, upgradelog)
+			err := k8sClient.Get(ctx, typeNamespacedName, upgradelogObj)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &managementv1beta1.UpgradeLog{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: managementv1beta1.UpgradeLogSpec{
+						UpgradePlanName: "test-upgrade-plan",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &managementv1beta1.UpgradeLog{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -66,19 +74,20 @@ var _ = Describe("UpgradeLog Controller", func() {
 			By("Cleanup the specific resource instance UpgradeLog")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &UpgradeLogReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Log:      logr.Discard(),
+				pipeline: &fakeUpgradeLogPipeline{},
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })
