@@ -185,6 +185,29 @@ func (p *CollectorDeployPhase) ensureDeployment(ctx context.Context, upgradeLog 
 								},
 							},
 						},
+						{
+							Name:    LogViewerContainer,
+							Image:   image,
+							Command: []string{"upgrade-toolkit"},
+							Args:    []string{"log-viewer", CollectorLogDir},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "logs",
+									MountPath: CollectorLogDir,
+									ReadOnly:  true,
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("5m"),
+									corev1.ResourceMemory: resource.MustParse("8Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("50m"),
+									corev1.ResourceMemory: resource.MustParse("32Mi"),
+								},
+							},
+						},
 					},
 					Volumes: []corev1.Volume{
 						{

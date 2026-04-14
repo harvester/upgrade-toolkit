@@ -45,6 +45,14 @@ func (p *LogPreparePhase) Run(ctx context.Context, upgradePlan *managementv1beta
 			},
 		}
 
+		// Custom image, if specified
+		if customImage, ok := upgradePlan.Annotations[AnnotationUpgradeToolkitImage]; ok {
+			if upgradeLog.Annotations == nil {
+				upgradeLog.Annotations = make(map[string]string)
+			}
+			upgradeLog.Annotations[AnnotationUpgradeToolkitImage] = customImage
+		}
+
 		// Set UpgradePlan as the owner so the UpgradeLog is cleaned up on deletion
 		if setErr := controllerutil.SetOwnerReference(upgradePlan, &upgradeLog, p.Scheme); setErr != nil {
 			return ctrl.Result{}, fmt.Errorf("setting owner reference: %w", setErr)

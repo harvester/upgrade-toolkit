@@ -86,6 +86,7 @@ var commands = []Command{
 	&RestoreVMCommand{},
 	&LogCollectorCommand{},
 	&LogShipperCommand{},
+	&LogViewerCommand{},
 	&VersionCommand{},
 }
 

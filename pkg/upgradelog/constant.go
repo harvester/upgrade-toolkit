@@ -24,6 +24,7 @@ const (
 	CollectorReplicas   = 1
 	CollectorImage      = "rancher/harvester-upgrade-toolkit"
 	LogShipperContainer = "log-shipper"
+	LogViewerContainer  = "log-viewer"
 
 	// Shared volume for log tee between main container and sidecar
 	SharedLogVolumeName = "upgrade-log-shared"
