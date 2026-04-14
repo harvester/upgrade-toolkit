@@ -26,12 +26,45 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func newTestScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, managementv1beta1.AddToScheme(scheme))
+	return scheme
+}
+
+func newTestUpgradeLog() *managementv1beta1.UpgradeLog {
+	return &managementv1beta1.UpgradeLog{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-upgrade",
+			UID:  types.UID("test-uid-12345"),
+		},
+		Spec: managementv1beta1.UpgradeLogSpec{
+			UpgradePlanName: "my-plan",
+		},
+	}
+}
+
+func assertOwnerReference(t *testing.T, refs []metav1.OwnerReference, ul *managementv1beta1.UpgradeLog) {
+	t.Helper()
+	require.Len(t, refs, 1)
+	ref := refs[0]
+	assert.Equal(t, "UpgradeLog", ref.Kind)
+	assert.Equal(t, ul.Name, ref.Name)
+	assert.Equal(t, ul.UID, ref.UID)
+	require.NotNil(t, ref.Controller)
+	assert.True(t, *ref.Controller)
+}
 
 func TestGetCollectorImage(t *testing.T) {
 	defaultImage := fmt.Sprintf("%s:%s", CollectorImage, buildversion.Version)
@@ -74,17 +107,8 @@ func TestGetCollectorImage(t *testing.T) {
 }
 
 func TestEnsureDeployment_LogViewerContainer(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, appsv1.AddToScheme(scheme))
-
-	ul := &managementv1beta1.UpgradeLog{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-upgrade",
-		},
-		Spec: managementv1beta1.UpgradeLogSpec{
-			UpgradePlanName: "my-plan",
-		},
-	}
+	scheme := newTestScheme(t)
+	ul := newTestUpgradeLog()
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	phase := &CollectorDeployPhase{
@@ -149,4 +173,58 @@ func TestEnsureDeployment_LogViewerContainer(t *testing.T) {
 		assert.Equal(t, resource.MustParse("50m"), vc.Resources.Limits["cpu"])
 		assert.Equal(t, resource.MustParse("32Mi"), vc.Resources.Limits["memory"])
 	})
+
+	t.Run("has correct owner reference", func(t *testing.T) {
+		assertOwnerReference(t, deploy.OwnerReferences, ul)
+	})
+}
+
+func TestEnsurePVC_OwnerReference(t *testing.T) {
+	scheme := newTestScheme(t)
+	ul := newTestUpgradeLog()
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	phase := &CollectorDeployPhase{
+		PhaseDeps: &PhaseDeps{
+			Client: fakeClient,
+			Scheme: scheme,
+		},
+	}
+
+	err := phase.ensurePVC(context.Background(), ul)
+	require.NoError(t, err)
+
+	var pvc corev1.PersistentVolumeClaim
+	err = fakeClient.Get(context.Background(), types.NamespacedName{
+		Name:      collectorPVCName(ul.Name),
+		Namespace: collectorNamespace,
+	}, &pvc)
+	require.NoError(t, err)
+
+	assertOwnerReference(t, pvc.OwnerReferences, ul)
+}
+
+func TestEnsureService_OwnerReference(t *testing.T) {
+	scheme := newTestScheme(t)
+	ul := newTestUpgradeLog()
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	phase := &CollectorDeployPhase{
+		PhaseDeps: &PhaseDeps{
+			Client: fakeClient,
+			Scheme: scheme,
+		},
+	}
+
+	err := phase.ensureService(context.Background(), ul)
+	require.NoError(t, err)
+
+	var svc corev1.Service
+	err = fakeClient.Get(context.Background(), types.NamespacedName{
+		Name:      collectorServiceName(ul.Name),
+		Namespace: collectorNamespace,
+	}, &svc)
+	require.NoError(t, err)
+
+	assertOwnerReference(t, svc.OwnerReferences, ul)
 }

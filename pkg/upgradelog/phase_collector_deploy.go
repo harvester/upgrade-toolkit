@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -104,6 +105,10 @@ func (p *CollectorDeployPhase) ensurePVC(ctx context.Context, upgradeLog *manage
 				},
 			},
 		},
+	}
+
+	if err := controllerutil.SetControllerReference(upgradeLog, &pvc, p.Scheme); err != nil {
+		return fmt.Errorf("setting controller reference on PVC: %w", err)
 	}
 
 	return p.Client.Create(ctx, &pvc)
@@ -224,6 +229,10 @@ func (p *CollectorDeployPhase) ensureDeployment(ctx context.Context, upgradeLog 
 		},
 	}
 
+	if err := controllerutil.SetControllerReference(upgradeLog, &deploy, p.Scheme); err != nil {
+		return fmt.Errorf("setting controller reference on Deployment: %w", err)
+	}
+
 	return p.Client.Create(ctx, &deploy)
 }
 
@@ -259,6 +268,10 @@ func (p *CollectorDeployPhase) ensureService(ctx context.Context, upgradeLog *ma
 				},
 			},
 		},
+	}
+
+	if err := controllerutil.SetControllerReference(upgradeLog, &svc, p.Scheme); err != nil {
+		return fmt.Errorf("setting controller reference on Service: %w", err)
 	}
 
 	return p.Client.Create(ctx, &svc)
