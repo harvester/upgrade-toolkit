@@ -38,9 +38,7 @@ func NewPipeline(deps *PhaseDeps) *Pipeline {
 			{
 				NewCollectPhase(deps),
 				managementv1beta1.UpgradeLogPhaseCollecting,
-				// Collecting has no completed phase; it transitions externally
-				// when the UpgradePlan reaches a terminal state.
-				managementv1beta1.UpgradeLogPhase(""),
+				managementv1beta1.UpgradeLogPhaseCollected,
 			},
 			{
 				NewStopPhase(deps),
@@ -143,14 +141,6 @@ func (p *Pipeline) enterPhase(
 	p.recordEvent(upgradeLog, corev1.EventTypeNormal, "PhaseTransition",
 		fmt.Sprintf("Entering phase %s", entry.Phase.Name()))
 	return ctrl.Result{RequeueAfter: RequeueAfterDuration}, nil
-}
-
-// TransitionToStop moves the UpgradeLog from Collecting to Stopping.
-// Called externally when the UpgradePlan reaches a terminal state.
-func (p *Pipeline) TransitionToStop(upgradeLog *managementv1beta1.UpgradeLog) {
-	if upgradeLog.Status.CurrentPhase == managementv1beta1.UpgradeLogPhaseCollecting {
-		upgradeLog.Status.CurrentPhase = managementv1beta1.UpgradeLogPhaseStopping
-	}
 }
 
 func (p *Pipeline) recordEvent(

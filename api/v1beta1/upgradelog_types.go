@@ -33,6 +33,7 @@ const (
 	UpgradeLogPhaseCollectorDeploying UpgradeLogPhase = "CollectorDeploying"
 	UpgradeLogPhaseCollectorDeployed  UpgradeLogPhase = "CollectorDeployed"
 	UpgradeLogPhaseCollecting         UpgradeLogPhase = "Collecting"
+	UpgradeLogPhaseCollected          UpgradeLogPhase = "Collected"
 	UpgradeLogPhaseStopping           UpgradeLogPhase = "Stopping"
 	UpgradeLogPhaseStopped            UpgradeLogPhase = "Stopped"
 	UpgradeLogPhaseFailed             UpgradeLogPhase = "Failed"

@@ -25,9 +25,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/upgradelog"
@@ -52,6 +58,7 @@ type UpgradeLogReconciler struct {
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradelogs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradelogs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradelogs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=management.harvesterhci.io,resources=upgradeplans,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -110,6 +117,38 @@ func (r *UpgradeLogReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
+		Watches(
+			&managementv1beta1.UpgradePlan{},
+			handler.EnqueueRequestsFromMapFunc(mapUpgradePlanToUpgradeLog),
+			builder.WithPredicates(upgradePlanTerminalPredicate{}),
+		).
 		Named("upgradelog").
 		Complete(r)
+}
+
+func mapUpgradePlanToUpgradeLog(_ context.Context, obj client.Object) []reconcile.Request {
+	return []reconcile.Request{
+		{NamespacedName: types.NamespacedName{Name: obj.GetName()}},
+	}
+}
+
+type upgradePlanTerminalPredicate struct {
+	predicate.Funcs
+}
+
+func (upgradePlanTerminalPredicate) Create(_ event.CreateEvent) bool   { return false }
+func (upgradePlanTerminalPredicate) Delete(_ event.DeleteEvent) bool   { return true }
+func (upgradePlanTerminalPredicate) Generic(_ event.GenericEvent) bool { return false }
+
+func (upgradePlanTerminalPredicate) Update(e event.UpdateEvent) bool {
+	newPlan, ok := e.ObjectNew.(*managementv1beta1.UpgradePlan)
+	if !ok {
+		return false
+	}
+	return isUpgradePlanTerminal(newPlan.Status.CurrentPhase)
+}
+
+func isUpgradePlanTerminal(phase managementv1beta1.UpgradePlanPhase) bool {
+	return phase == managementv1beta1.UpgradePlanPhaseSucceeded ||
+		phase == managementv1beta1.UpgradePlanPhaseFailed
 }
