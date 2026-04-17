@@ -727,19 +727,24 @@ func RemoveSkipManifests(
 	if upgradePlan.Status.SingleNode != nil {
 		return false, nil
 	}
-	if _, ok := upgradePlan.Annotations[AnnotationSkipManifestsApplied]; !ok {
-		return false, nil
-	}
-
 	nodeCount, err := countManagedNodes(ctx, c)
 	if err != nil {
 		return false, err
 	}
+	if nodeCount == 0 {
+		return false, nil
+	}
 
-	waiting, _, err := ensureSkipManifestPlanCompleted(
+	waiting, failed, err := ensureSkipManifestPlanCompleted(
 		ctx, c, scheme, upgradePlan, false, serviceAccountName, nodeCount,
 	)
-	return waiting, err
+	if err != nil {
+		return false, err
+	}
+	if failed {
+		return false, fmt.Errorf("skip-manifest remove plan job(s) failed")
+	}
+	return waiting, nil
 }
 
 // resolveImagePreloadConcurrency computes the effective SUC plan concurrency.

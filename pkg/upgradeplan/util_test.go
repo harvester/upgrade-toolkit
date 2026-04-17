@@ -1111,23 +1111,9 @@ func TestRemoveSkipManifests(t *testing.T) {
 		assert.False(t, waiting)
 	})
 
-	t.Run("skips when annotation not set", func(t *testing.T) {
+	t.Run("creates remove plan for multi-node cluster", func(t *testing.T) {
 		up := &managementv1beta1.UpgradePlan{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-upgrade"},
-		}
-		c := newSkipManifestFakeClient(up.DeepCopy())
-
-		waiting, err := RemoveSkipManifests(context.Background(), c, scheme, up, "system-upgrade-controller")
-		require.NoError(t, err)
-		assert.False(t, waiting)
-	})
-
-	t.Run("creates remove plan when annotation is set", func(t *testing.T) {
-		up := &managementv1beta1.UpgradePlan{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "test-upgrade",
-				Annotations: map[string]string{AnnotationSkipManifestsApplied: valueTrue},
-			},
 		}
 		node := newManagedNode("node-1")
 		c := newSkipManifestFakeClient(up.DeepCopy(), node)
@@ -1144,5 +1130,32 @@ func TestRemoveSkipManifests(t *testing.T) {
 		}, &plan)
 		require.NoError(t, err)
 		assert.Equal(t, SkipManifestsRemoveComponent, plan.Labels[HarvesterUpgradeComponentLabel])
+	})
+
+	t.Run("returns error when remove plan jobs fail", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-upgrade",
+				Annotations: map[string]string{
+					AnnotationSkipManifestsApplied: valueTrue,
+				},
+			},
+			Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
+		}
+		existingPlan := constructSkipManifestPlan(up, manifestsToSkip, false, 1, "system-upgrade-controller")
+		existingPlan.Status.Conditions = []genericcondition.GenericCondition{
+			{
+				Type:   string(upgradev1.PlanComplete),
+				Status: corev1.ConditionFalse,
+				Reason: "JobFailed",
+			},
+		}
+		node := newManagedNode("node-1")
+		c := newSkipManifestFakeClient(up.DeepCopy(), existingPlan, node)
+
+		waiting, err := RemoveSkipManifests(context.Background(), c, scheme, up, "system-upgrade-controller")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "skip-manifest remove plan job(s) failed")
+		assert.False(t, waiting)
 	})
 }
