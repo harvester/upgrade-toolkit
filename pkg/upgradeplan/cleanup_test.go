@@ -17,9 +17,11 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	kubevirtv1 "kubevirt.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -36,11 +38,30 @@ func newFakeClient(objs ...client.Object) client.Client {
 	_ = appsv1.AddToScheme(scheme)
 	_ = batchv1.AddToScheme(scheme)
 	_ = lhv1beta2.AddToScheme(scheme)
+	_ = kubevirtv1.AddToScheme(scheme)
 
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objs...).
 		Build()
+}
+
+// newTestManagedChart builds an unstructured ManagedChart suitable for seeding
+// the fake client. Using unstructured avoids a direct dependency on
+// github.com/rancher/rancher/pkg/apis/management.cattle.io/v3.
+func newTestManagedChart(namespace, name string, comparePatches []map[string]interface{}) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(managedChartGVK)
+	u.SetNamespace(namespace)
+	u.SetName(name)
+	if comparePatches != nil {
+		raw := make([]interface{}, 0, len(comparePatches))
+		for _, p := range comparePatches {
+			raw = append(raw, p)
+		}
+		_ = unstructured.SetNestedSlice(u.Object, raw, "spec", "diff", "comparePatches")
+	}
+	return u
 }
 
 func cleanupUpgradeLabels(component string) map[string]string {
@@ -490,4 +511,66 @@ func TestCleanupUpgradeResources_PreservesRestoreVMConfigMap(t *testing.T) {
 		Name:      cm.Name,
 	}, &corev1.ConfigMap{})
 	assert.NoError(t, err, "restore-vm ConfigMap should be preserved during cleanup")
+}
+
+func TestCleanupUpgradeResources_RestoresKubeVirtLiveMigrate(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	kv := &kubevirtv1.KubeVirt{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: harvesterSystemNamespace,
+			Name:      KubeVirtObjectName,
+		},
+		Spec: kubevirtv1.KubeVirtSpec{
+			WorkloadUpdateStrategy: kubevirtv1.KubeVirtWorkloadUpdateStrategy{
+				WorkloadUpdateMethods: []kubevirtv1.WorkloadUpdateMethod{},
+			},
+		},
+	}
+
+	mc := newTestManagedChart(FleetLocalNamespace, HarvesterManagedChartName, []map[string]interface{}{
+		{
+			"apiVersion":   "kubevirt.io/v1",
+			"kind":         "KubeVirt",
+			"name":         "kubevirt",
+			"jsonPointers": []interface{}{KubeVirtWorkloadUpdateMethodsJSONPointer},
+		},
+	})
+
+	c := newFakeClient(kv, mc)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	var restored kubevirtv1.KubeVirt
+	err = c.Get(context.Background(), types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      KubeVirtObjectName,
+	}, &restored)
+	require.NoError(t, err)
+	assert.Equal(t,
+		[]kubevirtv1.WorkloadUpdateMethod{kubevirtv1.WorkloadUpdateMethodLiveMigrate},
+		restored.Spec.WorkloadUpdateStrategy.WorkloadUpdateMethods,
+		"LiveMigrate should be restored during cleanup")
+
+	gotMC := &unstructured.Unstructured{}
+	gotMC.SetGroupVersionKind(managedChartGVK)
+	err = c.Get(context.Background(), types.NamespacedName{
+		Namespace: FleetLocalNamespace,
+		Name:      HarvesterManagedChartName,
+	}, gotMC)
+	require.NoError(t, err)
+
+	patches, found, err := unstructured.NestedSlice(gotMC.Object, "spec", "diff", "comparePatches")
+	require.NoError(t, err)
+	if found {
+		assert.Empty(t, patches, "kubevirt comparePatches entry should have been removed")
+	}
+}
+
+func TestCleanupUpgradeResources_SkipsKubeVirtRestoreWhenMissing(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	c := newFakeClient()
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err, "cleanup should not fail when KubeVirt and ManagedChart are absent")
 }

@@ -26,6 +26,7 @@ require (
 	github.com/longhorn/longhorn-manager v1.8.1
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.38.0
+	github.com/rancher/fleet/pkg/apis v0.12.3
 	github.com/rancher/rancher/pkg/apis v0.0.0
 	github.com/rancher/system-upgrade-controller/pkg/apis v0.0.0-20250903002123-a8d5a372d82c
 	github.com/rancher/wrangler/v3 v3.2.3-rc.3

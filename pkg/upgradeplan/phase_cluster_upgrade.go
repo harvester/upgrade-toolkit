@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 )
@@ -26,6 +27,44 @@ func NewClusterUpgradePhase(deps *PhaseDeps) *ClusterUpgradePhase {
 }
 
 func (p *ClusterUpgradePhase) Name() string { return "ClusterUpgrade" }
+
+// PreRun disables KubeVirt's LiveMigrate workload update method before the
+// cluster-upgrade job runs, so the KubeVirt operator upgrade does not trigger
+// a migration storm across every running VM. VMs migrate naturally during node
+// upgrades. CPU/memory hot-plugging is unavailable for the duration of the
+// upgrade and is restored during cleanup.
+func (p *ClusterUpgradePhase) PreRun(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	log := logr.FromContextOrDiscard(ctx)
+	return disableKubevirtWorkloadLiveMigrate(ctx, p.Client, log)
+}
+
+// disableKubevirtWorkloadLiveMigrate clears KubeVirt workloadUpdateMethods and
+// adds the matching comparePatch entry to the harvester ManagedChart so Fleet
+// does not revert the change as drift. Idempotent.
+func disableKubevirtWorkloadLiveMigrate(
+	ctx context.Context,
+	c client.Client,
+	log logr.Logger,
+) error {
+	kv, err := getKubeVirt(ctx, c)
+	if err != nil {
+		return err
+	}
+	if kv == nil {
+		log.V(1).Info("kubevirt object not found, skipping LiveMigrate disable")
+		return addKubevirtComparePatches(ctx, c, log)
+	}
+
+	if err := setKubeVirtWorkloadUpdateMethods(ctx, c, kv, []string{}); err != nil {
+		return fmt.Errorf("failed to clear kubevirt workloadUpdateMethods: %w", err)
+	}
+	log.Info("ensured KubeVirt workloadUpdateMethods is empty to disable LiveMigrate during upgrade")
+
+	return addKubevirtComparePatches(ctx, c, log)
+}
 
 func (p *ClusterUpgradePhase) Run(
 	ctx context.Context,
