@@ -650,6 +650,10 @@ func constructSkipManifestPlan(
 			{Name: "MANIFESTS", Value: strings.Join(manifests, " ")},
 			{Name: "SKIP_ACTION", Value: action},
 		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  ptr.To(int64(0)),
+		},
 	}
 	version := getUpgradeVersion(upgradePlan)
 

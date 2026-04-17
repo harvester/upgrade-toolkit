@@ -968,6 +968,11 @@ func TestConstructSkipManifestPlan(t *testing.T) {
 		}
 		assert.True(t, hasNotReady, "should have NodeNotReady toleration")
 		assert.True(t, hasNetworkUnavailable, "should have NetworkUnavailable toleration")
+
+		// Verify security context runs as root
+		require.NotNil(t, plan.Spec.Upgrade.SecurityContext)
+		assert.Equal(t, ptr.To(true), plan.Spec.Upgrade.SecurityContext.Privileged)
+		assert.Equal(t, ptr.To(int64(0)), plan.Spec.Upgrade.SecurityContext.RunAsUser)
 	})
 
 	t.Run("custom image annotation", func(t *testing.T) {
