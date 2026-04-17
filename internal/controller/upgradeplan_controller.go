@@ -86,7 +86,8 @@ type UpgradePlanReconciler struct {
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=schedulevmbackups,verbs=get;list;watch
 // +kubebuilder:rbac:groups=harvesterhci.io,resources=addons,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=kubevirt.io,resources=virtualmachineinstances,verbs=get;list;watch
-// +kubebuilder:rbac:groups=management.cattle.io,resources=managedcharts,verbs=get;list;watch
+// +kubebuilder:rbac:groups=kubevirt.io,resources=kubevirts,verbs=get;update;patch
+// +kubebuilder:rbac:groups=management.cattle.io,resources=managedcharts,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

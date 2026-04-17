@@ -41,6 +41,11 @@ const (
 	FleetLocalNamespace = "fleet-local"
 	LocalClusterName    = "local"
 
+	// KubeVirt workload update management
+	HarvesterManagedChartName                = "harvester"
+	KubeVirtObjectName                       = "kubevirt"
+	KubeVirtWorkloadUpdateMethodsJSONPointer = "/spec/workloadUpdateStrategy/workloadUpdateMethods"
+
 	// Annotations on machine-plan Secrets set by Rancher
 	RKE2PreDrainAnnotation  = "rke.cattle.io/pre-drain"
 	RKE2PostDrainAnnotation = "rke.cattle.io/post-drain"
