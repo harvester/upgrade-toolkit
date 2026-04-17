@@ -9,6 +9,7 @@ import (
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
 	rkev1 "github.com/rancher/rancher/pkg/apis/rke.cattle.io/v1"
+	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
@@ -32,6 +33,7 @@ func newNodeUpgradePhaseWithAll(objs ...runtime.Object) *NodeUpgradePhase {
 	_ = corev1.AddToScheme(scheme)
 	_ = lhv1beta2.AddToScheme(scheme)
 	_ = harvesterv1beta1.AddToScheme(scheme)
+	_ = upgradev1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
@@ -679,6 +681,7 @@ func TestPreRun_ExtendsLonghornReplicaReplenishment(t *testing.T) {
 		},
 	}
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{AnnotationSkipManifestsApplied: valueTrue}
 
 	phase := newNodeUpgradePhaseWithAll(setting, node, up)
 
@@ -709,6 +712,7 @@ func TestPreRun_LonghornReplenishment_Idempotent(t *testing.T) {
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
 	up.Annotations = map[string]string{
 		AnnotationReplicaReplenishmentOriginal: "300",
+		AnnotationSkipManifestsApplied:         valueTrue,
 	}
 
 	phase := newNodeUpgradePhaseWithAll(setting, node, up)
@@ -728,6 +732,7 @@ func TestPreRun_LonghornSettingNotFound_Skips(t *testing.T) {
 		},
 	}
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{AnnotationSkipManifestsApplied: valueTrue}
 
 	phase := newNodeUpgradePhaseWithAll(node, up)
 
@@ -762,6 +767,7 @@ func TestPreRun_DisablesDeschedulerAddon(t *testing.T) {
 		},
 	}
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{AnnotationSkipManifestsApplied: valueTrue}
 
 	phase := newNodeUpgradePhaseWithAll(addon, node, up)
 
@@ -790,6 +796,7 @@ func TestPreRun_DeschedulerAddon_AlreadyDisabled(t *testing.T) {
 		},
 	}
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{AnnotationSkipManifestsApplied: valueTrue}
 
 	phase := newNodeUpgradePhaseWithAll(addon, node, up)
 
@@ -809,6 +816,7 @@ func TestPreRun_DeschedulerAddon_NotFound(t *testing.T) {
 		},
 	}
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
+	up.Annotations = map[string]string{AnnotationSkipManifestsApplied: valueTrue}
 
 	phase := newNodeUpgradePhaseWithAll(node, up)
 
@@ -830,6 +838,7 @@ func TestPreRun_DeschedulerAddon_Idempotent(t *testing.T) {
 	up := newTestUpgradePlanWithMetadata("v1.31.0+rke2r1")
 	up.Annotations = map[string]string{
 		AnnotationDeschedulerWasEnabled: "true",
+		AnnotationSkipManifestsApplied:  valueTrue,
 	}
 
 	phase := newNodeUpgradePhaseWithAll(addon, node, up)

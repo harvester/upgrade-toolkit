@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
+	"github.com/rancher/wrangler/v3/pkg/genericcondition"
+	"github.com/rancher/wrangler/v3/pkg/name"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,7 +15,9 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -908,5 +913,254 @@ func TestGetUpgradeToolkitImage(t *testing.T) {
 			},
 		}
 		assert.Equal(t, "starbops/harvester-upgrade-toolkit", getUpgradeToolkitImage(up))
+	})
+}
+
+func TestConstructSkipManifestPlan(t *testing.T) {
+	up := &managementv1beta1.UpgradePlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-upgrade"},
+		Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
+		Status: managementv1beta1.UpgradePlanStatus{
+			ReleaseMetadata: &managementv1beta1.ReleaseMetadata{Harvester: "v1.5.0"},
+		},
+	}
+
+	t.Run("apply mode", func(t *testing.T) {
+		plan := constructSkipManifestPlan(up, []string{"rke2-multus.yaml"}, true, 3, "system-upgrade-controller")
+
+		assert.Equal(t, name.SafeConcatName("test-upgrade", SkipManifestsApplyComponent), plan.Name)
+		assert.Equal(t, cattleSystemNamespace, plan.Namespace)
+		assert.Equal(t, "test-upgrade", plan.Labels[HarvesterUpgradePlanLabel])
+		assert.Equal(t, SkipManifestsApplyComponent, plan.Labels[HarvesterUpgradeComponentLabel])
+		assert.Equal(t, int64(3), plan.Spec.Concurrency)
+		assert.Equal(t, "system-upgrade-controller", plan.Spec.ServiceAccountName)
+
+		// Image should use getUpgradeToolkitImage (supports annotation override)
+		assert.Equal(t, upgradeToolkitImage, plan.Spec.Upgrade.Image)
+		// Version should use getUpgradeVersion (supports spec.upgrade override)
+		assert.Equal(t, "v1.5.0", plan.Spec.Version)
+
+		require.NotNil(t, plan.Spec.Upgrade)
+		assert.Equal(t, []string{"sh", "-c", skipManifestScript}, plan.Spec.Upgrade.Command)
+
+		var manifestsEnv, actionEnv string
+		for _, env := range plan.Spec.Upgrade.Env {
+			switch env.Name {
+			case "MANIFESTS":
+				manifestsEnv = env.Value
+			case "SKIP_ACTION":
+				actionEnv = env.Value
+			}
+		}
+		assert.Equal(t, "rke2-multus.yaml", manifestsEnv)
+		assert.Equal(t, "apply", actionEnv)
+
+		// Verify extra tolerations
+		hasNotReady := false
+		hasNetworkUnavailable := false
+		for _, t := range plan.Spec.Tolerations {
+			if t.Key == corev1.TaintNodeNotReady {
+				hasNotReady = true
+			}
+			if t.Key == "node.kubernetes.io/network-unavailable" {
+				hasNetworkUnavailable = true
+			}
+		}
+		assert.True(t, hasNotReady, "should have NodeNotReady toleration")
+		assert.True(t, hasNetworkUnavailable, "should have NetworkUnavailable toleration")
+
+		// Verify security context runs as root
+		require.NotNil(t, plan.Spec.Upgrade.SecurityContext)
+		assert.Equal(t, ptr.To(true), plan.Spec.Upgrade.SecurityContext.Privileged)
+		assert.Equal(t, ptr.To(int64(0)), plan.Spec.Upgrade.SecurityContext.RunAsUser)
+	})
+
+	t.Run("custom image annotation", func(t *testing.T) {
+		customUp := up.DeepCopy()
+		customUp.Annotations = map[string]string{
+			AnnotationUpgradeToolkitImage: "registry.example.com/harvester-upgrade-toolkit",
+		}
+		plan := constructSkipManifestPlan(customUp, []string{"rke2-multus.yaml"}, true, 3, "system-upgrade-controller")
+		assert.Equal(t, "registry.example.com/harvester-upgrade-toolkit", plan.Spec.Upgrade.Image)
+	})
+
+	t.Run("remove mode", func(t *testing.T) {
+		plan := constructSkipManifestPlan(up, []string{"rke2-multus.yaml"}, false, 3, "system-upgrade-controller")
+
+		assert.Equal(t, name.SafeConcatName("test-upgrade", SkipManifestsRemoveComponent), plan.Name)
+		assert.Equal(t, SkipManifestsRemoveComponent, plan.Labels[HarvesterUpgradeComponentLabel])
+
+		var actionEnv string
+		for _, env := range plan.Spec.Upgrade.Env {
+			if env.Name == "SKIP_ACTION" {
+				actionEnv = env.Value
+			}
+		}
+		assert.Equal(t, "remove", actionEnv)
+	})
+}
+
+func newSkipManifestFakeClient(objs ...client.Object) client.Client {
+	scheme := runtime.NewScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	_ = upgradev1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		Build()
+}
+
+func TestEnsureSkipManifestPlanCompleted(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	_ = upgradev1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	up := &managementv1beta1.UpgradePlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-upgrade"},
+		Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
+	}
+
+	t.Run("creates plan and returns waiting", func(t *testing.T) {
+		c := newSkipManifestFakeClient(up.DeepCopy())
+
+		waiting, failed, err := ensureSkipManifestPlanCompleted(
+			context.Background(), c, scheme, up, true, "system-upgrade-controller", 3,
+		)
+		require.NoError(t, err)
+		assert.True(t, waiting)
+		assert.False(t, failed)
+
+		// Verify Plan was created
+		var plan upgradev1.Plan
+		err = c.Get(context.Background(), types.NamespacedName{
+			Namespace: cattleSystemNamespace,
+			Name:      name.SafeConcatName("test-upgrade", SkipManifestsApplyComponent),
+		}, &plan)
+		require.NoError(t, err)
+		assert.Equal(t, SkipManifestsApplyComponent, plan.Labels[HarvesterUpgradeComponentLabel])
+	})
+
+	t.Run("existing plan not finished returns waiting", func(t *testing.T) {
+		existingPlan := constructSkipManifestPlan(up, manifestsToSkip, true, 3, "system-upgrade-controller")
+		c := newSkipManifestFakeClient(up.DeepCopy(), existingPlan)
+
+		waiting, failed, err := ensureSkipManifestPlanCompleted(
+			context.Background(), c, scheme, up, true, "system-upgrade-controller", 3,
+		)
+		require.NoError(t, err)
+		assert.True(t, waiting)
+		assert.False(t, failed)
+	})
+
+	t.Run("finished plan returns done", func(t *testing.T) {
+		existingPlan := constructSkipManifestPlan(up, manifestsToSkip, true, 3, "system-upgrade-controller")
+		existingPlan.Status.Conditions = []genericcondition.GenericCondition{
+			{
+				Type:   string(upgradev1.PlanComplete),
+				Status: corev1.ConditionTrue,
+			},
+		}
+		c := newSkipManifestFakeClient(up.DeepCopy(), existingPlan)
+
+		waiting, failed, err := ensureSkipManifestPlanCompleted(
+			context.Background(), c, scheme, up, true, "system-upgrade-controller", 3,
+		)
+		require.NoError(t, err)
+		assert.False(t, waiting)
+		assert.False(t, failed)
+	})
+
+	t.Run("failed plan job returns failed", func(t *testing.T) {
+		existingPlan := constructSkipManifestPlan(up, manifestsToSkip, true, 3, "system-upgrade-controller")
+		existingPlan.Status.Conditions = []genericcondition.GenericCondition{
+			{
+				Type:   string(upgradev1.PlanComplete),
+				Status: corev1.ConditionFalse,
+				Reason: "JobFailed",
+			},
+		}
+		c := newSkipManifestFakeClient(up.DeepCopy(), existingPlan)
+
+		waiting, failed, err := ensureSkipManifestPlanCompleted(
+			context.Background(), c, scheme, up, true, "system-upgrade-controller", 3,
+		)
+		require.NoError(t, err)
+		assert.False(t, waiting)
+		assert.True(t, failed)
+	})
+}
+
+func TestRemoveSkipManifests(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = managementv1beta1.AddToScheme(scheme)
+	_ = upgradev1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	t.Run("skips for single-node", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "test-upgrade",
+				Annotations: map[string]string{AnnotationSkipManifestsApplied: valueTrue},
+			},
+			Status: managementv1beta1.UpgradePlanStatus{
+				SingleNode: ptr.To("node-1"),
+			},
+		}
+		c := newSkipManifestFakeClient(up.DeepCopy())
+
+		waiting, err := RemoveSkipManifests(context.Background(), c, scheme, up, "system-upgrade-controller")
+		require.NoError(t, err)
+		assert.False(t, waiting)
+	})
+
+	t.Run("creates remove plan for multi-node cluster", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-upgrade"},
+		}
+		node := newManagedNode("node-1")
+		c := newSkipManifestFakeClient(up.DeepCopy(), node)
+
+		waiting, err := RemoveSkipManifests(context.Background(), c, scheme, up, "system-upgrade-controller")
+		require.NoError(t, err)
+		assert.True(t, waiting)
+
+		// Verify remove Plan was created
+		var plan upgradev1.Plan
+		err = c.Get(context.Background(), types.NamespacedName{
+			Namespace: cattleSystemNamespace,
+			Name:      name.SafeConcatName("test-upgrade", SkipManifestsRemoveComponent),
+		}, &plan)
+		require.NoError(t, err)
+		assert.Equal(t, SkipManifestsRemoveComponent, plan.Labels[HarvesterUpgradeComponentLabel])
+	})
+
+	t.Run("returns error when remove plan jobs fail", func(t *testing.T) {
+		up := &managementv1beta1.UpgradePlan{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-upgrade",
+				Annotations: map[string]string{
+					AnnotationSkipManifestsApplied: valueTrue,
+				},
+			},
+			Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
+		}
+		existingPlan := constructSkipManifestPlan(up, manifestsToSkip, false, 1, "system-upgrade-controller")
+		existingPlan.Status.Conditions = []genericcondition.GenericCondition{
+			{
+				Type:   string(upgradev1.PlanComplete),
+				Status: corev1.ConditionFalse,
+				Reason: "JobFailed",
+			},
+		}
+		node := newManagedNode("node-1")
+		c := newSkipManifestFakeClient(up.DeepCopy(), existingPlan, node)
+
+		waiting, err := RemoveSkipManifests(context.Background(), c, scheme, up, "system-upgrade-controller")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "skip-manifest remove plan job(s) failed")
+		assert.False(t, waiting)
 	})
 }

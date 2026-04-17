@@ -70,6 +70,52 @@ func (p *NodeUpgradePhase) PreRun(
 		return err
 	}
 
+	if err := p.ensureSkipManifestsApplied(ctx, upgradePlan); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ensureSkipManifestsApplied creates an SUC Plan to place .skip files on all
+// managed nodes before multi-node upgrades begin. It returns an error when the
+// Plan has not completed yet, which blocks the phase from being entered.
+func (p *NodeUpgradePhase) ensureSkipManifestsApplied(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	if upgradePlan.Status.SingleNode != nil {
+		return nil
+	}
+
+	if _, ok := upgradePlan.Annotations[AnnotationSkipManifestsApplied]; ok {
+		return nil
+	}
+
+	nodeCount, err := countManagedNodes(ctx, p.Client)
+	if err != nil {
+		return err
+	}
+
+	waiting, failed, err := ensureSkipManifestPlanCompleted(
+		ctx, p.Client, p.Scheme, upgradePlan, true, p.PlanServiceAccount, nodeCount,
+	)
+	if err != nil {
+		return err
+	}
+	if failed {
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed,
+			"skip-manifest apply plan job(s) failed")
+		return nil
+	}
+	if waiting {
+		return fmt.Errorf("waiting for skip-manifest apply plan to complete")
+	}
+
+	if upgradePlan.Annotations == nil {
+		upgradePlan.Annotations = make(map[string]string)
+	}
+	upgradePlan.Annotations[AnnotationSkipManifestsApplied] = valueTrue
 	return nil
 }
 

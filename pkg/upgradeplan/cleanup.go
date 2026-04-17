@@ -44,6 +44,8 @@ func CleanupUpgradeResources(
 		{&corev1.Service{}, harvesterSystemNamespace, repoComponent, ""},
 		{&upgradev1.Plan{}, cattleSystemNamespace, PrepareComponent, ""},
 		{&upgradev1.Plan{}, cattleSystemNamespace, ImageCleanupComponent, ""},
+		{&upgradev1.Plan{}, cattleSystemNamespace, SkipManifestsApplyComponent, ""},
+		{&upgradev1.Plan{}, cattleSystemNamespace, SkipManifestsRemoveComponent, ""},
 		{&batchv1.Job{}, harvesterSystemNamespace, ClusterComponent, ""},
 		// Delete node-upgrade jobs by specific type so that restore-vm jobs
 		// (which may still be running for the last upgraded node) are preserved.
