@@ -97,6 +97,10 @@ func CleanupUpgradeResources(
 		return err
 	}
 
+	if err := enableKubevirtWorkloadLiveMigrate(ctx, c, log); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -186,6 +190,39 @@ func restoreLonghornReplicaReplenishmentInterval(
 	}
 
 	log.Info("restored Longhorn replica replenishment wait interval", "value", originalValue)
+	return nil
+}
+
+// enableKubevirtWorkloadLiveMigrate restores KubeVirt workloadUpdateMethods to
+// [LiveMigrate] and removes the matching comparePatch entry from the harvester
+// ManagedChart. Idempotent. Removal failures are logged and swallowed so a
+// stale comparePatch cannot block cleanup.
+func enableKubevirtWorkloadLiveMigrate(
+	ctx context.Context,
+	c client.Client,
+	log logr.Logger,
+) error {
+	kv, err := getKubeVirt(ctx, c)
+	if err != nil {
+		return err
+	}
+	if kv == nil {
+		log.V(1).Info("kubevirt object not found during cleanup, skipping LiveMigrate restore")
+		if err := removeKubevirtComparePatches(ctx, c, log); err != nil {
+			log.Error(err, "failed to remove kubevirt comparePatches from harvester managedchart")
+		}
+		return nil
+	}
+
+	if err := setKubeVirtWorkloadUpdateMethods(ctx, c, kv, []string{liveMigrateWorkloadUpdateMethod}); err != nil {
+		return fmt.Errorf("failed to restore kubevirt workloadUpdateMethods: %w", err)
+	}
+	log.Info("ensured KubeVirt workloadUpdateMethods is [LiveMigrate]")
+
+	if err := removeKubevirtComparePatches(ctx, c, log); err != nil {
+		log.Error(err, "failed to remove kubevirt comparePatches from harvester managedchart")
+	}
+
 	return nil
 }
 
