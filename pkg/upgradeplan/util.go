@@ -587,6 +587,170 @@ func ConstructRestoreVMJob(
 	}
 }
 
+// Skip-manifest Plan helpers
+
+var manifestsToSkip = []string{"rke2-multus.yaml"}
+
+const skipManifestScript = `#!/usr/bin/env sh
+set -e
+
+HOST_DIR="${HOST_DIR:-/host}"
+MANIFESTS_DIR="$HOST_DIR/var/lib/rancher/rke2/server/manifests"
+
+if [ -z "$MANIFESTS" ]; then
+  echo "No manifests specified, nothing to do"
+  exit 0
+fi
+
+if [ ! -d "$MANIFESTS_DIR" ]; then
+  echo "Manifests directory $MANIFESTS_DIR does not exist, skipping"
+  exit 0
+fi
+
+for manifest in $MANIFESTS; do
+  skip_file="$MANIFESTS_DIR/${manifest}.skip"
+  case "$SKIP_ACTION" in
+    apply)
+      echo "Creating skip file: $skip_file"
+      touch "$skip_file"
+      ;;
+    remove)
+      echo "Removing skip file: $skip_file"
+      rm -vf "$skip_file"
+      ;;
+    *)
+      echo "Unknown SKIP_ACTION: $SKIP_ACTION (must be 'apply' or 'remove')"
+      exit 1
+      ;;
+  esac
+done
+`
+
+func constructSkipManifestPlan(
+	upgradePlan *managementv1beta1.UpgradePlan,
+	manifests []string,
+	skip bool,
+	nodeCount int,
+	serviceAccountName string,
+) *upgradev1.Plan {
+	action, component := "remove", SkipManifestsRemoveComponent
+	if skip {
+		action, component = "apply", SkipManifestsApplyComponent
+	}
+
+	selector := &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			harvesterManagedLabel: valueTrue,
+		},
+	}
+	container := &upgradev1.ContainerSpec{
+		Image:   getUpgradeToolkitImage(upgradePlan),
+		Command: []string{"sh", "-c", skipManifestScript},
+		Env: []corev1.EnvVar{
+			{Name: "MANIFESTS", Value: strings.Join(manifests, " ")},
+			{Name: "SKIP_ACTION", Value: action},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  ptr.To(int64(0)),
+		},
+	}
+	version := getUpgradeVersion(upgradePlan)
+
+	plan := constructPlan(
+		upgradePlan.Name, component, nodeCount, selector,
+		false, nil, container, version, serviceAccountName,
+	)
+
+	plan.Spec.Tolerations = append(plan.Spec.Tolerations,
+		corev1.Toleration{
+			Key:      corev1.TaintNodeNotReady,
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+		corev1.Toleration{
+			Key:      "node.kubernetes.io/network-unavailable",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+	)
+
+	return plan
+}
+
+func ensureSkipManifestPlanCompleted(
+	ctx context.Context,
+	c client.Client,
+	scheme *runtime.Scheme,
+	upgradePlan *managementv1beta1.UpgradePlan,
+	skip bool,
+	serviceAccountName string,
+	nodeCount int,
+) (waiting bool, failed bool, err error) {
+	component := SkipManifestsRemoveComponent
+	if skip {
+		component = SkipManifestsApplyComponent
+	}
+	nn := types.NamespacedName{
+		Namespace: cattleSystemNamespace,
+		Name:      name.SafeConcatName(upgradePlan.Name, component),
+	}
+
+	plan, _, err := GetOrCreate(
+		ctx, c, scheme, nn,
+		func() *upgradev1.Plan { return &upgradev1.Plan{} },
+		func() *upgradev1.Plan {
+			return constructSkipManifestPlan(upgradePlan, manifestsToSkip, skip, nodeCount, serviceAccountName)
+		},
+		upgradePlan,
+	)
+	if err != nil {
+		return false, false, err
+	}
+
+	if isPlanFinished(plan) {
+		return false, false, nil
+	}
+	if isAnyPlanJobFailed(plan) {
+		return false, true, nil
+	}
+
+	return true, false, nil
+}
+
+// RemoveSkipManifests creates an SUC Plan to remove .skip files from all
+// managed nodes if skip manifests were previously applied. It returns
+// (true, nil) when the Plan exists but has not completed yet.
+func RemoveSkipManifests(
+	ctx context.Context,
+	c client.Client,
+	scheme *runtime.Scheme,
+	upgradePlan *managementv1beta1.UpgradePlan,
+	serviceAccountName string,
+) (bool, error) {
+	if upgradePlan.Status.SingleNode != nil {
+		return false, nil
+	}
+	nodeCount, err := countManagedNodes(ctx, c)
+	if err != nil {
+		return false, err
+	}
+	if nodeCount == 0 {
+		return false, nil
+	}
+
+	waiting, failed, err := ensureSkipManifestPlanCompleted(
+		ctx, c, scheme, upgradePlan, false, serviceAccountName, nodeCount,
+	)
+	if err != nil {
+		return false, err
+	}
+	if failed {
+		return false, fmt.Errorf("skip-manifest remove plan job(s) failed")
+	}
+	return waiting, nil
+}
+
 // resolveImagePreloadConcurrency computes the effective SUC plan concurrency.
 // It returns:
 // - (concurrency, false) for normal operation

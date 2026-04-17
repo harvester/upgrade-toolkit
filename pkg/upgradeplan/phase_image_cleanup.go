@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
@@ -178,6 +179,10 @@ func constructPlanForImageCleanup(
 				Name:  "IMAGES",
 				Value: strings.Join(imagesToPurge, " "),
 			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.To(true),
+			RunAsUser:  ptr.To(int64(0)),
 		},
 	}
 	version := getUpgradeVersion(upgradePlan)
