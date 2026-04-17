@@ -574,3 +574,40 @@ func TestCleanupUpgradeResources_SkipsKubeVirtRestoreWhenMissing(t *testing.T) {
 	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
 	require.NoError(t, err, "cleanup should not fail when KubeVirt and ManagedChart are absent")
 }
+
+func TestCleanupUpgradeResources_DeletesSkipManifestPlans(t *testing.T) {
+	up := newTestUpgradePlan()
+
+	applyPlan := &upgradev1.Plan{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s", testUpgradePlanName, SkipManifestsApplyComponent),
+			Namespace: cattleSystemNamespace,
+			Labels:    cleanupUpgradeLabels(SkipManifestsApplyComponent),
+		},
+	}
+	removePlan := &upgradev1.Plan{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s", testUpgradePlanName, SkipManifestsRemoveComponent),
+			Namespace: cattleSystemNamespace,
+			Labels:    cleanupUpgradeLabels(SkipManifestsRemoveComponent),
+		},
+	}
+
+	c := newFakeClient(applyPlan, removePlan)
+	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	err = c.Get(ctx, types.NamespacedName{
+		Namespace: cattleSystemNamespace,
+		Name:      applyPlan.Name,
+	}, &upgradev1.Plan{})
+	assert.Error(t, err, "skip-manifest apply Plan should be deleted")
+
+	err = c.Get(ctx, types.NamespacedName{
+		Namespace: cattleSystemNamespace,
+		Name:      removePlan.Name,
+	}, &upgradev1.Plan{})
+	assert.Error(t, err, "skip-manifest remove Plan should be deleted")
+}

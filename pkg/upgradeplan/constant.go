@@ -24,6 +24,9 @@ const (
 	DeschedulerAddonNamespace       = "kube-system"
 	AnnotationDeschedulerWasEnabled = AnnotationPrefix + "/descheduler-was-enabled"
 
+	// Skip-manifest tracking during node upgrade
+	AnnotationSkipManifestsApplied = AnnotationPrefix + "/skip-rke2-manifests-applied"
+
 	HarvesterUpgradeImageAnnotation = UpstreamAnnotationPrefix + "/" + "os-upgrade-image"
 
 	HarvesterUpgradePlanLabel = LabelPrefix + "/" + "upgrade-plan"
@@ -33,6 +36,8 @@ const (
 	ClusterComponent               = "cluster-upgrade"
 	NodeComponent                  = "node-upgrade"
 	ImageCleanupComponent          = "image-cleanup"
+	SkipManifestsApplyComponent    = "apply-skip-rke2-manifests"
+	SkipManifestsRemoveComponent   = "remove-skip-rke2-manifests"
 
 	// Label on image-preload Jobs set by SUC
 	SUCNodeLabel = SUCLabelPrefix + "/" + "node"

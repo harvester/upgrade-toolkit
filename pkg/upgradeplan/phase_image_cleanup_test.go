@@ -101,6 +101,11 @@ func TestConstructPlanForImageCleanup(t *testing.T) {
 	// No drain/cordon
 	assert.False(t, plan.Spec.Cordon)
 	assert.Nil(t, plan.Spec.Drain)
+
+	// Verify security context runs as root
+	require.NotNil(t, plan.Spec.Upgrade.SecurityContext)
+	assert.Equal(t, ptr.To(true), plan.Spec.Upgrade.SecurityContext.Privileged)
+	assert.Equal(t, ptr.To(int64(0)), plan.Spec.Upgrade.SecurityContext.RunAsUser)
 }
 
 func TestImageCleanupPhase_PlanAlreadyCompleted(t *testing.T) {

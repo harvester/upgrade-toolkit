@@ -2,6 +2,7 @@ package upgradeplan
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 
@@ -24,12 +25,29 @@ func NewFinalizePhase(deps *PhaseDeps) *FinalizePhase {
 
 func (p *FinalizePhase) Name() string { return "Finalize" }
 
-// PreRun performs resource cleanup
+// PreRun removes skip manifests (if applied) and then performs resource cleanup.
 func (p *FinalizePhase) PreRun(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
 ) error {
+	if err := p.ensureSkipManifestsRemoved(ctx, upgradePlan); err != nil {
+		return err
+	}
 	return CleanupUpgradeResources(ctx, p.Client, p.Log, upgradePlan)
+}
+
+func (p *FinalizePhase) ensureSkipManifestsRemoved(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) error {
+	waiting, err := RemoveSkipManifests(ctx, p.Client, p.Scheme, upgradePlan, p.PlanServiceAccount)
+	if err != nil {
+		return err
+	}
+	if waiting {
+		return fmt.Errorf("waiting for skip-manifest remove plan to complete")
+	}
+	return nil
 }
 
 // Run determines success/failure and marks the UpgradePlan as complete.

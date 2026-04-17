@@ -108,6 +108,15 @@ func (r *UpgradePlanReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !upgradePlan.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(&upgradePlan, upgradeplan.UpgradePlanFinalizer) {
 			log.V(1).Info("upgradeplan under deletion, running cleanup")
+
+			waiting, err := upgradeplan.RemoveSkipManifests(ctx, r.Client, r.Scheme, &upgradePlan, r.PlanServiceAccount)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if waiting {
+				return ctrl.Result{}, nil
+			}
+
 			if err := upgradeplan.CleanupUpgradeResources(ctx, r.Client, log, &upgradePlan); err != nil {
 				return ctrl.Result{}, err
 			}
