@@ -530,14 +530,196 @@ make helm-deploy IMG=starbops/harvester-upgrade-toolkit:dev
 
 [Create the Version and UpgradePlan CRs](#kickstart-an-upgrade) to kickstart the upgrade process.
 
-### [WIP] Introduce new phases
+### Introduce new phases
 
 The phase-based runner design facilitates well-organized phase ordering and allows for the easy integration of new phases.
 
 Let's say we want to introduce a new phase called `PreCheck`. There will be three places in the codebase that require us to modify:
 
-1. Update the `pkg/upgradeplan/pipeline.go` file
-2. Create the new `pkg/upgradeplan/phase_precheck.go` file
+1. Add phase constants to the `api/v1beta1/upgradeplan_types.go` file
+2. Update the `pkg/upgradeplan/pipeline.go` file
+3. Create the new `pkg/upgradeplan/phase_precheck.go` file
+
+#### Step 1: Add Phase Constants
+
+Open `api/v1beta1/upgradeplan_types.go` and add the active and completed phase constants to the existing `UpgradePlanPhase` const block, inserting them in the appropriate position among the other phases:
+
+```go
+const (
+	// ... existing constants ...
+	UpgradePlanPhasePreChecking    UpgradePlanPhase = "PreChecking"
+	UpgradePlanPhasePreChecked     UpgradePlanPhase = "PreChecked"
+	// ... existing constants ...
+)
+```
+
+The naming convention is:
+- **Active phase**: `{PhaseName}ing` (e.g., `PreChecking`)
+- **Completed phase**: `{PhaseName}ed` (e.g., `PreChecked`)
+
+#### Step 2: Register the Phase in the Pipeline
+
+Open `pkg/upgradeplan/pipeline.go` and add the new phase to the `phases` slice in `NewPipeline()`, at the desired position in the execution order. The position determines when the phase runs relative to others.
+
+```go
+func NewPipeline(deps *PhaseDeps) *Pipeline {
+	p := &Pipeline{
+		deps:     deps,
+		init:     NewInitPhase(deps),
+		finalize: NewFinalizePhase(deps),
+		phases: []PhaseEntry{
+			{
+				NewISODownloadPhase(deps),
+				managementv1beta1.UpgradePlanPhaseISODownloading,
+				managementv1beta1.UpgradePlanPhaseISODownloaded,
+			},
+			// Insert new phase entry here in the desired order:
+			{
+				NewPreCheckPhase(deps),
+				managementv1beta1.UpgradePlanPhasePreChecking,
+				managementv1beta1.UpgradePlanPhasePreChecked,
+			},
+			{
+				NewRepoCreatePhase(deps),
+				managementv1beta1.UpgradePlanPhaseRepoCreating,
+				managementv1beta1.UpgradePlanPhaseRepoCreated,
+			},
+			// ... rest of the phases ...
+		},
+	}
+	p.buildIndex()
+	return p
+}
+```
+
+#### Step 3: Implement the Phase
+
+Create `pkg/upgradeplan/phase_precheck.go` with the following structure:
+
+```go
+package upgradeplan
+
+import (
+	"context"
+
+	"github.com/go-logr/logr"
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
+)
+
+// PreCheckPhase performs pre-upgrade validation checks.
+type PreCheckPhase struct {
+	*PhaseDeps
+}
+
+// NewPreCheckPhase creates a new PreCheckPhase instance.
+func NewPreCheckPhase(deps *PhaseDeps) *PreCheckPhase {
+	return &PreCheckPhase{PhaseDeps: deps}
+}
+
+// Name returns the display name of this phase.
+func (p *PreCheckPhase) Name() string {
+	return "PreCheck"
+}
+
+// Run executes the main logic of this phase. It is called on every reconcile
+// loop while the phase is active. Implementations MUST be idempotent.
+func (p *PreCheckPhase) Run(
+	ctx context.Context,
+	upgradePlan *managementv1beta1.UpgradePlan,
+) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx)
+	log.V(1).Info("handle pre-check")
+
+	// Check if pre-check is already complete
+	if upgradePlan.Status.CurrentPhase == managementv1beta1.UpgradePlanPhasePreChecked {
+		// Perform any completion logic here
+		// Then transition to the next phase
+		updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhasePreChecked, "")
+		return ctrl.Result{}, nil
+	}
+
+	// Set the active (progressing) phase
+	updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhasePreChecking, "")
+
+	// Perform the pre-check logic here
+	// If validation fails, transition to Failed:
+	// updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "pre-check failed: reason")
+	// return ctrl.Result{}, nil
+
+	// If the phase is not yet complete, return to be called again on the next reconcile
+	// For fast feedback, the pipeline requeues after RequeueAfterDuration (1 second)
+	return ctrl.Result{}, nil
+}
+
+// PreRun is optional. It runs before Run() when entering the active phase.
+// Use it for setup logic that needs to run once per phase entry.
+func (p *PreCheckPhase) PreRun(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) error {
+	// Setup logic, e.g., create resources
+	return nil
+}
+
+// PostRun is optional. It runs after Run() signals completion, before advancing
+// to the next phase. Use it for teardown logic.
+func (p *PreCheckPhase) PostRun(ctx context.Context, upgradePlan *managementv1beta1.UpgradePlan) error {
+	// Teardown logic, e.g., clean up resources
+	return nil
+}
+```
+
+#### Understanding the Phase Lifecycle
+
+The phase-based runner uses three interfaces that you can implement:
+
+| Interface | Method | When It Runs |
+|---|---|---|
+| `Runnable` (required) | `Run(ctx, upgradePlan) (ctrl.Result, error)` | Called on every reconcile loop while the phase is active. Must be idempotent. |
+| `PreRunnable` (optional) | `PreRun(ctx, upgradePlan) error` | Called once when entering the active phase, before `Run()`. |
+| `PostRunnable` (optional) | `PostRun(ctx, upgradePlan) error` | Called once after `Run()` signals completion, before advancing to the next phase. |
+
+The pipeline processes phases as follows:
+
+1. **Phase entry**: When transitioning to a new phase, `PreRun` (if implemented) is called, the active phase is set in `status.currentPhase`, and a `PhaseTransition` event is emitted.
+2. **Phase execution**: `Run()` is called repeatedly until it transitions to the completed phase.
+3. **Phase completion**: `PostRun` (if implemented) is called, a `PhaseCompleted` event is emitted, and the pipeline advances to the next phase.
+
+To transition the phase to a different state, use the `updateProgressingPhase()` helper:
+
+```go
+// Transition to completed state
+updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhasePreChecked, "")
+
+// Transition to failed state (terminal)
+updateProgressingPhase(upgradePlan, managementv1beta1.UpgradePlanPhaseFailed, "description of failure")
+```
+
+#### Accessing Shared Dependencies
+
+All phases receive a `*PhaseDeps` struct with shared resources:
+
+```go
+type PhaseDeps struct {
+	Client             client.Client        // Kubernetes API client
+	Scheme             *runtime.Scheme      // Scheme for object encoding
+	Log                logr.Logger          // Logger
+	EventRecorder      record.EventRecorder // For emitting Kubernetes events
+	JobServiceAccount  string               // SA name for Jobs
+	PlanServiceAccount string               // SA name for SUC Plans
+}
+```
+
+#### Phase Ordering Rules
+
+Phases execute in the order they appear in the `phases` slice in `pipeline.go`. When a phase completes, the pipeline automatically advances to the next phase by incrementing the index. The pipeline supports:
+
+- **Direct progression**: Phases advance sequentially from one to the next.
+- **Terminal transitions**: Any phase can transition directly to `Failed` on unrecoverable errors.
+- **Completion**: After the last core phase completes, the pipeline enters `Succeeded`.
+
+#### Testing Your Phase
+
+Use the existing phase test files as a template. For example, `pkg/upgradeplan/phase_init_test.go` demonstrates how to test a phase using fake clients and mock expectations. Follow the same pattern when creating tests for your new phase.
 
 ## License
 
