@@ -22,7 +22,7 @@ require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/goccy/go-yaml v1.18.0
 	github.com/harvester/go-common v0.0.0-20260119194217-0f17176ce67e
-	github.com/harvester/harvester v1.8.0-rc6
+	github.com/harvester/harvester v1.8.0
 	github.com/longhorn/longhorn-manager v1.10.0
 	github.com/onsi/ginkgo/v2 v2.28.0
 	github.com/onsi/gomega v1.39.1
