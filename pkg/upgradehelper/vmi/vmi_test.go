@@ -76,6 +76,29 @@ func TestGetAllNonLiveMigratableVMINames(t *testing.T) {
 			expected: []string{"default/vm-pci"},
 		},
 		{
+			name: "multi-node, VM with empty (non-nil) host devices is migratable",
+			vmis: []*kubevirtv1.VirtualMachineInstance{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "vm-empty-hd", Namespace: "default"},
+					Spec: kubevirtv1.VirtualMachineInstanceSpec{
+						Domain: kubevirtv1.DomainSpec{
+							Devices: kubevirtv1.Devices{
+								HostDevices: []kubevirtv1.HostDevice{},
+							},
+						},
+					},
+					Status: kubevirtv1.VirtualMachineInstanceStatus{
+						NodeName: "node1",
+					},
+				},
+			},
+			nodes: []*corev1.Node{
+				{ObjectMeta: metav1.ObjectMeta{Name: "node1"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "node2"}},
+			},
+			expected: nil,
+		},
+		{
 			name: "multi-node, VM with no restrictions is migratable",
 			vmis: []*kubevirtv1.VirtualMachineInstance{
 				{

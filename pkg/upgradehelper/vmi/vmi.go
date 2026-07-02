@@ -44,8 +44,9 @@ func GetAllNonLiveMigratableVMINames(
 		}
 
 		// PCIe devices
-		if vmi.Spec.Domain.Devices.HostDevices != nil {
-			log.Info("VMI considered non-live migratable due to pcie or usb devices", "vmi", vmiNamespacedName)
+		// Starting from Harvester v1.8.0, vGPU is moved to HostDevices, so we only need to check HostDevices here
+		if len(vmi.Spec.Domain.Devices.HostDevices) != 0 {
+			log.Info("VMI considered non-live migratable due to pcie, usb or vgpu devices", "vmi", vmiNamespacedName)
 			nonLiveMigratableVMINames = append(nonLiveMigratableVMINames, vmiNamespacedName)
 			continue
 		}
