@@ -76,6 +76,9 @@ echo "Patching MutatingWebhookConfiguration ..."
 kubectl patch mutatingwebhookconfiguration upgrade-toolkit-mutating-webhook-configuration \
   --type='json' \
   -p="[{\"op\": \"add\", \"path\": \"/webhooks/0/clientConfig/caBundle\", \"value\": \"${CA_BUNDLE}\"}]"
+kubectl patch mutatingwebhookconfiguration upgrade-toolkit-mutating-webhook-configuration \
+  --type='json' \
+  -p="[{\"op\": \"add\", \"path\": \"/webhooks/1/clientConfig/caBundle\", \"value\": \"${CA_BUNDLE}\"}]"
 
 echo "Patching ValidatingWebhookConfiguration ..."
 kubectl patch validatingwebhookconfiguration upgrade-toolkit-validating-webhook-configuration \

@@ -48,6 +48,7 @@ import (
 
 	managementv1beta1 "github.com/harvester/upgrade-toolkit/api/v1beta1"
 	"github.com/harvester/upgrade-toolkit/internal/controller"
+	webhookv1 "github.com/harvester/upgrade-toolkit/internal/webhook/v1"
 	webhookv1beta1 "github.com/harvester/upgrade-toolkit/internal/webhook/v1beta1"
 	"github.com/harvester/upgrade-toolkit/pkg/preflight"
 	// +kubebuilder:scaffold:imports
@@ -83,6 +84,9 @@ var commands = []Command{
 	&VMLiveMigrateDetectorCommand{},
 	&VersionGuardCommand{},
 	&RestoreVMCommand{},
+	&LogCollectorCommand{},
+	&LogShipperCommand{},
+	&LogViewerCommand{},
 	&VersionCommand{},
 }
 
@@ -320,6 +324,21 @@ func (c *ManagerCommand) Run() error {
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err := webhookv1beta1.SetupUpgradePlanWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "Failed to create webhook", "webhook", "UpgradePlan")
+			os.Exit(1)
+		}
+	}
+	if err := (&controller.UpgradeLogReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Log:    logf.FromContext(ctx).WithName("upgrade-log-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "UpgradeLog")
+		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookv1.SetupPodWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "Pod")
 			os.Exit(1)
 		}
 	}

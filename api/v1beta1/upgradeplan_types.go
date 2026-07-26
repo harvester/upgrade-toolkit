@@ -101,6 +101,8 @@ const (
 	// Overall UpgradePlan phases
 	UpgradePlanPhaseInitializing       UpgradePlanPhase = "Initializing"
 	UpgradePlanPhaseInitialized        UpgradePlanPhase = "Initialized"
+	UpgradePlanPhaseLogPreparing       UpgradePlanPhase = "LogPreparing"
+	UpgradePlanPhaseLogPrepared        UpgradePlanPhase = "LogPrepared"
 	UpgradePlanPhaseISODownloading     UpgradePlanPhase = "ISODownloading"
 	UpgradePlanPhaseISODownloaded      UpgradePlanPhase = "ISODownloaded"
 	UpgradePlanPhaseRepoCreating       UpgradePlanPhase = "RepoCreating"

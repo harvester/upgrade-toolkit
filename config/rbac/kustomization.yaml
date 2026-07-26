@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the upgrade-toolkit itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- upgradelog_admin_role.yaml
+- upgradelog_editor_role.yaml
+- upgradelog_viewer_role.yaml
 - upgradeplan_admin_role.yaml
 - upgradeplan_editor_role.yaml
 - upgradeplan_viewer_role.yaml
