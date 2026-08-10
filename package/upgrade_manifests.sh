@@ -1381,6 +1381,32 @@ apply_extra_nonversion_manifests()
   shopt -u nullglob
 }
 
+# Since Rancher v2.15.0, tls-internal-cn-allowed-services is needed to be
+# configured properly to prevent TLS certificate flapping
+# https://github.com/harvester/harvester/issues/11338
+apply_tls_internal_cn_allowed_services_setting() {
+  if [[ ! "$UPGRADEPLAN_PREVIOUS_VERSION" =~ ^v1\.8[.-][a-zA-Z0-9.-]+$ ]]; then
+    echo "Skip set tls-internal-cn-allowed-services if you are not upgrade from v1.8.x, current version: $UPGRADEPLAN_PREVIOUS_VERSION"
+    return
+  fi
+
+  local manifest="$UPGRADE_TMP_DIR/tls-internal-cn-allowed-services-settings.yaml"
+  mkdir -p "$UPGRADE_TMP_DIR"
+  cat > "$manifest" <<EOF
+apiVersion: management.cattle.io/v3
+customized: false
+default: ""
+kind: Setting
+metadata:
+  name: tls-internal-cn-allowed-services
+source: ""
+value: "kube-system/ingress-expose,kube-system/rke2-traefik"
+EOF
+  echo "The content of ${manifest}"
+  cat ${manifest}
+  kubectl apply -f "${manifest}"
+}
+
 wait_repo
 detect_repo
 detect_upgrade
@@ -1388,6 +1414,7 @@ pre_upgrade_manifest
 preserve_overcommit_config
 pause_all_charts
 skip_restart_rancher_system_agent
+apply_tls_internal_cn_allowed_services_setting
 upgrade_rancher
 patch_local_cluster_details
 update_local_rke_state_secret
