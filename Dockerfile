@@ -1,5 +1,5 @@
 # Build the upgrade-toolkit binary
-FROM registry.suse.com/bci/golang:1.25.7 AS builder
+FROM registry.suse.com/bci/golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM registry.opensuse.org/isv/rancher/harvester/os/dev/main/baseos:latest AS baseos
 
 # Generate addon manifests
-FROM registry.suse.com/bci/golang:1.25.7 AS addons_generator
+FROM registry.suse.com/bci/golang:1.26 AS addons_generator
 
 WORKDIR /workspace
 
