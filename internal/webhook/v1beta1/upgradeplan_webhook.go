@@ -22,9 +22,11 @@ import (
 	"strings"
 
 	harvesterv1beta1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
+	"github.com/harvester/harvester/pkg/settings"
 	addonutil "github.com/harvester/harvester/pkg/util/addon"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	provisioningv1 "github.com/rancher/rancher/pkg/apis/provisioning.cattle.io/v1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -54,7 +56,7 @@ func SetupUpgradePlanWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&managementv1beta1.UpgradePlan{}).
 		WithValidator(&UpgradePlanCustomValidator{Client: mgr.GetClient()}).
-		WithDefaulter(&UpgradePlanCustomDefaulter{}).
+		WithDefaulter(&UpgradePlanCustomDefaulter{Client: mgr.GetClient()}).
 		Complete()
 }
 
@@ -65,15 +67,73 @@ func SetupUpgradePlanWebhookWithManager(mgr ctrl.Manager) error {
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
-type UpgradePlanCustomDefaulter struct{}
+type UpgradePlanCustomDefaulter struct {
+	Client client.Reader
+}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind UpgradePlan.
-func (d *UpgradePlanCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
+// Upon creation, unset spec fields are populated from the upgrade-config Harvester Setting.
+func (d *UpgradePlanCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
 	upgradePlan, ok := obj.(*managementv1beta1.UpgradePlan)
 	if !ok {
 		return fmt.Errorf("expected an UpgradePlan object but got %T", obj)
 	}
 	upgradeplanlog.Info("Defaulting for UpgradePlan", "name", upgradePlan.GetName())
+
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil || req.Operation != admissionv1.Create {
+		return nil
+	}
+
+	// A broken upgrade-config Setting must not block the upgrade; fall back
+	// to the built-in defaults instead.
+	if err := applyUpgradeConfig(ctx, d.Client, upgradePlan); err != nil {
+		upgradeplanlog.Error(err, "WARNING: ignoring the upgrade-config Setting, built-in defaults apply",
+			"name", upgradePlan.GetName())
+	}
+
+	return nil
+}
+
+// applyUpgradeConfig populates the unset spec fields of the UpgradePlan from
+// the upgrade-config Setting. Its value takes precedence over its default.
+func applyUpgradeConfig(ctx context.Context, c client.Reader, upgradePlan *managementv1beta1.UpgradePlan) error {
+	var setting harvesterv1beta1.Setting
+	if err := c.Get(ctx, client.ObjectKey{Name: upgradeplan.UpgradeConfigSettingName}, &setting); err != nil {
+		if apierrors.IsNotFound(err) {
+			upgradeplanlog.Info("upgrade-config Setting not found, skipping defaulting", "name", upgradePlan.GetName())
+			return nil
+		}
+		return fmt.Errorf("failed to get upgrade-config Setting: %w", err)
+	}
+
+	value := setting.Value
+	if value == "" {
+		value = setting.Default
+	}
+	if value == "" {
+		upgradeplanlog.Info("upgrade-config Setting is empty, skipping defaulting", "name", upgradePlan.GetName())
+		return nil
+	}
+
+	cfg, err := settings.DecodeConfig[settings.UpgradeConfig](value)
+	if err != nil {
+		return err
+	}
+
+	var nodeList corev1.NodeList
+	if err := c.List(ctx, &nodeList); err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+	nodeNames := make([]string, 0, len(nodeList.Items))
+	for _, node := range nodeList.Items {
+		nodeNames = append(nodeNames, node.Name)
+	}
+
+	if err := upgradeplan.ApplyUpgradeConfig(&upgradePlan.Spec, cfg, nodeNames); err != nil {
+		return err
+	}
+	upgradeplanlog.Info("Applied the upgrade-config Setting", "name", upgradePlan.GetName(), "spec", upgradePlan.Spec)
 
 	return nil
 }
