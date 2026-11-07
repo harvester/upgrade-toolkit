@@ -124,6 +124,32 @@ EOF
 
 For all the available options, see the output of `kubectl explain upgradeplans.spec`.
 
+#### Cluster-wide defaults via the `upgrade-config` Setting
+
+Options left unset in an UpgradePlan are populated from the `upgrade-config` Harvester Setting when the UpgradePlan is created. The resolved values are written into the UpgradePlan's spec, so later changes to the Setting do not affect existing UpgradePlans.
+
+- Explicitly specified spec fields always take precedence over the Setting.
+- The Setting's `value` takes precedence over its `default`.
+- A missing, malformed, or invalid Setting is logged and ignored; built-in defaults apply.
+- Defaulting still applies when the `management.harvesterhci.io/skip-check` annotation is set.
+
+| `upgrade-config` field | UpgradePlan field | Resolved value |
+|---|---|---|
+| `imagePreloadOption.strategy.type: skip` | `spec.imagePreloadOption.concurrency` | `-1` (skip image preloading) |
+| `imagePreloadOption.strategy.type: sequential` | `spec.imagePreloadOption.concurrency` | `1` |
+| `imagePreloadOption.strategy.type: parallel` | `spec.imagePreloadOption.concurrency` | `imagePreloadOption.strategy.concurrency` (`0` means all nodes) |
+| `nodeUpgradeOption.strategy.mode: manual` | `spec.nodeUpgradeOption.pauseNodes` | `nodeUpgradeOption.strategy.pauseNodes` limited to existing nodes, or all nodes if empty |
+| `nodeUpgradeOption.strategy.mode: auto` | `spec.nodeUpgradeOption` | Left unset (no nodes paused) |
+| `restoreVM` | `spec.restoreVM` | Same value |
+| `logReadyTimeout` | - | Ignored |
+
+For example, to skip image preloading, pause every node before it starts upgrading, and restore VMs by default:
+
+```bash
+kubectl patch settings.harvesterhci.io upgrade-config --type merge \
+  -p '{"value":"{\"imagePreloadOption\":{\"strategy\":{\"type\":\"skip\"}},\"nodeUpgradeOption\":{\"strategy\":{\"mode\":\"manual\"}},\"restoreVM\":true}"}'
+```
+
 A successfully executed UpgradePlan looks like the following:
 
 ```yaml
