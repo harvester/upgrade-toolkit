@@ -76,8 +76,8 @@ const (
 	// Annotation to allow deletion of a progressing UpgradePlan (two-step safeguard)
 	AnnotationAllowDeletion = AnnotationPrefix + "/" + "allow-deletion"
 
-	// Annotation to skip webhook validation entirely
-	AnnotationSkipWebhook = AnnotationPrefix + "/" + "skip-webhook"
+	// Annotation to skip validating webhook checks entirely (mutating webhooks still apply)
+	AnnotationSkipCheck = AnnotationPrefix + "/" + "skip-check"
 
 	// Annotation to skip single-replica detached volume check
 	AnnotationSkipSingleReplicaDetachedVol = AnnotationPrefix + "/" + "skip-single-replica-detached-vol"

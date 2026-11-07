@@ -290,9 +290,9 @@ var _ = Describe("UpgradePlan Webhook", func() {
 		})
 	})
 
-	Context("skipWebhook annotation", func() {
-		It("should bypass all validation when skipWebhook annotation is set", func() {
-			// No Version CR, no cluster - would normally fail, but skipWebhook bypasses all checks
+	Context("skip-check annotation", func() {
+		It("should bypass all validation when skip-check annotation is set", func() {
+			// No Version CR, no cluster - would normally fail, but skip-check bypasses all checks
 			validator := UpgradePlanCustomValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
 			}
@@ -300,7 +300,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "upgrade-1",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						"management.harvesterhci.io/skip-check": "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},

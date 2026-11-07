@@ -265,7 +265,7 @@ The following annotations can be set on an UpgradePlan CR to skip or override sp
 
 | Annotation | Value | Scope | Description |
 |---|---|---|---|
-| `management.harvesterhci.io/skip-webhook` | `"true"` | Webhook (create) | Bypasses all create-time validation checks |
+| `management.harvesterhci.io/skip-check` | `"true"` | Webhook (create) | Bypasses all create-time validation checks (mutating defaults, e.g. from the `upgrade-config` Setting, still apply) |
 | `management.harvesterhci.io/skip-single-replica-detached-vol` | `"true"` | Webhook (create) | Skips the detached single-replica Longhorn volume check (active single-replica volumes are still blocked) |
 | `management.harvesterhci.io/allow-deletion` | `"true"` | Webhook (delete) | Allows deletion of a progressing UpgradePlan (hard-blocked during `ClusterUpgrading` and `NodeUpgrading` phases regardless) |
 | `management.harvesterhci.io/skip-garbage-collection-threshold-check` | `"true"` | Controller (init phase) | Skips the kubelet disk-space / image GC threshold pre-flight check |

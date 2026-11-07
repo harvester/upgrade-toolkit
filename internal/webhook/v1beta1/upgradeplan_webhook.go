@@ -97,8 +97,8 @@ func (v *UpgradePlanCustomValidator) ValidateCreate(ctx context.Context, obj run
 	}
 	upgradeplanlog.Info("Validation for UpgradePlan upon creation", "name", upgradePlan.GetName())
 
-	// Skip all validation if the skipWebhook annotation is set
-	if upgradePlan.Annotations[upgradeplan.AnnotationSkipWebhook] == annotationValueTrue {
+	// Skip all validation if the skip-check annotation is set
+	if upgradePlan.Annotations[upgradeplan.AnnotationSkipCheck] == annotationValueTrue {
 		return nil, nil
 	}
 
