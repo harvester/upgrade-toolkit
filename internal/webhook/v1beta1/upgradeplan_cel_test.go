@@ -38,7 +38,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-version-immutable",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
@@ -63,7 +63,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-upgrade-immutable",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
@@ -87,7 +87,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-upgrade-nil-to-value",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
@@ -110,7 +110,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-upgrade-value-to-nil",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
@@ -136,7 +136,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-empty-version",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
@@ -155,7 +155,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-empty-pausenode",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{
@@ -177,7 +177,7 @@ var _ = Describe("UpgradePlan CEL Validation", Ordered, func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "cel-test-mutable-force",
 					Annotations: map[string]string{
-						upgradeplan.AnnotationSkipWebhook: "true",
+						upgradeplan.AnnotationSkipCheck: "true",
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{

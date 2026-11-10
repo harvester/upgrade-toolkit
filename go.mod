@@ -99,6 +99,7 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/rancher/lasso v0.2.3 // indirect
 	github.com/rancher/wrangler v1.1.2 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
