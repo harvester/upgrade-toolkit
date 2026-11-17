@@ -152,8 +152,6 @@ docker-push: ## Push docker image with the manager.
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' ./Dockerfile > ./Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name upgrade-toolkit-builder
 	$(CONTAINER_TOOL) buildx use upgrade-toolkit-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} \
@@ -161,9 +159,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
 		--build-arg GIT_TREE_STATE=$(GIT_TREE_STATE) \
 		--no-cache-filter=addons_generator \
-		-f ./Dockerfile.cross .
+		-f ./Dockerfile .
 	- $(CONTAINER_TOOL) buildx rm upgrade-toolkit-builder
-	rm ./Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
