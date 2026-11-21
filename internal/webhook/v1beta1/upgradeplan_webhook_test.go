@@ -953,7 +953,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should reject active single-replica volumes", func() {
+		It("should reject active single-replica volumes on multi-node clusters", func() {
 			version := &harvesterv1beta1.Version{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
 				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
@@ -962,8 +962,10 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
 				Status:     provisioningv1.ClusterStatus{Ready: true},
 			}
-			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
-			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m2"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine1 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			machine2 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m2"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n2"}}}
 			vol := &lhv1beta2.Volume{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "longhorn-system", Name: "vol-1"},
 				Spec:       lhv1beta2.VolumeSpec{NumberOfReplicas: 1},
@@ -977,7 +979,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				},
 			}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, vol).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2, machine1, machine2, vol).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
@@ -990,7 +992,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 			Expect(err.Error()).To(ContainSubstring("default/my-pvc"))
 		})
 
-		It("should reject detached single-replica volumes by default", func() {
+		It("should reject detached single-replica volumes by default on multi-node clusters", func() {
 			version := &harvesterv1beta1.Version{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
 				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
@@ -999,8 +1001,10 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
 				Status:     provisioningv1.ClusterStatus{Ready: true},
 			}
-			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
-			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m2"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine1 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			machine2 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m2"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n2"}}}
 			vol := &lhv1beta2.Volume{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "longhorn-system", Name: "vol-1"},
 				Spec:       lhv1beta2.VolumeSpec{NumberOfReplicas: 1},
@@ -1014,7 +1018,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				},
 			}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, vol).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2, machine1, machine2, vol).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
@@ -1036,8 +1040,10 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
 				Status:     provisioningv1.ClusterStatus{Ready: true},
 			}
-			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
-			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			node1 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			node2 := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n2", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m2"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine1 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			machine2 := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m2"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n2"}}}
 			vol := &lhv1beta2.Volume{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "longhorn-system", Name: "vol-1"},
 				Spec:       lhv1beta2.VolumeSpec{NumberOfReplicas: 1},
@@ -1051,7 +1057,7 @@ var _ = Describe("UpgradePlan Webhook", func() {
 				},
 			}
 			validator := UpgradePlanCustomValidator{
-				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, vol).Build(),
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node1, node2, machine1, machine2, vol).Build(),
 			}
 			obj := &managementv1beta1.UpgradePlan{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1061,6 +1067,53 @@ var _ = Describe("UpgradePlan Webhook", func() {
 					},
 				},
 				Spec: managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
+			}
+
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should skip single-replica volume checks on single-node clusters", func() {
+			version := &harvesterv1beta1.Version{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "harvester-system", Name: "v1.4.0"},
+				Spec:       harvesterv1beta1.VersionSpec{ISOURL: "https://example.com/iso"},
+			}
+			cluster := &provisioningv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "local"},
+				Status:     provisioningv1.ClusterStatus{Ready: true},
+			}
+			node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1", Labels: map[string]string{"harvesterhci.io/managed": "true"}, Annotations: map[string]string{"cluster.x-k8s.io/machine": "m1"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}
+			machine := &clusterv1.Machine{ObjectMeta: metav1.ObjectMeta{Namespace: "fleet-local", Name: "m1"}, Status: clusterv1.MachineStatus{Phase: string(clusterv1.MachinePhaseRunning), NodeRef: &corev1.ObjectReference{Name: "n1"}}}
+			activeVol := &lhv1beta2.Volume{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "longhorn-system", Name: "vol-1"},
+				Spec:       lhv1beta2.VolumeSpec{NumberOfReplicas: 1},
+				Status: lhv1beta2.VolumeStatus{
+					State:      lhv1beta2.VolumeStateAttached,
+					Robustness: lhv1beta2.VolumeRobustnessHealthy,
+					KubernetesStatus: lhv1beta2.KubernetesStatus{
+						Namespace: "default",
+						PVCName:   "my-pvc",
+					},
+				},
+			}
+			detachedVol := &lhv1beta2.Volume{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "longhorn-system", Name: "vol-2"},
+				Spec:       lhv1beta2.VolumeSpec{NumberOfReplicas: 1},
+				Status: lhv1beta2.VolumeStatus{
+					State:      lhv1beta2.VolumeStateDetached,
+					Robustness: lhv1beta2.VolumeRobustnessUnknown,
+					KubernetesStatus: lhv1beta2.KubernetesStatus{
+						Namespace: "default",
+						PVCName:   "detached-pvc",
+					},
+				},
+			}
+			validator := UpgradePlanCustomValidator{
+				Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(version, cluster, node, machine, activeVol, detachedVol).Build(),
+			}
+			obj := &managementv1beta1.UpgradePlan{
+				ObjectMeta: metav1.ObjectMeta{Name: "upgrade-1"},
+				Spec:       managementv1beta1.UpgradePlanSpec{Version: ptr.To("v1.4.0")},
 			}
 
 			_, err := validator.ValidateCreate(ctx, obj)

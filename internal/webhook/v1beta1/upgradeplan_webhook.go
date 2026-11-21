@@ -423,6 +423,7 @@ func validateLonghornVolumes(ctx context.Context, c client.Reader, upgradePlan *
 	}
 
 	// Count nodes for the degraded volume check (only enforce on 3+ node clusters)
+	// and the single-replica volume checks (skipped on single-node clusters)
 	var nodeList corev1.NodeList
 	if err := c.List(ctx, &nodeList); err != nil {
 		allErrs = append(allErrs, field.InternalError(
@@ -440,6 +441,12 @@ func validateLonghornVolumes(ctx context.Context, c client.Reader, upgradePlan *
 				break
 			}
 		}
+	}
+
+	// Skip the single-replica checks on single-node clusters, where every volume
+	// is single-replica and VMs are shut down during the upgrade anyway.
+	if len(nodeList.Items) == 1 {
+		return allErrs
 	}
 
 	// Collect single-replica volumes
