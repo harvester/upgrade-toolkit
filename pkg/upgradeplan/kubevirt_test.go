@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 )
 
@@ -27,69 +27,59 @@ func newTestKubeVirt(methods []kubevirtv1.WorkloadUpdateMethod) *kubevirtv1.Kube
 	}
 }
 
-func TestSetKubeVirtWorkloadUpdateMethods(t *testing.T) {
-	cases := []struct {
-		name         string
-		initial      []kubevirtv1.WorkloadUpdateMethod
-		desired      []string
-		expectMethod *kubevirtv1.WorkloadUpdateMethod // nil means expect empty/nil
-	}{
-		{
-			name:         "empty to empty is a no-op",
-			initial:      []kubevirtv1.WorkloadUpdateMethod{},
-			desired:      []string{},
-			expectMethod: nil,
-		},
-		{
-			name:         "empty to [LiveMigrate] restores",
-			initial:      []kubevirtv1.WorkloadUpdateMethod{},
-			desired:      []string{liveMigrateWorkloadUpdateMethod},
-			expectMethod: ptr.To(kubevirtv1.WorkloadUpdateMethodLiveMigrate),
-		},
-		{
-			name:         "[LiveMigrate] to empty clears",
-			initial:      []kubevirtv1.WorkloadUpdateMethod{kubevirtv1.WorkloadUpdateMethodLiveMigrate},
-			desired:      []string{},
-			expectMethod: nil,
-		},
-		{
-			name:         "[LiveMigrate] to [LiveMigrate] is idempotent",
-			initial:      []kubevirtv1.WorkloadUpdateMethod{kubevirtv1.WorkloadUpdateMethodLiveMigrate},
-			desired:      []string{liveMigrateWorkloadUpdateMethod},
-			expectMethod: ptr.To(kubevirtv1.WorkloadUpdateMethodLiveMigrate),
-		},
+func TestUpgradeToolkitManagedFieldsRemovalPatch(t *testing.T) {
+	t.Run("no matching manager returns nil", func(t *testing.T) {
+		entries := []metav1.ManagedFieldsEntry{{Manager: "fleet-agent"}, {Manager: "virt-operator"}}
+		assert.Nil(t, upgradeToolkitManagedFieldsRemovalPatch(entries))
+		assert.Nil(t, upgradeToolkitManagedFieldsRemovalPatch(nil))
+	})
+
+	t.Run("manager owning every entry returns nil", func(t *testing.T) {
+		entries := []metav1.ManagedFieldsEntry{{Manager: upgradeToolkitFieldManager}}
+		assert.Nil(t, upgradeToolkitManagedFieldsRemovalPatch(entries))
+	})
+
+	t.Run("matching entries are removed from the highest index down", func(t *testing.T) {
+		entries := []metav1.ManagedFieldsEntry{
+			{Manager: upgradeToolkitFieldManager},
+			{Manager: "fleet-agent"},
+			{Manager: upgradeToolkitFieldManager},
+		}
+		patch := upgradeToolkitManagedFieldsRemovalPatch(entries)
+		assert.JSONEq(t, `[
+			{"op":"test","path":"/metadata/managedFields/2/manager","value":"upgrade-toolkit"},
+			{"op":"remove","path":"/metadata/managedFields/2"},
+			{"op":"test","path":"/metadata/managedFields/0/manager","value":"upgrade-toolkit"},
+			{"op":"remove","path":"/metadata/managedFields/0"}
+		]`, string(patch))
+	})
+}
+
+func TestRemoveKubeVirtFieldManagerEntries(t *testing.T) {
+	kv := newTestKubeVirt([]kubevirtv1.WorkloadUpdateMethod{})
+	kv.ManagedFields = []metav1.ManagedFieldsEntry{
+		{Manager: "fleet-agent", Operation: metav1.ManagedFieldsOperationApply, APIVersion: "kubevirt.io/v1"},
+		{Manager: upgradeToolkitFieldManager, Operation: metav1.ManagedFieldsOperationUpdate, APIVersion: "kubevirt.io/v1"},
 	}
+	c := newFakeClient(kv)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			kv := newTestKubeVirt(tc.initial)
-			c := newFakeClient(kv)
+	require.NoError(t, removeKubeVirtFieldManagerEntries(context.Background(), c, logr.Discard()))
 
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(kubevirtGVK)
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{
-				Namespace: harvesterSystemNamespace,
-				Name:      KubeVirtObjectName,
-			}, u))
+	var after kubevirtv1.KubeVirt
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Namespace: harvesterSystemNamespace,
+		Name:      KubeVirtObjectName,
+	}, &after))
+	require.Len(t, after.ManagedFields, 1)
+	assert.Equal(t, "fleet-agent", after.ManagedFields[0].Manager)
 
-			require.NoError(t, setKubeVirtWorkloadUpdateMethods(context.Background(), c, u, tc.desired))
+	// Idempotent: nothing left to remove.
+	require.NoError(t, removeKubeVirtFieldManagerEntries(context.Background(), c, logr.Discard()))
+}
 
-			var after kubevirtv1.KubeVirt
-			require.NoError(t, c.Get(context.Background(), types.NamespacedName{
-				Namespace: harvesterSystemNamespace,
-				Name:      KubeVirtObjectName,
-			}, &after))
-			actual := after.Spec.WorkloadUpdateStrategy.WorkloadUpdateMethods
-			if tc.expectMethod == nil {
-				// Empty and nil are equivalent here because kubevirt's JSON
-				// tags strip an empty workloadUpdateMethods slice on round-trip.
-				assert.Empty(t, actual)
-			} else {
-				require.Len(t, actual, 1)
-				assert.Equal(t, *tc.expectMethod, actual[0])
-			}
-		})
-	}
+func TestRemoveKubeVirtFieldManagerEntries_MissingKubeVirt(t *testing.T) {
+	c := newFakeClient()
+	require.NoError(t, removeKubeVirtFieldManagerEntries(context.Background(), c, logr.Discard()))
 }
 
 func TestGetKubeVirt_NotFoundReturnsNil(t *testing.T) {
@@ -113,5 +103,5 @@ func TestGetKubeVirt_ReturnsObject(t *testing.T) {
 		"spec", "workloadUpdateStrategy", "workloadUpdateMethods")
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, []string{liveMigrateWorkloadUpdateMethod}, methods)
+	assert.Equal(t, []string{"LiveMigrate"}, methods)
 }

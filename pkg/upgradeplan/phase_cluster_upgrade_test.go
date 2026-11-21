@@ -85,6 +85,12 @@ func TestClusterUpgradePhase_PreRunDisablesKubeVirtLiveMigrate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: harvesterSystemNamespace,
 			Name:      KubeVirtObjectName,
+			// A stale entry left by an earlier upgrade-toolkit release that
+			// patched the KubeVirt CR directly.
+			ManagedFields: []metav1.ManagedFieldsEntry{
+				{Manager: "fleet-agent", Operation: metav1.ManagedFieldsOperationApply, APIVersion: "kubevirt.io/v1"},
+				{Manager: upgradeToolkitFieldManager, Operation: metav1.ManagedFieldsOperationUpdate, APIVersion: "kubevirt.io/v1"},
+			},
 		},
 		Spec: kubevirtv1.KubeVirtSpec{
 			WorkloadUpdateStrategy: kubevirtv1.KubeVirtWorkloadUpdateStrategy{
@@ -94,46 +100,49 @@ func TestClusterUpgradePhase_PreRunDisablesKubeVirtLiveMigrate(t *testing.T) {
 			},
 		},
 	}
-	mc := newTestManagedChart(FleetLocalNamespace, HarvesterManagedChartName, nil)
+	mc := newTestManagedChart(nil)
 
 	c := newFakeClient(kv, mc)
 	phase := &ClusterUpgradePhase{PhaseDeps: &PhaseDeps{Client: c}}
 
 	require.NoError(t, phase.PreRun(context.Background(), up))
 
-	var patchedKV kubevirtv1.KubeVirt
+	// The KubeVirt CR spec is left to Fleet; only the stale ownership is gone.
+	var gotKV kubevirtv1.KubeVirt
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
 		Name:      KubeVirtObjectName,
-	}, &patchedKV))
-	assert.Empty(t, patchedKV.Spec.WorkloadUpdateStrategy.WorkloadUpdateMethods,
-		"workloadUpdateMethods should have been cleared")
+	}, &gotKV))
+	assert.Equal(t,
+		[]kubevirtv1.WorkloadUpdateMethod{kubevirtv1.WorkloadUpdateMethodLiveMigrate},
+		gotKV.Spec.WorkloadUpdateStrategy.WorkloadUpdateMethods,
+		"PreRun must not patch the KubeVirt CR spec")
+	for _, e := range gotKV.ManagedFields {
+		assert.NotEqual(t, upgradeToolkitFieldManager, e.Manager, "stale upgrade-toolkit managedFields entry must be removed")
+	}
 
-	patchedMC := &unstructured.Unstructured{}
-	patchedMC.SetGroupVersionKind(managedChartGVK)
+	gotMC := &unstructured.Unstructured{}
+	gotMC.SetGroupVersionKind(managedChartGVK)
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
 		Namespace: FleetLocalNamespace,
 		Name:      HarvesterManagedChartName,
-	}, patchedMC))
-	patches, found, err := unstructured.NestedSlice(patchedMC.Object, "spec", "diff", "comparePatches")
+	}, gotMC))
+	methods, found, err := unstructured.NestedSlice(gotMC.Object, kubevirtWorkloadUpdateMethodsValuesPath...)
 	require.NoError(t, err)
-	require.True(t, found, "spec.diff.comparePatches should have been added")
-	require.Len(t, patches, 1)
-	entry, ok := patches[0].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "kubevirt.io/v1", entry["apiVersion"])
-	assert.Equal(t, "KubeVirt", entry["kind"])
-	assert.Equal(t, "kubevirt", entry["name"])
+	require.True(t, found, "workloadUpdateMethods values override should have been set")
+	assert.Empty(t, methods)
+	assert.Equal(t, "null", gotMC.GetAnnotations()[AnnotationKubeVirtWorkloadUpdateMethodsOriginal])
+	_, found, err = unstructured.NestedSlice(gotMC.Object, "spec", "diff", "comparePatches")
+	require.NoError(t, err)
+	assert.False(t, found, "no comparePatches entry is needed when Fleet owns the value")
 
 	// Second invocation must be a no-op (idempotent).
+	rv := gotMC.GetResourceVersion()
 	require.NoError(t, phase.PreRun(context.Background(), up))
-
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
 		Namespace: FleetLocalNamespace,
 		Name:      HarvesterManagedChartName,
-	}, patchedMC))
-	patches, found, err = unstructured.NestedSlice(patchedMC.Object, "spec", "diff", "comparePatches")
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Len(t, patches, 1, "PreRun must be idempotent; entry should not be duplicated")
+	}, gotMC))
+	assert.Equal(t, rv, gotMC.GetResourceVersion(), "PreRun must be idempotent")
+	assert.Equal(t, "null", gotMC.GetAnnotations()[AnnotationKubeVirtWorkloadUpdateMethodsOriginal])
 }
