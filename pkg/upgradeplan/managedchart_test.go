@@ -1,11 +1,15 @@
 package upgradeplan
 
 import (
+	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
 	fleetv1alpha1 "github.com/rancher/fleet/pkg/apis/fleet.cattle.io/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // TestFilterKubevirtComparePatches mirrors the upstream test matrix from
@@ -262,75 +266,233 @@ func TestFilterKubevirtComparePatches(t *testing.T) {
 	}
 }
 
-func TestAddKubevirtComparePatchEntry(t *testing.T) {
-	const targetJSONPointer = KubeVirtWorkloadUpdateMethodsJSONPointer
+// newTestManagedChartWithValues returns a harvester ManagedChart with the given
+// spec.values and annotations.
+func newTestManagedChartWithValues(
+	values map[string]interface{},
+	annotations map[string]string,
+) *unstructured.Unstructured {
+	mc := newTestManagedChart(nil)
+	if values != nil {
+		_ = unstructured.SetNestedMap(mc.Object, values, "spec", "values")
+	}
+	if annotations != nil {
+		mc.SetAnnotations(annotations)
+	}
+	return mc
+}
 
-	t.Run("nil diff creates new kubevirt entry", func(t *testing.T) {
-		out, changed := addKubevirtComparePatchEntry(nil)
-		require.True(t, changed)
-		require.NotNil(t, out)
-		require.Len(t, out.ComparePatches, 1)
-		assert.Equal(t, "kubevirt.io/v1", out.ComparePatches[0].APIVersion)
-		assert.Equal(t, "KubeVirt", out.ComparePatches[0].Kind)
-		assert.Equal(t, "kubevirt", out.ComparePatches[0].Name)
-		assert.Equal(t, []string{targetJSONPointer}, out.ComparePatches[0].JsonPointers)
-	})
+func getTestHarvesterManagedChart(t *testing.T, c client.Client) *unstructured.Unstructured {
+	t.Helper()
+	mc, err := getHarvesterManagedChart(context.Background(), c)
+	require.NoError(t, err)
+	require.NotNil(t, mc)
+	return mc
+}
 
-	t.Run("empty ComparePatches appends new kubevirt entry", func(t *testing.T) {
-		in := &fleetv1alpha1.DiffOptions{ComparePatches: []fleetv1alpha1.ComparePatch{}}
-		out, changed := addKubevirtComparePatchEntry(in)
-		require.True(t, changed)
-		require.Len(t, out.ComparePatches, 1)
-		assert.Equal(t, []string{targetJSONPointer}, out.ComparePatches[0].JsonPointers)
-	})
+func workloadUpdateMethodsValue(t *testing.T, mc *unstructured.Unstructured) (interface{}, bool) {
+	t.Helper()
+	v, found, err := unstructured.NestedFieldCopy(mc.Object, kubevirtWorkloadUpdateMethodsValuesPath...)
+	require.NoError(t, err)
+	return v, found
+}
 
-	t.Run("existing kubevirt entry without target pointer appends pointer", func(t *testing.T) {
-		in := &fleetv1alpha1.DiffOptions{
-			ComparePatches: []fleetv1alpha1.ComparePatch{
-				{
-					APIVersion:   "kubevirt.io/v1",
-					Kind:         "KubeVirt",
-					Name:         "kubevirt",
-					JsonPointers: []string{"/spec/other"},
+func kubevirtValues(methods ...interface{}) map[string]interface{} {
+	if methods == nil {
+		methods = []interface{}{}
+	}
+	return map[string]interface{}{
+		"kubevirt": map[string]interface{}{
+			"spec": map[string]interface{}{
+				"workloadUpdateStrategy": map[string]interface{}{
+					"workloadUpdateMethods": methods,
 				},
 			},
-		}
-		out, changed := addKubevirtComparePatchEntry(in)
-		require.True(t, changed)
-		require.Len(t, out.ComparePatches, 1)
-		assert.Equal(t, []string{"/spec/other", targetJSONPointer}, out.ComparePatches[0].JsonPointers)
-	})
+		},
+	}
+}
 
-	t.Run("existing kubevirt entry with target pointer is idempotent", func(t *testing.T) {
-		in := &fleetv1alpha1.DiffOptions{
-			ComparePatches: []fleetv1alpha1.ComparePatch{
-				{
-					APIVersion:   "kubevirt.io/v1",
-					Kind:         "KubeVirt",
-					Name:         "kubevirt",
-					JsonPointers: []string{targetJSONPointer},
-				},
-			},
-		}
-		out, changed := addKubevirtComparePatchEntry(in)
-		require.False(t, changed)
-		require.Len(t, out.ComparePatches, 1)
-		assert.Equal(t, []string{targetJSONPointer}, out.ComparePatches[0].JsonPointers)
-	})
+func TestDisableKubevirtLiveMigrateInManagedChart(t *testing.T) {
+	cases := []struct {
+		name           string
+		values         map[string]interface{}
+		annotations    map[string]string
+		expectOriginal string
+	}{
+		{
+			name:           "no values override records null",
+			values:         nil,
+			expectOriginal: "null",
+		},
+		{
+			name:           "unrelated values are kept and null is recorded",
+			values:         map[string]interface{}{"storageClass": map[string]interface{}{"defaultStorageClass": false}},
+			expectOriginal: "null",
+		},
+		{
+			name:           "explicit [LiveMigrate] override is recorded",
+			values:         kubevirtValues("LiveMigrate"),
+			expectOriginal: `["LiveMigrate"]`,
+		},
+		{
+			name:           "explicit [] override is recorded",
+			values:         kubevirtValues(),
+			expectOriginal: `[]`,
+		},
+		{
+			name:           "existing record is not overwritten",
+			values:         kubevirtValues(),
+			annotations:    map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: "null"},
+			expectOriginal: "null",
+		},
+	}
 
-	t.Run("input slice is not mutated", func(t *testing.T) {
-		in := &fleetv1alpha1.DiffOptions{
-			ComparePatches: []fleetv1alpha1.ComparePatch{
-				{
-					APIVersion:   "kubevirt.io/v1",
-					Kind:         "KubeVirt",
-					Name:         "kubevirt",
-					JsonPointers: []string{"/spec/other"},
-				},
-			},
-		}
-		_, _ = addKubevirtComparePatchEntry(in)
-		assert.Equal(t, []string{"/spec/other"}, in.ComparePatches[0].JsonPointers,
-			"input slice must not be mutated; addKubevirtComparePatchEntry should operate on a deep copy")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newFakeClient(newTestManagedChartWithValues(tc.values, tc.annotations))
+
+			require.NoError(t, disableKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+
+			mc := getTestHarvesterManagedChart(t, c)
+			v, found := workloadUpdateMethodsValue(t, mc)
+			require.True(t, found, "workloadUpdateMethods override must be set")
+			assert.Equal(t, []interface{}{}, v)
+			assert.Equal(t, tc.expectOriginal, mc.GetAnnotations()[AnnotationKubeVirtWorkloadUpdateMethodsOriginal])
+
+			if _, ok := tc.values["storageClass"]; ok {
+				dsc, found, err := unstructured.NestedBool(mc.Object, "spec", "values", "storageClass", "defaultStorageClass")
+				require.NoError(t, err)
+				require.True(t, found, "unrelated values must be preserved")
+				assert.False(t, dsc)
+			}
+
+			// A second call (for example, a retried PreRun) must keep the
+			// original record instead of recording [].
+			require.NoError(t, disableKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+			mc = getTestHarvesterManagedChart(t, c)
+			assert.Equal(t, tc.expectOriginal, mc.GetAnnotations()[AnnotationKubeVirtWorkloadUpdateMethodsOriginal])
+		})
+	}
+}
+
+func TestDisableKubevirtLiveMigrateInManagedChart_DropsStaleComparePatch(t *testing.T) {
+	mc := newTestManagedChart([]map[string]interface{}{
+		{
+			"apiVersion":   "kubevirt.io/v1",
+			"kind":         "KubeVirt",
+			"name":         "kubevirt",
+			"jsonPointers": []interface{}{KubeVirtWorkloadUpdateMethodsJSONPointer},
+		},
+		{
+			"apiVersion":   "v1",
+			"kind":         "ConfigMap",
+			"name":         "other",
+			"jsonPointers": []interface{}{"/data"},
+		},
 	})
+	c := newFakeClient(mc)
+
+	require.NoError(t, disableKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+
+	got := getTestHarvesterManagedChart(t, c)
+	patches, found, err := unstructured.NestedSlice(got.Object, "spec", "diff", "comparePatches")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Len(t, patches, 1, "only the kubevirt entry must be removed")
+	assert.Equal(t, "ConfigMap", patches[0].(map[string]interface{})["kind"])
+}
+
+func TestDisableKubevirtLiveMigrateInManagedChart_MissingChart(t *testing.T) {
+	c := newFakeClient()
+	require.NoError(t, disableKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+}
+
+func TestRestoreKubevirtLiveMigrateInManagedChart(t *testing.T) {
+	cases := []struct {
+		name        string
+		values      map[string]interface{}
+		annotations map[string]string
+		expectFound bool
+		expectValue interface{}
+		expectEmpty bool // spec.values must be left without a kubevirt key
+	}{
+		{
+			name:        "null record removes the override and empty parents",
+			values:      kubevirtValues(),
+			annotations: map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: "null"},
+			expectFound: false,
+			expectEmpty: true,
+		},
+		{
+			name:        "recorded [LiveMigrate] is written back",
+			values:      kubevirtValues(),
+			annotations: map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: `["LiveMigrate"]`},
+			expectFound: true,
+			expectValue: []interface{}{"LiveMigrate"},
+		},
+		{
+			name:        "recorded [] is written back",
+			values:      kubevirtValues(),
+			annotations: map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: `[]`},
+			expectFound: true,
+			expectValue: []interface{}{},
+		},
+		{
+			name:        "no record leaves the values untouched",
+			values:      kubevirtValues(),
+			expectFound: true,
+			expectValue: []interface{}{},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newFakeClient(newTestManagedChartWithValues(tc.values, tc.annotations))
+
+			require.NoError(t, restoreKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+
+			mc := getTestHarvesterManagedChart(t, c)
+			v, found := workloadUpdateMethodsValue(t, mc)
+			assert.Equal(t, tc.expectFound, found)
+			if tc.expectFound {
+				assert.Equal(t, tc.expectValue, v)
+			}
+			if tc.expectEmpty {
+				_, found, err := unstructured.NestedFieldNoCopy(mc.Object, "spec", "values", "kubevirt")
+				require.NoError(t, err)
+				assert.False(t, found, "empty parent maps must be pruned")
+			}
+			assert.NotContains(t, mc.GetAnnotations(), AnnotationKubeVirtWorkloadUpdateMethodsOriginal)
+
+			// Idempotent.
+			require.NoError(t, restoreKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+		})
+	}
+}
+
+func TestRestoreKubevirtLiveMigrateInManagedChart_KeepsSiblingValues(t *testing.T) {
+	values := kubevirtValues()
+	kvSpec := values["kubevirt"].(map[string]interface{})["spec"].(map[string]interface{})
+	kvSpec["configuration"] = map[string]interface{}{
+		"developerConfiguration": map[string]interface{}{"featureGates": []interface{}{"Foo"}},
+	}
+	c := newFakeClient(newTestManagedChartWithValues(values,
+		map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: "null"}))
+
+	require.NoError(t, restoreKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
+
+	mc := getTestHarvesterManagedChart(t, c)
+	_, found := workloadUpdateMethodsValue(t, mc)
+	assert.False(t, found)
+	gates, found, err := unstructured.NestedStringSlice(mc.Object,
+		"spec", "values", "kubevirt", "spec", "configuration", "developerConfiguration", "featureGates")
+	require.NoError(t, err)
+	require.True(t, found, "sibling kubevirt values must be preserved")
+	assert.Equal(t, []string{"Foo"}, gates)
+}
+
+func TestRestoreKubevirtLiveMigrateInManagedChart_InvalidRecord(t *testing.T) {
+	c := newFakeClient(newTestManagedChartWithValues(kubevirtValues(),
+		map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: "not-json"}))
+	require.Error(t, restoreKubevirtLiveMigrateInManagedChart(context.Background(), c, logr.Discard()))
 }

@@ -28,11 +28,12 @@ func NewClusterUpgradePhase(deps *PhaseDeps) *ClusterUpgradePhase {
 
 func (p *ClusterUpgradePhase) Name() string { return "ClusterUpgrade" }
 
-// PreRun disables KubeVirt's LiveMigrate workload update method before the
-// cluster-upgrade job runs, so the KubeVirt operator upgrade does not trigger
-// a migration storm across every running VM. VMs migrate naturally during node
-// upgrades. CPU/memory hot-plugging is unavailable for the duration of the
-// upgrade and is restored during cleanup.
+// PreRun disables KubeVirt's LiveMigrate workload update method in the
+// harvester ManagedChart values before the cluster-upgrade job runs, so the
+// KubeVirt operator upgrade does not trigger a migration storm across every
+// running VM. VMs migrate naturally during node upgrades. CPU/memory
+// hot-plugging is unavailable for the duration of the upgrade and is restored
+// during cleanup.
 func (p *ClusterUpgradePhase) PreRun(
 	ctx context.Context,
 	upgradePlan *managementv1beta1.UpgradePlan,
@@ -41,29 +42,24 @@ func (p *ClusterUpgradePhase) PreRun(
 	return disableKubevirtWorkloadLiveMigrate(ctx, p.Client, log)
 }
 
-// disableKubevirtWorkloadLiveMigrate clears KubeVirt workloadUpdateMethods and
-// adds the matching comparePatch entry to the harvester ManagedChart so Fleet
-// does not revert the change as drift. Idempotent.
+// disableKubevirtWorkloadLiveMigrate disables the KubeVirt LiveMigrate
+// workload update method through the harvester ManagedChart values instead of
+// patching the KubeVirt CR, so Fleet stays the only owner of
+// spec.workloadUpdateStrategy.workloadUpdateMethods and its server-side apply
+// does not conflict when the cluster-upgrade job upgrades the chart. This
+// mirrors the V1 upgrade path (upgrade_manifests.sh
+// disable_kubevirt_workload_live_migration). Idempotent.
 func disableKubevirtWorkloadLiveMigrate(
 	ctx context.Context,
 	c client.Client,
 	log logr.Logger,
 ) error {
-	kv, err := getKubeVirt(ctx, c)
-	if err != nil {
+	// Clear ownership left on the KubeVirt CR by earlier upgrade-toolkit
+	// releases first; otherwise Fleet cannot apply the new value.
+	if err := removeKubeVirtFieldManagerEntries(ctx, c, log); err != nil {
 		return err
 	}
-	if kv == nil {
-		log.V(1).Info("kubevirt object not found, skipping LiveMigrate disable")
-		return addKubevirtComparePatches(ctx, c, log)
-	}
-
-	if err := setKubeVirtWorkloadUpdateMethods(ctx, c, kv, []string{}); err != nil {
-		return fmt.Errorf("failed to clear kubevirt workloadUpdateMethods: %w", err)
-	}
-	log.Info("ensured KubeVirt workloadUpdateMethods is empty to disable LiveMigrate during upgrade")
-
-	return addKubevirtComparePatches(ctx, c, log)
+	return disableKubevirtLiveMigrateInManagedChart(ctx, c, log)
 }
 
 func (p *ClusterUpgradePhase) Run(

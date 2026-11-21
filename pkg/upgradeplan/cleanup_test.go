@@ -49,11 +49,11 @@ func newFakeClient(objs ...client.Object) client.Client {
 // newTestManagedChart builds an unstructured ManagedChart suitable for seeding
 // the fake client. Using unstructured avoids a direct dependency on
 // github.com/rancher/rancher/pkg/apis/management.cattle.io/v3.
-func newTestManagedChart(namespace, name string, comparePatches []map[string]interface{}) *unstructured.Unstructured {
+func newTestManagedChart(comparePatches []map[string]interface{}) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(managedChartGVK)
-	u.SetNamespace(namespace)
-	u.SetName(name)
+	u.SetNamespace(FleetLocalNamespace)
+	u.SetName(HarvesterManagedChartName)
 	if comparePatches != nil {
 		raw := make([]interface{}, 0, len(comparePatches))
 		for _, p := range comparePatches {
@@ -520,6 +520,10 @@ func TestCleanupUpgradeResources_RestoresKubeVirtLiveMigrate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: harvesterSystemNamespace,
 			Name:      KubeVirtObjectName,
+			ManagedFields: []metav1.ManagedFieldsEntry{
+				{Manager: "fleet-agent", Operation: metav1.ManagedFieldsOperationApply, APIVersion: "kubevirt.io/v1"},
+				{Manager: upgradeToolkitFieldManager, Operation: metav1.ManagedFieldsOperationUpdate, APIVersion: "kubevirt.io/v1"},
+			},
 		},
 		Spec: kubevirtv1.KubeVirtSpec{
 			WorkloadUpdateStrategy: kubevirtv1.KubeVirtWorkloadUpdateStrategy{
@@ -528,7 +532,9 @@ func TestCleanupUpgradeResources_RestoresKubeVirtLiveMigrate(t *testing.T) {
 		},
 	}
 
-	mc := newTestManagedChart(FleetLocalNamespace, HarvesterManagedChartName, []map[string]interface{}{
+	// State left by ClusterUpgrade PreRun, plus a comparePatch entry from an
+	// earlier upgrade-toolkit release.
+	mc := newTestManagedChart([]map[string]interface{}{
 		{
 			"apiVersion":   "kubevirt.io/v1",
 			"kind":         "KubeVirt",
@@ -536,29 +542,33 @@ func TestCleanupUpgradeResources_RestoresKubeVirtLiveMigrate(t *testing.T) {
 			"jsonPointers": []interface{}{KubeVirtWorkloadUpdateMethodsJSONPointer},
 		},
 	})
+	require.NoError(t, unstructured.SetNestedField(mc.Object, []interface{}{}, kubevirtWorkloadUpdateMethodsValuesPath...))
+	mc.SetAnnotations(map[string]string{AnnotationKubeVirtWorkloadUpdateMethodsOriginal: "null"})
 
 	c := newFakeClient(kv, mc)
 	err := CleanupUpgradeResources(context.Background(), c, logr.Discard(), up)
 	require.NoError(t, err)
 
-	var restored kubevirtv1.KubeVirt
-	err = c.Get(context.Background(), types.NamespacedName{
+	var gotKV kubevirtv1.KubeVirt
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
 		Namespace: harvesterSystemNamespace,
 		Name:      KubeVirtObjectName,
-	}, &restored)
-	require.NoError(t, err)
-	assert.Equal(t,
-		[]kubevirtv1.WorkloadUpdateMethod{kubevirtv1.WorkloadUpdateMethodLiveMigrate},
-		restored.Spec.WorkloadUpdateStrategy.WorkloadUpdateMethods,
-		"LiveMigrate should be restored during cleanup")
+	}, &gotKV))
+	for _, e := range gotKV.ManagedFields {
+		assert.NotEqual(t, upgradeToolkitFieldManager, e.Manager, "stale upgrade-toolkit managedFields entry must be removed")
+	}
 
 	gotMC := &unstructured.Unstructured{}
 	gotMC.SetGroupVersionKind(managedChartGVK)
-	err = c.Get(context.Background(), types.NamespacedName{
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
 		Namespace: FleetLocalNamespace,
 		Name:      HarvesterManagedChartName,
-	}, gotMC)
+	}, gotMC))
+
+	_, found, err := unstructured.NestedFieldNoCopy(gotMC.Object, "spec", "values", "kubevirt")
 	require.NoError(t, err)
+	assert.False(t, found, "the values override must be removed so the chart default (LiveMigrate) applies")
+	assert.NotContains(t, gotMC.GetAnnotations(), AnnotationKubeVirtWorkloadUpdateMethodsOriginal)
 
 	patches, found, err := unstructured.NestedSlice(gotMC.Object, "spec", "diff", "comparePatches")
 	require.NoError(t, err)

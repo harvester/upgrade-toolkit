@@ -195,37 +195,20 @@ func restoreLonghornReplicaReplenishmentInterval(
 	return nil
 }
 
-// enableKubevirtWorkloadLiveMigrate restores KubeVirt workloadUpdateMethods to
-// [LiveMigrate] and removes the matching comparePatch entry from the harvester
-// ManagedChart. Idempotent. Removal failures are logged and swallowed so a
-// stale comparePatch cannot block cleanup.
+// enableKubevirtWorkloadLiveMigrate restores the KubeVirt workloadUpdateMethods
+// override in the harvester ManagedChart values to its pre-upgrade value, so
+// Fleet re-applies LiveMigrate. It also removes stale upgrade-toolkit
+// ownership from the KubeVirt CR and the comparePatch entry that earlier
+// upgrade-toolkit releases added. Idempotent.
 func enableKubevirtWorkloadLiveMigrate(
 	ctx context.Context,
 	c client.Client,
 	log logr.Logger,
 ) error {
-	kv, err := getKubeVirt(ctx, c)
-	if err != nil {
+	if err := removeKubeVirtFieldManagerEntries(ctx, c, log); err != nil {
 		return err
 	}
-	if kv == nil {
-		log.V(1).Info("kubevirt object not found during cleanup, skipping LiveMigrate restore")
-		if err := removeKubevirtComparePatches(ctx, c, log); err != nil {
-			log.Error(err, "failed to remove kubevirt comparePatches from harvester managedchart")
-		}
-		return nil
-	}
-
-	if err := setKubeVirtWorkloadUpdateMethods(ctx, c, kv, []string{liveMigrateWorkloadUpdateMethod}); err != nil {
-		return fmt.Errorf("failed to restore kubevirt workloadUpdateMethods: %w", err)
-	}
-	log.Info("ensured KubeVirt workloadUpdateMethods is [LiveMigrate]")
-
-	if err := removeKubevirtComparePatches(ctx, c, log); err != nil {
-		log.Error(err, "failed to remove kubevirt comparePatches from harvester managedchart")
-	}
-
-	return nil
+	return restoreKubevirtLiveMigrateInManagedChart(ctx, c, log)
 }
 
 // reEnableDeschedulerAddon re-enables the descheduler addon if it was disabled

@@ -50,6 +50,11 @@ const (
 	HarvesterManagedChartName                = "harvester"
 	KubeVirtObjectName                       = "kubevirt"
 	KubeVirtWorkloadUpdateMethodsJSONPointer = "/spec/workloadUpdateStrategy/workloadUpdateMethods"
+	// AnnotationKubeVirtWorkloadUpdateMethodsOriginal is set on the harvester
+	// ManagedChart and records the JSON value of
+	// spec.values.kubevirt.spec.workloadUpdateStrategy.workloadUpdateMethods
+	// before the upgrade ("null" when the override was absent).
+	AnnotationKubeVirtWorkloadUpdateMethodsOriginal = AnnotationPrefix + "/" + "kubevirt-workload-update-methods"
 
 	// Annotations on machine-plan Secrets set by Rancher
 	RKE2PreDrainAnnotation  = "rke.cattle.io/pre-drain"
